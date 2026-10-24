@@ -30,7 +30,6 @@ type Result<T> = std::result::Result<T, LauncherError>;
 #[derive(Debug)]
 struct LauncherError {
     message: String,
-    raw_os_error: Option<i32>,
     export_failure: Option<ExportFailure>,
 }
 
@@ -44,7 +43,6 @@ impl From<io::Error> for LauncherError {
     fn from(error: io::Error) -> Self {
         Self {
             message: error.to_string(),
-            raw_os_error: error.raw_os_error(),
             export_failure: None,
         }
     }
@@ -52,10 +50,7 @@ impl From<io::Error> for LauncherError {
 
 impl LauncherError {
     fn classified_export_failure(&self) -> Option<ExportFailure> {
-        self.export_failure.or_else(|| {
-            matches!(self.raw_os_error, Some(libc::ENOSPC | libc::EDQUOT))
-                .then_some(ExportFailure::CapacityExceeded)
-        })
+        self.export_failure
     }
 }
 
@@ -866,7 +861,6 @@ fn require_no_child_setup_error(error: OwnedFd) -> Result<()> {
     }
     Err(LauncherError {
         message: format!("child setup failed: {message}"),
-        raw_os_error: None,
         export_failure: None,
     })
 }
@@ -972,7 +966,6 @@ fn drop_bounding_capabilities(retained: &[u32]) -> Result<()> {
             let error = io::Error::last_os_error();
             return Err(LauncherError {
                 message: format!("bounding capability drop {capability}: {error}"),
-                raw_os_error: error.raw_os_error(),
                 export_failure: None,
             });
         }
@@ -1235,9 +1228,15 @@ fn inspect_workspace_entries(
         {
             return Ok(Some(ExportFailure::Invalid));
         }
-        *entries = entries.saturating_add(1);
+        let Some(next_entries) = entries.checked_add(1) else {
+            return Ok(Some(ExportFailure::CapacityExceeded));
+        };
+        *entries = next_entries;
         if metadata.file_type().is_file() {
-            *bytes = bytes.saturating_add(metadata.len());
+            let Some(next_bytes) = bytes.checked_add(metadata.len()) else {
+                return Ok(Some(ExportFailure::CapacityExceeded));
+            };
+            *bytes = next_bytes;
         }
         if *entries > maximum_entries || *bytes > maximum_bytes {
             return Ok(Some(ExportFailure::CapacityExceeded));
@@ -1619,7 +1618,6 @@ fn set_once<T>(slot: &mut Option<T>, value: T) -> Result<()> {
 fn failure(message: &str) -> LauncherError {
     LauncherError {
         message: message.to_owned(),
-        raw_os_error: None,
         export_failure: None,
     }
 }
@@ -1627,7 +1625,6 @@ fn failure(message: &str) -> LauncherError {
 fn capacity_failure(message: &str) -> LauncherError {
     LauncherError {
         message: message.to_owned(),
-        raw_os_error: Some(libc::ENOSPC),
         export_failure: Some(ExportFailure::CapacityExceeded),
     }
 }
@@ -1635,7 +1632,6 @@ fn capacity_failure(message: &str) -> LauncherError {
 fn invalid_export_failure(message: &str) -> LauncherError {
     LauncherError {
         message: message.to_owned(),
-        raw_os_error: None,
         export_failure: Some(ExportFailure::Invalid),
     }
 }
@@ -1644,7 +1640,6 @@ fn os_failure(operation: &str) -> LauncherError {
     let error = io::Error::last_os_error();
     LauncherError {
         message: format!("{operation}: {error}"),
-        raw_os_error: error.raw_os_error(),
         export_failure: None,
     }
 }
@@ -2031,5 +2026,17 @@ mod tests {
             Some(ExportFailure::CapacityExceeded)
         );
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn destination_enospc_is_infrastructure_not_capacity() {
+        let destination_error = LauncherError::from(io::Error::from_raw_os_error(libc::ENOSPC));
+        assert_eq!(destination_error.classified_export_failure(), None);
+
+        let logical_limit = capacity_failure("logical export limit exceeded");
+        assert_eq!(
+            logical_limit.classified_export_failure(),
+            Some(ExportFailure::CapacityExceeded)
+        );
     }
 }
