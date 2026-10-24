@@ -11,9 +11,9 @@ Source reconciliation: public operations below were checked against `main`
 `7f6a71a69` on 2026-10-23. The release automation from
 [WS-CLI-001-44](https://github.com/Flow-Research/workstream/blob/47760fa9dacf3d2000a073ee41c275c7c8b43ba6/.commitrail/initiatives/WS-CLI-001/WS-CLI-001-44.md)
 is merged; no public binary publication is established. The project catalogue
-in [PR #665](https://github.com/Flow-Research/workstream/pull/665), inspected at
-`4683decf345f0cccf8d6f7f819523514e4f0e8a3`, is still pending, not a delivered
-dependency. The first slice is reconciled with main `733c752f7`; recheck merged
+in [PR #665](https://github.com/Flow-Research/workstream/pull/665) is merged and
+available to the explicit CLI, but is not used by this contributor workbench.
+The first slice is reconciled with main `2e6cee003`; recheck merged
 owners before implementing any later slice.
 
 ## Product shape
@@ -40,18 +40,18 @@ projection. An administrator with covering authority may not have an exact
 project grant in `me projects`; Manager, Finance, Operator, and Audit therefore
 also offer **Open exact project ID**. They do not pretend that recent local IDs
 or `me projects` are a complete administrative project catalogue. There is no
-global project-discovery endpoint on the inspected `main`. Pending PR #665
-defines `GET /api/v1/projects` and `workstream project list`: one authorized
+contributor-wide project directory. Merged PR #665
+provides `GET /api/v1/projects` and `workstream project list`: one authorized
 page of project ID, name and status, available only to current system-scoped
 Project Manager, Operator, Finance Authority or Audit Authority readers. An
 Access Administrator alone, exact-project administrative grants and contributor
-grants do not enumerate this catalogue. Once merged and verified, this is the
-preferred picker for those system readers, not a replacement for `me projects`
+grants do not enumerate this catalogue. This is the backing API for a later
+system-reader picker, not a replacement for `me projects`
 or a grant to read a guide or mutate a project. Exact-project managers/finance/
 audit readers still need selection through separately held contributor membership,
 if any, or **Open exact project ID**; their administrative grant alone does not
 populate `me projects`. A catalogue denial must never trigger a hidden fallback
-request. Pending
+request. System-reader
 catalogue pages follow the same explicit pagination and error rules below.
 
 The TUI opens only on an interactive terminal; non-TTY use receives a bounded
@@ -441,7 +441,7 @@ This proposal is not authorization to begin that next change automatically.
 | Later in-TUI contribution Evidence | Narrow shared typed single-page contribution port and preserved complete-export regressions → explicit per-page evidence browsing; not a first-slice prerequisite |
 | Claim/start | Read workbench + reviewed per-operation private receipt and exact-key recovery → separate claim and start confirmations |
 | Prepare/submit | Claim/start + ZIP source integrity + distinct preparation/admission replay receipts → separate intake and immutable Submission, then stored evaluation/outcome/contribution evidence |
-| System workspace project picker | Pending #665 merged and verified → four-role system catalogue only; exact-grant/exact-ID entry retained for actors outside that scope |
+| System workspace project picker | Merged #665 supplies the public API and explicit CLI; later TUI integration uses the four-role system catalogue only, retaining exact-grant/exact-ID entry for actors outside that scope |
 | Management read workspaces | Existing Manager/Finance/Operator/Audit typed reads + explicit project selection → scoped queues, details and CLI handoffs; not blocked on catalogue if exact ID is known |
 | Management writes | Each read workspace + that operation's reviewed form/authority/recovery proof → setup/release/policy/recovery actions individually, not an all-POST engine |
 | Human Review or fulfillment | Stable public contracts and tested lifecycle guards for those specific journeys → separate design/implementation; not enabled by TUI or catalogue work |
@@ -451,8 +451,8 @@ The main mutation gate is implementing and proving the private,
 operation-specific receipt boundary above for one-shot writes across TUI
 crash/terminal loss. Do not expose a mutating action until that exact
 operation's unchanged inputs and privacy boundaries are proven.
-Other implementation gates: pending backend-owned system project discovery
-for the four-role picker; real API-backed detail/denial tests, narrow terminal
+Other implementation gates: later TUI integration of the existing backend-owned
+four-role project catalogue; real API-backed detail/denial tests, narrow terminal
 layout snapshots at 120×40 and 80×24, keyboard-only and no-color checks on all
 supported platforms, and proof that the explicit CLI/help/JSON behavior remains
 unchanged. A TUI is an interface over currently local/backend capability, not
