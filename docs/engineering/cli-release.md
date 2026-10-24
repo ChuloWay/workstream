@@ -18,7 +18,23 @@ integration suite or prove every deployed backend version.
 Before the first release, a repository administrator must configure the
 `cli-release` GitHub environment with required human reviewers and a deployment
 branch restriction to `main`, with self-review prevention enabled, then inspect
-those settings. The workflow queries the environment API in both preparation
+those settings. In Settings > Environments > `cli-release`, deselect **Allow
+administrators to bypass configured protection rules** and save the protection
+rules, following [GitHub's environment instructions](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
+Before approval, verify the environment's read-only GET response:
+
+```bash
+gh api repos/Flow-Research/workstream/environments/cli-release
+```
+
+It must contain literal `"can_admins_bypass": false`; missing, null, true,
+string or numeric values are not proof that bypass is disabled. The
+[GET endpoint](https://docs.github.com/en/rest/deployments/environments#get-an-environment)
+uses the existing Actions read permission. GitHub's documented environment
+update parameters do not include this setting; configure it in the UI, not
+through a workflow or an assumed API write parameter.
+
+The workflow queries the environment API in both preparation
 and publication and fails closed if those controls are absent or unavailable.
 At planning time, the environment could not be verified (GitHub API returned
 404, which could mean absent or inaccessible). It is an external prerequisite,

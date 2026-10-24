@@ -4,8 +4,8 @@ from alembic import op
 from sqlalchemy import text
 
 
-revision = "0061_model_usage"
-down_revision = "0060_audit_restore_path"
+revision = "0062_model_usage"
+down_revision = "0061_project_catalogue_read"
 branch_labels = None
 depends_on = None
 

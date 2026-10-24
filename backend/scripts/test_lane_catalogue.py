@@ -304,6 +304,7 @@ SHARED_FOUNDATION_MODULES = (
 
 PROJECT_MODULES = (
     # Project-bound batch custody stays in the project semantic family.
+    "tests/project_catalogue/test_public.py",
     "tests/tasks/test_task_import_batch_contract.py",
     "tests/tasks/test_task_import_batch_bindings.py",
     "tests/tasks/test_task_import_batches.py",
@@ -736,6 +737,7 @@ LANES = (
         "schema_contracts",
         (
             SCHEMA_MODULE,
+            "tests/migrations/test_project_catalogue_read.py",
             "tests/migrations/test_contribution_read_audit.py",
             "tests/migrations/test_contribution_export_snapshots.py",
             "tests/authorization/post_submit/test_receipt_custody.py",

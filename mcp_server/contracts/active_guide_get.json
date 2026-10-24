@@ -1,0 +1,1731 @@
+{
+  "canonical_sha256": "d9af4c29529e1b9ea49f2df3204133de84fb57f6cb42c3de9525c32d2bae0539",
+  "components": {
+    "schemas": {
+      "ActiveGuidePreSubmitCheckerPolicyResponse": {
+        "additionalProperties": false,
+        "description": "Active-guide response schema for project pre-submit checker context.",
+        "properties": {
+          "checker_configs": {
+            "additionalProperties": true,
+            "title": "Checker Configs",
+            "type": "object"
+          },
+          "checker_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Checker Names",
+            "type": "array"
+          },
+          "compiled_bundle_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compiled Bundle Hash"
+          },
+          "compiler_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compiler Version"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "effective_policy_hash": {
+            "type": "string"
+          },
+          "effective_policy_id": {
+            "title": "Effective Policy Id",
+            "type": "string"
+          },
+          "guide_id": {
+            "title": "Guide Id",
+            "type": "string"
+          },
+          "guide_version": {
+            "title": "Guide Version",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lifecycle_status": {
+            "title": "Lifecycle Status",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "source_snapshot_hash": {
+            "title": "Source Snapshot Hash",
+            "type": "string"
+          },
+          "source_snapshot_id": {
+            "title": "Source Snapshot Id",
+            "type": "string"
+          },
+          "superseded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded At"
+          },
+          "supersedes_pre_submit_checker_policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Pre Submit Checker Policy Id"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "guide_id",
+          "guide_version",
+          "source_snapshot_id",
+          "source_snapshot_hash",
+          "effective_policy_id",
+          "effective_policy_hash",
+          "lifecycle_status",
+          "compiler_version",
+          "compiled_bundle_hash",
+          "checker_names",
+          "created_by",
+          "created_at",
+          "supersedes_pre_submit_checker_policy_id",
+          "superseded_at",
+          "checker_configs"
+        ],
+        "title": "ActiveGuidePreSubmitCheckerPolicyResponse",
+        "type": "object"
+      },
+      "ActiveGuideReadResponse": {
+        "additionalProperties": false,
+        "description": "Strict administrative read projection for one active guide.",
+        "properties": {
+          "effective_submission_artifact_policy": {
+            "$ref": "#/components/schemas/EffectiveProjectSubmissionArtifactPolicyResponse"
+          },
+          "guide": {
+            "$ref": "#/components/schemas/ProjectGuideResponse"
+          },
+          "guide_source_snapshot": {
+            "$ref": "#/components/schemas/GuideSourceSnapshotResponse"
+          },
+          "guide_sufficiency_report": {
+            "$ref": "#/components/schemas/GuideSufficiencyReportResponse"
+          },
+          "post_submit_checker_policy": {
+            "$ref": "#/components/schemas/PostSubmitCheckerPolicyResponse"
+          },
+          "pre_submit_checker_policy": {
+            "$ref": "#/components/schemas/ActiveGuidePreSubmitCheckerPolicyResponse"
+          },
+          "review_policy": {
+            "$ref": "#/components/schemas/ReviewPolicyResponse"
+          },
+          "revision_policy": {
+            "$ref": "#/components/schemas/RevisionPolicyResponse"
+          },
+          "submission_artifact_policy": {
+            "$ref": "#/components/schemas/SubmissionArtifactPolicyResponse"
+          }
+        },
+        "required": [
+          "guide",
+          "guide_source_snapshot",
+          "guide_sufficiency_report",
+          "submission_artifact_policy",
+          "effective_submission_artifact_policy",
+          "pre_submit_checker_policy",
+          "post_submit_checker_policy",
+          "review_policy",
+          "revision_policy"
+        ],
+        "title": "ActiveGuideReadResponse",
+        "type": "object"
+      },
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "EffectiveProjectSubmissionArtifactPolicyResponse": {
+        "additionalProperties": false,
+        "description": "Response schema for merged effective project submission artifact policy.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "effective_policy": {
+            "additionalProperties": true,
+            "title": "Effective Policy",
+            "type": "object"
+          },
+          "effective_policy_hash": {
+            "type": "string"
+          },
+          "guide_id": {
+            "title": "Guide Id",
+            "type": "string"
+          },
+          "guide_version": {
+            "title": "Guide Version",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lifecycle_status": {
+            "title": "Lifecycle Status",
+            "type": "string"
+          },
+          "merge_algorithm_version": {
+            "title": "Merge Algorithm Version",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "source_snapshot_hash": {
+            "title": "Source Snapshot Hash",
+            "type": "string"
+          },
+          "source_snapshot_id": {
+            "title": "Source Snapshot Id",
+            "type": "string"
+          },
+          "submission_artifact_policy_hash": {
+            "title": "Submission Artifact Policy Hash",
+            "type": "string"
+          },
+          "submission_artifact_policy_id": {
+            "title": "Submission Artifact Policy Id",
+            "type": "string"
+          },
+          "superseded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded At"
+          },
+          "supersedes_effective_policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Effective Policy Id"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "guide_id",
+          "guide_version",
+          "source_snapshot_id",
+          "source_snapshot_hash",
+          "submission_artifact_policy_id",
+          "submission_artifact_policy_hash",
+          "lifecycle_status",
+          "merge_algorithm_version",
+          "effective_policy",
+          "effective_policy_hash",
+          "created_by",
+          "created_at",
+          "supersedes_effective_policy_id",
+          "superseded_at"
+        ],
+        "title": "EffectiveProjectSubmissionArtifactPolicyResponse",
+        "type": "object"
+      },
+      "GuideSourceSnapshotItemResponse": {
+        "additionalProperties": false,
+        "description": "Response schema for a sanitized guide-source snapshot item.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ingestion_adapter": {
+            "title": "Ingestion Adapter",
+            "type": "string"
+          },
+          "item_order": {
+            "title": "Item Order",
+            "type": "integer"
+          },
+          "media_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Type"
+          },
+          "source_kind": {
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "source_label": {
+            "title": "Source Label",
+            "type": "string"
+          },
+          "source_snapshot_id": {
+            "title": "Source Snapshot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source_snapshot_id",
+          "item_order",
+          "source_kind",
+          "source_label",
+          "ingestion_adapter",
+          "media_type",
+          "created_at"
+        ],
+        "title": "GuideSourceSnapshotItemResponse",
+        "type": "object"
+      },
+      "GuideSourceSnapshotResponse": {
+        "additionalProperties": false,
+        "description": "Response schema for immutable guide-source snapshots.",
+        "properties": {
+          "bundle_hash": {
+            "title": "Bundle Hash",
+            "type": "string"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "captured_by": {
+            "title": "Captured By",
+            "type": "string"
+          },
+          "guide_id": {
+            "title": "Guide Id",
+            "type": "string"
+          },
+          "guide_version": {
+            "title": "Guide Version",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GuideSourceSnapshotItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "manifest_json": {
+            "additionalProperties": true,
+            "title": "Manifest Json",
+            "type": "object"
+          },
+          "manifest_schema_version": {
+            "title": "Manifest Schema Version",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "guide_id",
+          "guide_version",
+          "manifest_schema_version",
+          "manifest_json",
+          "bundle_hash",
+          "captured_by",
+          "captured_at"
+        ],
+        "title": "GuideSourceSnapshotResponse",
+        "type": "object"
+      },
+      "GuideSufficiencyReportResponse": {
+        "additionalProperties": false,
+        "description": "Response schema for guide sufficiency reports.",
+        "properties": {
+          "acknowledgement_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledgement Note"
+          },
+          "agent_material_byte_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Material Byte Count"
+          },
+          "agent_material_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Material Sha256"
+          },
+          "agent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Name"
+          },
+          "agent_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Version"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "guide_id": {
+            "title": "Guide Id",
+            "type": "string"
+          },
+          "guide_version": {
+            "title": "Guide Version",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_setup_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Setup Run Id"
+          },
+          "setup_generation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setup Generation"
+          },
+          "source_snapshot_hash": {
+            "title": "Source Snapshot Hash",
+            "type": "string"
+          },
+          "source_snapshot_id": {
+            "title": "Source Snapshot Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "warnings_acknowledged_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warnings Acknowledged At"
+          },
+          "warnings_acknowledged_by_actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warnings Acknowledged By Actor"
+          },
+          "warnings_acknowledged_by_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warnings Acknowledged By Role"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "guide_id",
+          "guide_version",
+          "source_snapshot_id",
+          "source_snapshot_hash",
+          "status",
+          "findings",
+          "summary",
+          "agent_name",
+          "agent_version",
+          "project_setup_run_id",
+          "setup_generation",
+          "agent_material_sha256",
+          "agent_material_byte_count",
+          "created_by",
+          "created_at",
+          "warnings_acknowledged_by_role",
+          "warnings_acknowledged_by_actor",
+          "warnings_acknowledged_at",
+          "acknowledgement_note"
+        ],
+        "title": "GuideSufficiencyReportResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "detail",
+          "error"
+        ],
+        "type": "object"
+      },
+      "PostSubmitCheckerPolicyResponse": {
+        "additionalProperties": false,
+        "description": "Response schema for post-submit checker policy records.",
+        "properties": {
+          "approval_operation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Operation Id"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "blocking_severities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking Severities",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "guide_version": {
+            "title": "Guide Version",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lifecycle_status": {
+            "title": "Lifecycle Status",
+            "type": "string"
+          },
+          "policy_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Hash"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "projection_operation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projection Operation Id"
+          },
+          "required_checkers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Checkers",
+            "type": "array"
+          },
+          "warning_checkers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warning Checkers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "guide_version",
+          "required_checkers",
+          "warning_checkers",
+          "blocking_severities",
+          "policy_hash",
+          "lifecycle_status",
+          "projection_operation_id",
+          "approval_operation_id",
+          "approved_at",
+          "created_at"
+        ],
+        "title": "PostSubmitCheckerPolicyResponse",
+        "type": "object"
+      },
+      "ProjectGuideResponse": {
+        "additionalProperties": false,
+        "description": "Response schema for project guide records.",
+        "properties": {
+          "activation_operation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activation Operation Id"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "change_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Summary"
+          },
+          "contribution_policy_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contribution Policy Id"
+          },
+          "contribution_policy_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contribution Policy Version Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "superseded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded At"
+          },
+          "task_examples": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ProjectGuideTaskExample"
+                },
+                "maxItems": 100,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Examples"
+          },
+          "task_examples_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Examples Hash"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "version",
+          "status",
+          "change_summary",
+          "task_examples",
+          "task_examples_hash",
+          "approved_by",
+          "effective_at",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "superseded_at"
+        ],
+        "title": "ProjectGuideResponse",
+        "type": "object"
+      },
+      "ProjectGuideTaskExample": {
+        "additionalProperties": false,
+        "description": "A starting idea or fuller description; project rules belong in the guide.",
+        "properties": {
+          "content": {
+            "maxLength": 65536,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "labels": {
+            "default": [],
+            "items": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Labels",
+            "type": "array"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "ProjectGuideTaskExample",
+        "type": "object"
+      },
+      "ReviewPolicyResponse": {
+        "additionalProperties": false,
+        "description": "Response schema for review policy records.",
+        "properties": {
+          "allowed_decisions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Decisions",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "finding_evidence_requirement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Evidence Requirement"
+          },
+          "guide_version": {
+            "title": "Guide Version",
+            "type": "string"
+          },
+          "human_review_required": {
+            "default": true,
+            "title": "Human Review Required",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "max_active_review_leases_per_reviewer": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Active Review Leases Per Reviewer"
+          },
+          "minimum_finding_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Minimum Finding Fields",
+            "type": "array"
+          },
+          "policy_generation": {
+            "title": "Policy Generation",
+            "type": "integer"
+          },
+          "policy_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Hash"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "reject_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reject Policy"
+          },
+          "requires_second_review": {
+            "const": false,
+            "title": "Requires Second Review",
+            "type": "boolean"
+          },
+          "review_lease_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Lease Duration Seconds"
+          },
+          "review_preference_window_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Preference Window Seconds"
+          },
+          "self_review_allowed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Self Review Allowed"
+          },
+          "semantics_format": {
+            "default": "v1",
+            "enum": [
+              "v1",
+              "v2"
+            ],
+            "title": "Semantics Format",
+            "type": "string"
+          },
+          "semantics_status": {
+            "enum": [
+              "complete",
+              "legacy_incomplete"
+            ],
+            "title": "Semantics Status",
+            "type": "string"
+          },
+          "supersedes_policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Policy Id"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "guide_version",
+          "policy_generation",
+          "policy_hash",
+          "semantics_status",
+          "supersedes_policy_id",
+          "review_preference_window_seconds",
+          "review_lease_duration_seconds",
+          "max_active_review_leases_per_reviewer",
+          "self_review_allowed",
+          "reject_policy",
+          "finding_evidence_requirement",
+          "requires_second_review",
+          "allowed_decisions",
+          "minimum_finding_fields",
+          "created_at"
+        ],
+        "title": "ReviewPolicyResponse",
+        "type": "object"
+      },
+      "RevisionPolicyResponse": {
+        "additionalProperties": false,
+        "description": "Response schema for revision policy records.",
+        "properties": {
+          "allowed_resubmission_states": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Resubmission States",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "guide_version": {
+            "title": "Guide Version",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "max_revision_rounds": {
+            "title": "Max Revision Rounds",
+            "type": "integer"
+          },
+          "policy_generation": {
+            "title": "Policy Generation",
+            "type": "integer"
+          },
+          "policy_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Hash"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "reviewer_reassignment_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Reassignment Rule"
+          },
+          "revision_deadline_hours": {
+            "title": "Revision Deadline Hours",
+            "type": "integer"
+          },
+          "semantics_status": {
+            "enum": [
+              "complete",
+              "legacy_incomplete"
+            ],
+            "title": "Semantics Status",
+            "type": "string"
+          },
+          "supersedes_policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Policy Id"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "guide_version",
+          "policy_generation",
+          "policy_hash",
+          "semantics_status",
+          "supersedes_policy_id",
+          "max_revision_rounds",
+          "revision_deadline_hours",
+          "allowed_resubmission_states",
+          "reviewer_reassignment_rule",
+          "created_at"
+        ],
+        "title": "RevisionPolicyResponse",
+        "type": "object"
+      },
+      "SubmissionArtifactPolicyResponse": {
+        "additionalProperties": false,
+        "description": "Response schema for project submission artifact policy records.",
+        "properties": {
+          "approved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "approved_by_actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By Actor"
+          },
+          "approved_by_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By Role"
+          },
+          "change_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Summary"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "derivation_agent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derivation Agent Name"
+          },
+          "derivation_agent_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derivation Agent Version"
+          },
+          "derivation_source": {
+            "title": "Derivation Source",
+            "type": "string"
+          },
+          "guide_id": {
+            "title": "Guide Id",
+            "type": "string"
+          },
+          "guide_version": {
+            "title": "Guide Version",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lifecycle_status": {
+            "title": "Lifecycle Status",
+            "type": "string"
+          },
+          "policy_body": {
+            "additionalProperties": true,
+            "title": "Policy Body",
+            "type": "object"
+          },
+          "policy_hash": {
+            "title": "Policy Hash",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "source_material_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Material Refs",
+            "type": "array"
+          },
+          "source_snapshot_hash": {
+            "title": "Source Snapshot Hash",
+            "type": "string"
+          },
+          "source_snapshot_id": {
+            "title": "Source Snapshot Id",
+            "type": "string"
+          },
+          "superseded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded At"
+          },
+          "supersedes_policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Policy Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "guide_id",
+          "guide_version",
+          "source_snapshot_id",
+          "source_snapshot_hash",
+          "policy_version",
+          "lifecycle_status",
+          "policy_body",
+          "policy_hash",
+          "derivation_source",
+          "source_material_refs",
+          "derivation_agent_name",
+          "derivation_agent_version",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "approved_by_role",
+          "approved_by_actor",
+          "approved_at",
+          "supersedes_policy_id",
+          "superseded_at",
+          "change_summary"
+        ],
+        "title": "SubmissionArtifactPolicyResponse",
+        "type": "object"
+      }
+    }
+  },
+  "operation": {
+    "description": "Return the current active guide and policy context for a project.",
+    "operationId": "get_active_guide_api_v1_projects__project_id__active_guide_get",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "project_id",
+        "required": true,
+        "schema": {
+          "title": "Project Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ActiveGuideReadResponse"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Resource not found.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        },
+        "description": "Validation Error",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Identity verification unavailable.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Get Active Guide",
+    "tags": [
+      "projects"
+    ],
+    "x-workstream-action-id": "project.active_guide.read"
+  },
+  "source": {
+    "method": "GET",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/projects/{project_id}/active-guide",
+    "repository_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694"
+  }
+}

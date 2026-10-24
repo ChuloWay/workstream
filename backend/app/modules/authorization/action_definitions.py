@@ -138,6 +138,7 @@ ACTION_DEFINITIONS = (
         ActionOwner.AUTH_10C,
     ),
     _active(ActionId.PROJECT_READ, PermissionId.PROJECT_READ, ActionOwner.AUTH_11B),
+    _active(ActionId.PROJECT_CATALOGUE_LIST, PermissionId.PROJECT_READ, ActionOwner.CLI_46),
     _active(
         ActionId.ACTOR_AUTHORIZATION_CONTEXT_READ,
         PermissionId.ACTOR_PROFILE_READ_SELF,

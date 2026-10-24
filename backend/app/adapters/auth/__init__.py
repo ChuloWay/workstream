@@ -461,6 +461,12 @@ def contributor_read_authorization(kernel, session: AsyncSession, secret):
     return ContributorReadAuthorization(kernel, AdminAuthorizationRepository(session), secret)
 
 
+def project_catalogue_authorization(kernel, secret):
+    """Compose the bounded system-project read through the request kernel."""
+    from app.modules.authorization.project_catalogue import ProjectCatalogueAuthorization
+    return ProjectCatalogueAuthorization(kernel, secret)
+
+
 def project_management_read_authorization(kernel, secret):
     """Compose the project-wide Project Manager and Finance read adapter over the request kernel."""
     from app.modules.authorization.management_read import ProjectManagementReadAuthorization

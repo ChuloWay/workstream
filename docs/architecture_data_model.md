@@ -1782,7 +1782,7 @@ or incomplete usage never permits another create. Late completion may retain
 evidence after the originating run ends; fresh current execution is still
 required to release that output to an image.
 
-Migration `0061_model_usage` extends existing ART put/receipt custody
+Migration `0062_model_usage` extends existing ART put/receipt custody
 with `model_call_attempt_id` and exact private request/response slots. Transcript
 bytes stay in ART, never these ledger rows or outbox payloads. Existing historical
 run-bound ART rows remain retained; new model evidence uses the paid attempt.

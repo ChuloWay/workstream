@@ -382,6 +382,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0061_project_catalogue_read",
         "0060_audit_restore_path",
         "0059_neutral_guide_runtime",
         "0058_compensation_unit_create",
@@ -598,6 +599,7 @@ def test_repeated_upgrade_head_preserves_current_database(
         "0058_compensation_unit_create",
         "0059_neutral_guide_runtime",
         "0060_audit_restore_path",
+        "0061_project_catalogue_read",
     ],
 )
 def test_preceding_head_upgrades_to_current_without_recreation(
@@ -630,7 +632,12 @@ def test_preceding_head_upgrades_to_current_without_recreation(
         assert before["versions"] == [installed_revision]
         validators = (
             asyncio.run(_audit_validator_custody(isolated_database_env))
-            if installed_revision == "0059_neutral_guide_runtime"
+            if installed_revision
+            in (
+                "0059_neutral_guide_runtime",
+                "0060_audit_restore_path",
+                "0061_project_catalogue_read",
+            )
             else None
         )
         command.upgrade(config, HEAD_REVISION)
@@ -638,6 +645,11 @@ def test_preceding_head_upgrades_to_current_without_recreation(
             updated = asyncio.run(_audit_validator_custody(isolated_database_env))
             assert [row[:-1] for row in updated] == [row[:-1] for row in validators]
             assert all(row[-1] == ["search_path=pg_catalog, public, pg_temp"] for row in updated)
+            if installed_revision in (
+                "0060_audit_restore_path",
+                "0061_project_catalogue_read",
+            ):
+                assert updated == validators
         after = asyncio.run(_database_snapshot(isolated_database_env))
         command.upgrade(config, "head")
         repeated = asyncio.run(_database_snapshot(isolated_database_env))
