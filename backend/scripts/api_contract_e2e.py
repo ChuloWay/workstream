@@ -202,6 +202,14 @@ def api_environment() -> dict[str, str]:
     env["WORKSTREAM_FLOW_AUTH_AUDIENCE"] = flow_audience
     env["WORKSTREAM_FLOW_AUTH_LOCAL_HMAC_SECRET"] = flow_secret
     env["WORKSTREAM_PROJECT_AGENT_MODEL"] = "api-contract-fixture-model"
+    model_socket = Path(env.get("RUNNER_TEMP", "/tmp")) / (
+        f"workstream-api-contract-model-{os.getpid()}.sock"
+    )
+    if os.path.lexists(model_socket):
+        raise RuntimeError("scripted model socket path is not fresh")
+    # The deterministic runtime does not call the capability. A concrete absent
+    # path still proves typed profile/session admission without a provider bypass.
+    env["WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET"] = str(model_socket)
     env["WORKSTREAM_CELERY_TASK_ALWAYS_EAGER"] = "true"
     env["WORKSTREAM_CELERY_BROKER_URL"] = "memory://"
     env["WORKSTREAM_CELERY_RESULT_BACKEND_URL"] = "cache+memory://"
