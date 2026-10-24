@@ -2,6 +2,7 @@
 
 import asyncio
 from copy import deepcopy
+from functools import partial
 import json
 import subprocess
 import sys
@@ -25,9 +26,11 @@ from test_guide_post_approval_public_api import (
     pagination_cursor_hmac_secret as pagination_cursor_hmac_secret,
 )
 from test_public_self_service import _ready
+from app.adapters.project_agents import build_project_guide_adapter_profile
+from app.core.config import get_settings
 from app.core.identifiers import new_record_id
+from app.core.project_agents import project_guide_runtime_configuration
 from tests.project_create_fixtures import seed_historical_project
-from tests.projects.guide_compilation.helpers import runtime_configuration
 from tests.projects.guide_compilation.runtime_fixtures import (
     scripted_model_profile_spec,
 )
@@ -35,7 +38,7 @@ from tests.projects.guide_compilation.runtime_fixtures import (
 
 @pytest.mark.asyncio
 async def test_guide_correction_public_save_dispatch_replay_and_authority(
-    clean_postgres_database, tmp_path, cli
+    clean_postgres_database, tmp_path, cli, monkeypatch,  # noqa: F811
 ):
     env = api_environment()
     env["WORKSTREAM_E2E_FLOW_ISSUER"] = "https://identity.flowresearch.tech"
@@ -234,8 +237,24 @@ async def test_guide_correction_public_save_dispatch_replay_and_authority(
                 )
                 source = await direct.get(prefix + "/proposal", headers=headers)
                 assert source.status_code == 200, source.text
+                with monkeypatch.context() as runtime_environment:
+                    for name, value in env.items():
+                        if name.startswith("WORKSTREAM_"):
+                            runtime_environment.setenv(name, value)
+                    get_settings.cache_clear()
+                    try:
+                        runtime_settings = get_settings()
+                        configuration = project_guide_runtime_configuration(
+                            runtime_settings,
+                            adapter_profile_builder=partial(
+                                build_project_guide_adapter_profile,
+                                runtime_settings.project_agent_runtime,
+                            ),
+                        )
+                    finally:
+                        get_settings.cache_clear()
                 profile = scripted_model_profile_spec(
-                    command.project_id, runtime_configuration()
+                    command.project_id, configuration
                 )
                 published = await direct.post(
                     f"/api/v1/operations/projects/{command.project_id}/model-profiles",
