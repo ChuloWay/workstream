@@ -38,6 +38,23 @@ async def assert_other_actors_cannot_recover(factory, creator, latest_path, endp
             assert rejected.status_code == 404, rejected.text
 
 
+async def assert_dispatch_keeps_selected_profile(
+    factory, actor, project_id, setup_id, configuration, profile,
+):
+    """A later Operator profile cannot rewrite the committed correction attempt."""
+    async with factory() as session:
+        saved = await session.scalar(text(
+            "SELECT runtime_configuration FROM project_guide_compilation_attempts "
+            "WHERE setup_run_id=:id"
+        ), {"id": setup_id})
+    assert saved["model_profile_id"] == profile["profile_id"]
+    assert saved["model_profile_version"] == profile["spec"]["profile_version"]
+    assert saved["model_profile_digest"] == profile["profile_digest"]
+    async with proposal_client(factory, actor) as operator:
+        newer = await publish_scripted_model_profile(operator, project_id, configuration, version=2)
+    assert newer["profile_id"] != profile["profile_id"]
+
+
 def configure_manual_dispatch(monkeypatch, tmp_path, broker_failure):
     """Wire the scripted worker and a broker with observable delivery attempts."""
     from app.core.config import get_settings
@@ -96,7 +113,7 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
             configuration = scripted_runtime_configuration(
                 get_settings(), adapter_profile_builder=lambda value: value
             )
-            await publish_scripted_model_profile(
+            profile = await publish_scripted_model_profile(
                 client, command.project_id, configuration
             )
             package = await client.get(path+"/proposal")
@@ -134,6 +151,9 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
             assert response.status_code == 202, response.text
             assert "provider_idempotency_key" not in response.text
             assert len(published) == 1 and runtime.calls == 0
+            await assert_dispatch_keeps_selected_profile(
+                factory, actor, command.project_id, pending["id"], configuration, profile,
+            )
             if broker_failure:
                 replay = await client.post(endpoint)
                 assert replay.status_code == 202, replay.text
@@ -180,3 +200,9 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
             assert completed.json()["correction_operation_id"] == operation
             assert completed.json()["predecessor_compilation_id"] == predecessor
             assert await predecessor_record() == original_finalization
+            async with factory() as session:
+                retained_profile = await session.scalar(text(
+                    "SELECT runtime_configuration->>'model_profile_id' "
+                    "FROM project_guide_compilation_attempts WHERE setup_run_id=:id"
+                ), {"id": pending["id"]})
+            assert retained_profile == profile["profile_id"]

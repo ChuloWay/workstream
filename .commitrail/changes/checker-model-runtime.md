@@ -455,3 +455,15 @@ Test names and counts were not treated as runtime proof: assertions, setup
 completion, metadata custody and owner code were inspected. No live provider
 call, hosted CI run, gVisor run, or complete real-project execution occurred,
 so this verdict makes none of those claims.
+
+
+Manual guide correction dispatch must select the same immutable project model
+profile as automatic setup before request facts and runtime hashes are locked.
+The real public correction regression exposed a missing selection: the worker
+correctly refused the already-created attempt because its configuration had no
+profile. The repair shares selection in the existing PROJECTS request-input
+module, supplies the MODEL-USAGE read port at composition, and preserves an
+existing attempt's exact configuration on replay. A later Operator profile
+publication must not change that attempt. This owns the affected correction
+dispatch, live coordinator, request-input and composition files plus their
+existing public and boundary tests; it adds no new route or model call.
