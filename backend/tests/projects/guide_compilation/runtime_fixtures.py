@@ -119,15 +119,18 @@ def scripted_model_profile_spec(project_id, configuration) -> ProjectModelProfil
     return ProjectModelProfileSpec.model_validate(source)
 
 
-async def publish_scripted_model_profile(client, project_id, configuration):
+async def publish_scripted_model_profile(client, project_id, configuration, *, version=1):
     """Publish one exact scripted-runtime profile through the Operator API."""
-    spec = scripted_model_profile_spec(project_id, configuration)
+    spec = scripted_model_profile_spec(project_id, configuration).model_copy(
+        update={"profile_version": version}
+    )
     published = await client.post(
         f"/api/v1/operations/projects/{project_id}/model-profiles",
         headers=auth_headers() | {"Idempotency-Key": str(uuid4())},
         json=spec.model_dump(mode="json"),
     )
     assert published.status_code == 201, published.text
+    return published.json()
 
 
 def configure_scripted_model_transport(monkeypatch, socket_path: Path) -> None:

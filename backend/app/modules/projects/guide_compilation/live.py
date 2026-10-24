@@ -40,7 +40,9 @@ from .models import (
     ProjectGuideSetupFinalization,
 )
 from .repository import GuideCompilationIntegrityError
-from .request_inputs import CompilationRequestInputs, automatic_request_selector
+from .request_inputs import (
+    CompilationRequestInputs, automatic_request_selector, select_model_runtime_configuration,
+)
 from .service import GuideCompilationService
 from .source_state import is_compilation_source_setup
 
@@ -249,21 +251,8 @@ class LiveGuideCompilationCoordinator:
         self, session: AsyncSession, project_id: UUID
     ) -> ProjectGuideRuntimeConfiguration:
         """Snapshot the newest exact Operator profile while PROJECTS custody is held."""
-        configuration = self._configuration()
-        if not configuration.uses_inference:
-            return configuration
-        profile = await self._model_profiles(session).read_latest_matching(
-            project_id=project_id,
-            provider=configuration.model_provider,
-            api=configuration.model_api,
-            model_snapshot=configuration.model,
-        )
-        return configuration.model_copy(
-            update={
-                "model_profile_id": profile.profile_id,
-                "model_profile_version": profile.spec.profile_version,
-                "model_profile_digest": profile.profile_digest,
-            }
+        return await select_model_runtime_configuration(
+            self._configuration(), self._model_profiles(session), project_id
         )
 
     async def _finalize(self, command: ProjectGuideSetupFinalizationCommand) -> dict:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, replace
@@ -390,6 +391,8 @@ class _Journey:
     output_diagnostics: list[dict[str, object] | None]
     fail_completion: list[bool]
     outputs: object
+    provider_entered: asyncio.Event | None = None
+    provider_release: asyncio.Event | None = None
 
     def handler(self) -> SetupModelProxyHandler:
         return _ObservedHandler(
@@ -424,6 +427,10 @@ class _Provider:
         assert self.journey.reserve_observations == [
             ("setup_model_call", "model_request", "verified")
         ]
+        if self.journey.provider_entered is not None:
+            assert self.journey.provider_release is not None
+            self.journey.provider_entered.set()
+            await asyncio.wait_for(self.journey.provider_release.wait(), timeout=30)
         return SetupProviderResponse(
             status_code=200,
             response_json=self.journey.response_json,
@@ -842,3 +849,39 @@ async def test_setup_response_recovers_from_verified_minio_after_ledger_loss(
         assert replay == recovered
         assert journey.provider_calls == ["dispatch"]
         assert await _state(journey) == completed
+
+
+async def test_concurrent_setup_callbacks_share_one_paid_effect(
+    tmp_path,
+    isolated_database_env,
+    admin_access,  # noqa: F811 - imported fixture is intentionally requested here
+    monkeypatch,
+) -> None:
+    """A duplicate callback observes the durable reservation and cannot send again."""
+    async with _storage_case(tmp_path, isolated_database_env, monkeypatch) as storage:
+        journey = await _journey(storage, admin_access)
+        journey.fail_completion[0] = False
+        journey.provider_entered = asyncio.Event()
+        journey.provider_release = asyncio.Event()
+        first = asyncio.create_task(journey.handler().handle(journey.request))
+        try:
+            await asyncio.wait_for(journey.provider_entered.wait(), timeout=30)
+            duplicate = await journey.handler().handle(journey.request)
+            assert duplicate.outcome == "unavailable"
+            assert duplicate.failure_code == "model_call_unavailable"
+            pending = await _state(journey)
+            assert pending.state == "dispatching"
+            assert pending.response_binding_id is None
+            assert pending.lifetime_reserved_nanodollars > 0
+            assert pending.lifetime_settled_nanodollars == 0
+        finally:
+            journey.provider_release.set()
+        completed = await asyncio.wait_for(first, timeout=30)
+        replay = await journey.handler().handle(journey.request)
+        assert completed.outcome == replay.outcome == "completed"
+        assert completed.response_json == replay.response_json == journey.response_json
+        assert journey.provider_calls == ["dispatch"]
+        state = await _state(journey)
+        assert state.state == "completed"
+        assert state.lifetime_reserved_nanodollars == 0
+        assert state.lifetime_settled_nanodollars == state.settled_nanodollars == 23_000

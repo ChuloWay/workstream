@@ -2,6 +2,7 @@
 members = [
     "workstream-checker-sdk",
     "workstream-checker-service",
+    "workstream-checker-guest",
 ]
 resolver = "2"
 

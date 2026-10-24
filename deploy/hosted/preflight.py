@@ -923,6 +923,10 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         and services["model-proxy"]["image"] != values["WORKSTREAM_MODEL_PROXY_IMAGE"]
     ):
         raise PreflightError("model proxy must use the exact agents backend image")
+    if any(services[name].get("pull_policy") != "never" for name in PROOF_SERVICES):
+        raise PreflightError(
+            "AWS proof jobs must use the cached release image without pulling"
+        )
     for name in (
         "api",
         "worker",

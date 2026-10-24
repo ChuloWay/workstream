@@ -147,6 +147,18 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                 "registry_entry_digest": registry.entry_digest,
             }
         )
+        if terminal_mode is not None:
+            # An authorized child is a second provider dispatch in the same
+            # immutable envelope, even though it reuses logical call slot zero.
+            spec = spec.model_copy(
+                update={
+                    "maximum_calls": 2,
+                    "maximum_total_request_bytes": 20_000,
+                    "maximum_total_response_bytes": 60_000,
+                    "maximum_total_input_tokens": 200,
+                    "maximum_total_output_tokens": 100,
+                }
+            )
         response = await admin_access.signed.client.post(
             f"/api/v1/operations/projects/{project_id}/model-profiles",
             headers=admin_access.target.headers | {"Idempotency-Key": str(uuid4())},

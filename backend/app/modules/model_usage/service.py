@@ -56,9 +56,9 @@ from app.modules.model_usage.repository import (
 from app.modules.model_usage.profiles import stored_model_profile
 
 
-def _uuid(value: str) -> UUID:
+def _uuid(value: object) -> UUID:
     """Decode a persisted UUID string at the typed service boundary."""
-    return UUID(value)
+    return UUID(str(value))
 
 
 def _same_uuid(value: str, expected: UUID) -> bool:
@@ -662,10 +662,16 @@ class ModelCallService:
         attempt = PreparedModelCallAttempt.model_validate(attempt)
         request_evidence = ModelCallEvidence.model_validate(request_evidence)
         self._require_execution_slot(execution, attempt.slot_key)
-        authority = await self._authority.authorize_dispatch(execution, attempt, request_evidence)
+        # ``replayed`` describes how this caller obtained the immutable attempt;
+        # it is not dispatch identity. Normalize it so a successor invocation can
+        # authorize the already-created recovery child against durable SQL facts.
+        authority_attempt = attempt.model_copy(update={"replayed": False})
+        authority = await self._authority.authorize_dispatch(
+            execution, authority_attempt, request_evidence
+        )
         dispatch_facts = {
             "execution": execution.model_dump(mode="json"),
-            "attempt": attempt.model_dump(mode="json"),
+            "attempt": authority_attempt.model_dump(mode="json"),
             "request_evidence": request_evidence.model_dump(mode="json"),
         }
         _require_authority("dispatch", dispatch_facts, authority)

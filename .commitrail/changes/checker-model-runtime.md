@@ -225,106 +225,63 @@ honest separation of local proof from deployed operation.
 
 ## Evidence
 
-Initial source inspection and architecture review identified the stable paid
-slot and the need to preserve image ownership. No live provider spend or project
-completion is established. The candidate has focused controlled-provider,
-proxy crash/replay, private Unix transport, setup/checker shared-account and
-hosted Compose contract proof. The retained-data upgrade through
-`0060_audit_restore_path` through `0061_project_catalogue_read` to
-`0062_model_usage`, PostgreSQL ledger, public
-provisioning and actual authorization catalogue adapter require final exact-head
-evidence before readiness.
-All six composed public profile-to-checker cases pass with real PostgreSQL,
-local/MinIO ART and a controlled provider/image boundary: completion, retained
-paid results after a lost image reply, concurrent callbacks, and explicit child
-recovery after proven no-effect or fully settled provider failure. Database and
-MinIO cleanup completed. Final independent reviews and full CI remain required
-before readiness. These checks do not establish live provider or gVisor operation.
+The canonical parent schema installs linearly through
+`0060_audit_restore_path`, `0061_project_catalogue_read`, and
+`0062_model_usage`; its measured public-schema digest is
+`d14a06c088aae0e8876bebb637a7b3fb0c19344f8cc4fdfd31aa2c1a47348593`.
+The migration and owner guard retain immutable prepare/dispatch/terminal
+authority facts instead of reconstructing them from a later worker lease. A
+real PostgreSQL selection passed 20/20 checker and setup authority cases,
+including every foreign digest branch, a renewed legitimate checker grant,
+successor-run attachment to one paid effect, known-failed settlement, and stale
+or reused authorization rejection. Independent QA reran seven discriminating
+authority/renewal cases and killed a mutant that restored latest-grant lookup.
 
-Implementation review caught and repaired two runtime defects: inherited Compose
-profiles unintentionally started the optional listener, and an empty prompt could
-reserve budget before local validation rejected it. Profile publication now also
-requires the exact registered POST image digest, with independent SQL checks of
-canonical profile/budget specification hashes. Regressions cover each boundary;
-the final frozen review must assess their composed behavior and current head.
+The controlled composed boundary has separate current evidence for its ordinary
+and recovery paths. Four ordinary completion, retained-result and concurrent
+callback cases passed with real PostgreSQL and MinIO. The concurrent callback
+is held before first response publication so the second caller must recover the
+known provider identifier; both replies use one effect, response receipt and
+settlement. Proven no-effect and fully settled failure each passed their public
+Operator recovery journey with exactly one additional pre-authorized dispatch,
+while the original effect and evidence remain immutable. Database and MinIO
+cleanup completed for each owned run. The setup handler separately proves that
+two simultaneous resumptions share one durable paid effect and provider create;
+the scripted setup coordinator convergence test is intentionally not represented
+as paid-effect deduplication.
 
-The retained-data upgrade into the model-usage migration exposed a PL/pgSQL parsing failure that
-fresh baseline installation did not expose. A discriminating PostgreSQL probe
-isolated the unparenthesized CASE expression in the ART binding guard; the
-corrected upgrade passes with retained data and owned-database cleanup. Public
-HTTP qualification also exposed strict JSON UUID decoding and a prepared
-system-Operator scope mismatch. These require the real adapter/API proofs; the
-ledger's controlled-authority tests alone cannot establish public usability.
+Private request/response evidence uses the existing generated-output ART path.
+Manual setup correction dispatch passed five public HTTP/PostgreSQL profile
+selection, replay and denial cases: a created attempt remains pinned to profile
+version 1 even after version 2 is published. Actual MinIO tests passed 11/11
+transport-timeout, outer-cancellation, precondition and malformed-observation
+cases after the S3 adapter was made to join its single SDK body consumer before
+returning; no source reads continue after timeout cleanup.
 
-Composed execution also exposed strict Python decoding of the JSON prepared
-ART authorization packet. The parser now validates that packet as JSON while
-retaining strict integer validation. Both write and binding regressions reject
-the original decoder. The composed fixture explicitly declares model evaluation
-and supplies the canonical profile reader instead of attaching a model profile
-to a static requirement; production policy validation remains unchanged.
+The current hosted configuration passes 38/38 focused tests after reconciling
+main's cached proof-image policy with the private model-proxy image identity.
+Current main's Smol microVM engine was also reconciled without claiming a socket
+capability it does not provide: its configuration rejects the host model relay,
+and a model-entitled request on a Smol-only node closes as infrastructure
+unavailable before VM admission. The combined checker-service unit selection
+passes 44/44; model-enabled POST remains bound to the intended `runsc`/`gvisor`
+deployment path, which still requires deployed qualification.
+An actual parent Rust relay image previously passed a controlled Docker smoke
+with no network, read-only input/root filesystem, only the invocation socket
+exposed, the global grant concealed, and owned image/container cleanup
+confirmed. Static API/lane, CLI, MCP, Ruff, behavior ownership and structural
+debt checks pass their affected selections. These are controlled local proofs,
+not hosted deployment or composed gVisor qualification.
 
-That composed path also exposed an inherited ART receipt trigger that required
-a checker-run producer even for a paid-call receipt. The migration now admits
-only the exact model-call attempt and request/response role while retaining the
-existing producer guards. Fresh schema installation, the canonical ART custody
-case and retained intermediate upgrade pass with the corrected trigger.
-
-Canonical storage regressions also require malformed or substituted commitment
-facts to leave AUTH through its concealed unavailable outcome. Resource
-validation now discards the prepared handle before returning that outcome;
-changed bytes cannot reach provider I/O. The remaining ART cases cover mixed
-binding lineage, rollback/concurrent replay, uncertain puts, revocation,
-cancellation and size limits. The adapter composition uses existing owner ports
-and passes the protected-base boundary check without adding private-edge debt.
-
-Operator recovery uses the existing authorized checker retry-source read to
-discover bounded eligible paid-call candidates. Child preparation retains exact
-current Task/Submission custody without requiring a live worker lease; actual
-dispatch still requires a fresh current invocation. This closes the otherwise
-unusable repair path after a terminal infrastructure failure.
-
-Current owner documentation replaces deny-only generated-output wording with
-active paid-call ART custody, lists all nine model permission/action mappings and
-describes stable effect records. Existing normalized checker outcomes and
-true/false review-policy routing remain unchanged.
-
-The current security repair makes setup `known_failed` completion record the
-required settlement authority and timestamp before the terminal transition. A
-real PostgreSQL regression proves one provider dispatch, exact settled cost,
-zero remaining reservation and immutable restart replay. Checker recovery rows
-now retain canonical execution/effect facts, and the `0062_model_usage` guard
-independently verifies exact project, Task, assignment, Submission, registry,
-run, lease, generation, effect, service actor, action and resource digest. The
-valid fresh retry successor and independent substitutions of every one of those
-facts passed together with the setup settlement case (`2 passed` in 14.76s).
-
-The same repair closes repository metadata drift: project budget accounts and
-grant-call bindings are explicitly classified natural/composite identities,
-all MODEL foreign keys use the referenced native UUID representation, and the
-ORM declares the budget configuration uniqueness required by the account's
-composite foreign key. Native UUID metadata tests pass `5/5`; the complete
-static identifier inventory passes `24/24`. The first combined canonical model
-usage run installed every migration through `0062_model_usage` and emitted six passing
-tests, but its final ART case exceeded the deliberately bounded 240-second child
-limit. Cleanup completed and no full-run pass is claimed from that attempt;
-that historical pre-rechain result does not qualify `0062_model_usage`; split
-exact-head PostgreSQL replay and retained-data upgrade remain pending.
-
-Hosted configuration proof at `9a57c8831` passes 31 focused tests. An actual
-parent Rust relay image built from `04bbac112` passed a controlled smoke with no
-network, read-only input/root filesystem, only the invocation socket exposed,
-the global grant concealed, and owned image/container cleanup confirmed. This
-does not qualify hosted deployment or the composed gVisor runtime. The final
-static API/lane run passes 59 tests, the CLI permission contract passes 23, and
-the actual MCP permission payload passes 231; these are controlled local proofs,
-not live provider or deployment evidence.
-
-Plan review found that existing ART output slots are empty and run/lease-bound;
-the stable call evidence reservation above is required. It also required exact
-profile selection/readiness checks rather than merely hashing opaque config.
-The proposed new CheckerRun state was rejected as unnecessary: call-effect
-recovery belongs to the durable slot while existing infrastructure outcomes stay
-unchanged.
+Independent QA issued a PASS for the reviewed MODEL runtime atoms and the
+discriminating PostgreSQL/composed callback tests. Attempts to obtain the
+separate security-review verdict ended in platform review errors, so no security
+sign-off is claimed. Current hosted CI, retained-data qualification on the
+stacked migration, and remaining independent review gates must complete before
+the draft is marked ready. No live provider call or paid spend occurred. The
+historical setup spend remains unreconciled; deployment and any paid rehearsal
+remain disabled until the Operator supplies the externally reconciled remaining
+allowance within the existing US$10 aggregate ceiling.
 
 ## Reconciliation
 
@@ -455,3 +412,35 @@ Test names and counts were not treated as runtime proof: assertions, setup
 completion, metadata custody and owner code were inspected. No live provider
 call, hosted CI run, gVisor run, or complete real-project execution occurred,
 so this verdict makes none of those claims.
+
+
+Manual guide correction dispatch must select the same immutable project model
+profile as automatic setup before request facts and runtime hashes are locked.
+The real public correction regression exposed a missing selection: the worker
+correctly refused the already-created attempt because its configuration had no
+profile. The repair shares selection in the existing PROJECTS request-input
+module, supplies the MODEL-USAGE read port at composition, and preserves an
+existing attempt's exact configuration on replay. A later Operator profile
+publication must not change that attempt. This owns the affected correction
+dispatch, live coordinator, request-input and composition files plus their
+existing public and boundary tests; it adds no new route or model call.
+
+An S3 write timeout may cancel the pinned aiohttp request while its separately
+scheduled body-writer task is still advancing the single committed scratch
+stream. Recovery must own that task to quiescence before it validates, observes,
+or releases the sealed source. This bounded repair owns only the S3-compatible
+adapter and its focused tests: it must reproduce the actual asynchronous-writer
+race, prevent concurrent advancement and post-return source access, preserve
+the source's finite scratch deadline, and never accept an incomplete source as
+a replay. A canceled partial write is unavailable/uncertain and remains
+recoverable only through the existing complete provider-object observation;
+increasing transport timeouts is not a correctness fix.
+
+The pre-repair probe used the pinned aiohttp 3.14.3 writer against a local
+stalled HTTP endpoint and deterministically produced the qualification failure:
+request timeout followed by `anext(): asynchronous generator is already
+running`. With explicit consumer ownership, the same probe joins the writer and
+classifies the still-incomplete body unavailable. Eleven focused S3 cases pass
+against MinIO, covering transport timeout, outer caller cancellation, no source
+access after return, early 412 replay, missing replay, malformed sealed bytes,
+unconsumed success, and independent uncertain-write observation.

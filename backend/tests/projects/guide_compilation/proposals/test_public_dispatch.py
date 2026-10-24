@@ -38,6 +38,42 @@ async def assert_other_actors_cannot_recover(factory, creator, latest_path, endp
             assert rejected.status_code == 404, rejected.text
 
 
+async def retained_runtime_configuration(factory, setup_id):
+    """Read the exact immutable runtime selected by this correction attempt."""
+    async with factory() as session:
+        return await session.scalar(text(
+            "SELECT runtime_configuration FROM project_guide_compilation_attempts "
+            "WHERE setup_run_id=:id"
+        ), {"id": setup_id})
+
+
+async def assert_dispatch_keeps_selected_profile(
+    factory, actor, project_id, setup_id, configuration, profile,
+):
+    """A later Operator profile cannot rewrite the committed correction attempt."""
+    saved = await retained_runtime_configuration(factory, setup_id)
+    assert saved["model_profile_id"] == profile["profile_id"]
+    assert saved["model_profile_version"] == profile["spec"]["profile_version"]
+    assert saved["model_profile_digest"] == profile["profile_digest"]
+    async with proposal_client(factory, actor) as operator:
+        newer = await publish_scripted_model_profile(operator, project_id, configuration, version=2)
+    assert newer["profile_id"] != profile["profile_id"]
+
+
+async def replay_without_latest_profile_read(monkeypatch, client, endpoint):
+    """An admitted correction reuses its attempt without mutable profile selection."""
+    from app.modules.model_usage.profiles import ModelProfileReader
+
+    async def forbidden_latest_profile_read(*_args, **_kwargs):
+        pytest.fail("correction replay consulted the latest model profile")
+
+    with monkeypatch.context() as replay_guard:
+        replay_guard.setattr(
+            ModelProfileReader, "read_latest_matching", forbidden_latest_profile_read
+        )
+        return await client.post(endpoint)
+
+
 def configure_manual_dispatch(monkeypatch, tmp_path, broker_failure):
     """Wire the scripted worker and a broker with observable delivery attempts."""
     from app.core.config import get_settings
@@ -70,7 +106,7 @@ def configure_manual_dispatch(monkeypatch, tmp_path, broker_failure):
 @pytest.mark.parametrize("broker_failure", [False, True])
 @pytest.mark.parametrize("manager_handoff", [False, True])
 async def test_manual_dispatch_retains_one_human_request_and_one_execution(
-    project_database_env, monkeypatch, tmp_path, broker_failure, manager_handoff,
+    project_database_env, monkeypatch, tmp_path, broker_failure, manager_handoff,  # noqa: F811
 ):
     from app.core.config import get_settings
 
@@ -78,12 +114,7 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
         monkeypatch, tmp_path, broker_failure
     )
     async with proposal_case(project_database_env) as (_, factory, command, actor, grant):
-        from tests.project_create_fixtures import grant_fixture_admin_role
-
-        async with factory() as session, session.begin():
-            await grant_fixture_admin_role(
-                session, actor.actor_profile_id, role="operator", scope="system"
-            )
+        operator, _ = await seed_review_actor(factory, None, role="operator", scope="system")
         path = proposal_path(command)
         latest_path = f"/api/v1/projects/{command.project_id}/guides/{command.guide_id}/setup-runs/latest"
         async def predecessor_record():
@@ -92,13 +123,14 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
                     "SELECT row_to_json(f) FROM project_guide_setup_finalizations f WHERE compilation_id=:id"
                 ), {"id": command.compilation_id})
         original_finalization = await predecessor_record()
+        configuration = scripted_runtime_configuration(
+            get_settings(), adapter_profile_builder=lambda value: value
+        )
+        async with proposal_client(factory, operator) as operator_client:
+            profile = await publish_scripted_model_profile(
+                operator_client, command.project_id, configuration
+            )
         async with proposal_client(factory, actor) as client:
-            configuration = scripted_runtime_configuration(
-                get_settings(), adapter_profile_builder=lambda value: value
-            )
-            await publish_scripted_model_profile(
-                client, command.project_id, configuration
-            )
             package = await client.get(path+"/proposal")
             assert package.status_code == 200, package.text
             correction = await client.post(path+"/corrections", headers={"Idempotency-Key":str(uuid4())}, json={
@@ -134,13 +166,14 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
             assert response.status_code == 202, response.text
             assert "provider_idempotency_key" not in response.text
             assert len(published) == 1 and runtime.calls == 0
-            if broker_failure:
-                replay = await client.post(endpoint)
-                assert replay.status_code == 202, replay.text
-                assert len(published) == 2
-            else:
-                assert (await client.post(endpoint)).status_code == 202
-                assert len(published) == 1
+            await assert_dispatch_keeps_selected_profile(
+                factory, operator, command.project_id, pending["id"], configuration, profile,
+            )
+            replay = await replay_without_latest_profile_read(
+                monkeypatch, client, endpoint
+            )
+            assert replay.status_code == 202, replay.text
+            assert len(published) == (2 if broker_failure else 1)
             async with factory() as session:
                 row = (await session.execute(text(
                     "SELECT request_trigger,setup_run_id,setup_generation,source_snapshot_id,actor_profile_id "
@@ -180,3 +213,51 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
             assert completed.json()["correction_operation_id"] == operation
             assert completed.json()["predecessor_compilation_id"] == predecessor
             assert await predecessor_record() == original_finalization
+            saved = await retained_runtime_configuration(factory, pending["id"])
+            assert saved["model_profile_id"] == profile["profile_id"]
+
+
+async def test_manual_dispatch_without_matching_profile_has_no_effects(
+    project_database_env, monkeypatch, tmp_path,  # noqa: F811
+):
+    """A missing Operator profile is concealed before request or queue effects."""
+    _worker, runtime, published = configure_manual_dispatch(monkeypatch, tmp_path, False)
+    async with proposal_case(project_database_env) as (_, factory, command, actor, _grant):
+        path = proposal_path(command)
+        async with factory() as session:
+            profile_count = await session.scalar(text(
+                "SELECT count(*) FROM model_usage_profiles WHERE project_id=:project"
+            ), {"project": command.project_id})
+        assert profile_count == 0
+
+        async with proposal_client(factory, actor) as client:
+            package = await client.get(path + "/proposal")
+            assert package.status_code == 200, package.text
+            correction = await client.post(
+                path + "/corrections",
+                headers={"Idempotency-Key": str(uuid4())},
+                json={
+                    "target": package.json()["target"],
+                    "reason": "Reconsider the requirement using the guide evidence.",
+                },
+            )
+            assert correction.status_code == 201, correction.text
+            receipt = correction.json()
+            endpoint = (
+                f"{path}/corrections/{receipt['operation_id']}/dispatch"
+            )
+            response = await client.post(endpoint)
+            assert response.status_code == 404, response.text
+            assert response.json()["error"]["code"] == "proposal_unavailable"
+
+        assert published == [] and runtime.calls == 0
+        async with factory() as session:
+            state = (await session.execute(text(
+                "SELECT s.status,s.current_step,s.celery_task_id,"
+                "(SELECT count(*) FROM project_guide_compilation_attempts a "
+                "WHERE a.setup_run_id=s.id) AS attempts,"
+                "(SELECT count(*) FROM project_guide_compilation_request_operations r "
+                "WHERE r.setup_run_id=s.id) AS requests "
+                "FROM project_setup_runs s WHERE s.id=:setup"
+            ), {"setup": receipt["successor_setup_run_id"]})).one()
+        assert tuple(state) == ("correction_requested", "correction_requested", None, 0, 0)

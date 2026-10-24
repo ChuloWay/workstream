@@ -232,10 +232,13 @@ def project_guide_correction_dispatch(
     )
     from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs
 
+    from app.adapters.model_usage import model_profile_reader
+
     return GuideCorrectionDispatchService(
         session,
         authorization,
         CompilationRequestInputs(material, capabilities, configuration),
+        profiles=model_profile_reader(session),
     )
 
 
