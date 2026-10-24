@@ -158,7 +158,7 @@ PROJECT_GUIDE_OUTPUT_EXAMPLE = {
                         {
                             "dependency_id": "reasoning_model",
                             "kind": "model_service",
-                            "provisioning": "runtime_gap",
+                            "provisioning": "model_proxy",
                             "purpose": "Apply the qualitative evidence rubric.",
                             "unavailable_code": "implementation_unavailable",
                         }
@@ -317,9 +317,11 @@ Keep infrastructure failures separate from work failures: missing support/materi
 capacity, deadline, provider failure and invalid output cannot consume revision rounds.
 
 DEPENDENCIES
-Specifications grant no access. Current images receive verified package material,
-manifest, approved configuration and normalized request metadata, not task/guide
-prose, hosted models or nested environments. Declare unavailable needs explicitly;
+Specs give no access. Images get verified material, manifest, config and
+request, not guide prose, provider keys or nested environments. POST
+model_evaluation requires model_service/model_proxy, implementation_unavailable,
+a registered project image and its exact approved profile; else stays unbound.
+Declare unavailable needs explicitly;
 a supported binding cannot depend on runtime_gap. current_runner isolates the
 checker image only; it supplies no container engine, second sandbox or host socket.
 Follow the schema's exact dependency kind/provisioning/unavailable_code pairs.

@@ -1093,6 +1093,16 @@ def test_production_rate_dependencies_match_exact_route_allowlist() -> None:
             route: {enforce_authorization_read_rate_limit}
             for route in ESTABLISHED_AUTHORIZATION_READ_RATE_ROUTES
         },
+        **{
+            ("POST", f"/operations/projects/{{project_id}}/{suffix}"): {enforce_admin_mutation_rate_limit}
+            for suffix in (
+                "model-profiles", "model-budget-configurations",
+                "model-call-attempts/{parent_attempt_id}/recovery-children",
+            )
+        },
+        ("GET", "/operations/projects/{project_id}/model-usage/effects/{effect_id}"): {
+            enforce_authorization_read_rate_limit
+        },
         **CHECKER_REGISTRY_RATE_BINDINGS,
         **CHECKER_RECOVERY_RATE_BINDINGS,
     }

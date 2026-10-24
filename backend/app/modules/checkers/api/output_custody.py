@@ -1,18 +1,23 @@
-"""CHECKERS-owned output custody contracts; production reservations are unavailable."""
+"""Call-stable private model evidence through CHECKERS and existing ART custody."""
 
 from collections.abc import AsyncIterable
 from dataclasses import dataclass
 from typing import Annotated, Literal, Protocol, Self
 from uuid import UUID
 
-from pydantic import Field, StrictInt, model_validator
+from pydantic import Field, StrictInt, TypeAdapter, model_validator
 
-from app.modules.checkers.api.evaluation_contract import PostSubmissionExecutionRequest
+from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api.canonical_values import (
     CheckerValue,
-    Identifier,
     ResourceId,
-    VersionNumber,
+)
+from app.modules.model_usage.api import (
+    ModelCallEvidence,
+    ModelCallExecutionFacts,
+    ModelPaidSlotKey,
+    SetupModelOutputReservation,
+    SetupModelOutputSelector,
 )
 
 
@@ -21,59 +26,69 @@ class CheckerOutputUnavailable(RuntimeError):
 
 
 class CheckerOutputSelector(CheckerValue):
-    """Select exact immutable evaluation and the caller's claimed execution lease."""
+    """Select one call effect's bytes without tying late completion to an old run."""
 
-    evaluation: PostSubmissionExecutionRequest
-    checker_run_id: ResourceId
-    worker_lease_id: ResourceId
-    worker_lease_generation: VersionNumber
-    slot_key: Identifier
+    paid_slot: ModelPaidSlotKey
+    task_id: ResourceId
+    model_call_slot_id: ResourceId
+    model_call_attempt_id: ResourceId
+    slot_key: Literal["model_request", "model_response"]
+    content_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    execution: ModelCallExecutionFacts | None = None
+
+    @model_validator(mode="after")
+    def exact_execution_scope(self) -> Self:
+        """Request writes need a current invocation; effect responses do not."""
+        if self.slot_key == "model_response":
+            if self.execution is not None:
+                raise ValueError("model response custody is call-effect scoped")
+            return self
+        execution = self.execution
+        if execution is None or (
+            execution.project_id,
+            execution.task_id,
+            execution.assignment_id,
+            execution.submission_id,
+            execution.submission_version,
+        ) != (
+            self.paid_slot.project_id,
+            self.task_id,
+            self.paid_slot.assignment_id,
+            self.paid_slot.submission_id,
+            self.paid_slot.submission_version,
+        ):
+            raise ValueError("model request custody requires exact execution facts")
+        return self
 
 
 class CheckerOutputSlot(CheckerValue):
-    """One globally unique run slot issued by CHECKERS, not by a contributor."""
+    """One bounded canonical JSON role issued by the call-effect owner."""
 
-    key: Identifier
-    media_type: Literal["application/json", "application/octet-stream", "text/plain"]
-    maximum_bytes: Annotated[StrictInt, Field(ge=1, le=536_870_912)]
+    key: Literal["model_request", "model_response"]
+    media_type: Literal["application/json"] = "application/json"
+    maximum_bytes: Annotated[StrictInt, Field(ge=1, le=1_048_576)]
 
 
 class CheckerOutputReservation(CheckerValue):
     """Detached owner facts, never a substitute for fresh action authority."""
 
-    evaluation: PostSubmissionExecutionRequest
-    checker_run_id: ResourceId
-    worker_lease_id: ResourceId
-    worker_lease_generation: VersionNumber
-    slots: tuple[CheckerOutputSlot, ...] = Field(max_length=64)
+    selector: CheckerOutputSelector
+    slot: CheckerOutputSlot
 
     @model_validator(mode="after")
-    def unique_slots(self) -> Self:
-        """Keep generic ART binding's run/role scope unambiguous."""
-        if len({slot.key for slot in self.slots}) != len(self.slots):
-            raise ValueError("checker output slots repeat")
+    def exact_role(self) -> Self:
+        """Reserve exactly the requested role; never grant another evidence slot."""
+        if self.slot.key != self.selector.slot_key:
+            raise ValueError("checker output role differs from reservation")
         return self
 
     def select(self, selector: CheckerOutputSelector) -> CheckerOutputSlot:
-        """Match the caller's claimed lease as well as immutable evaluation facts."""
+        """Match exact call custody and the authority phase selected by its owner."""
         current = CheckerOutputReservation.model_validate(self)
         selector = CheckerOutputSelector.model_validate(selector)
-        if (
-            current.evaluation,
-            current.checker_run_id,
-            current.worker_lease_id,
-            current.worker_lease_generation,
-        ) != (
-            selector.evaluation,
-            selector.checker_run_id,
-            selector.worker_lease_id,
-            selector.worker_lease_generation,
-        ):
+        if current.selector != selector:
             raise CheckerOutputUnavailable("checker_output_reservation_unavailable")
-        for slot in current.slots:
-            if slot.key == selector.slot_key:
-                return slot
-        raise CheckerOutputUnavailable("checker_output_slot_unavailable")
+        return current.slot
 
 
 class CheckerOutputReservationPort(Protocol):
@@ -81,6 +96,13 @@ class CheckerOutputReservationPort(Protocol):
 
     async def resolve(self, selector: CheckerOutputSelector) -> CheckerOutputReservation:
         """Return exact current facts under the caller's CHECKERS transaction locks."""
+
+
+class CheckerOutputTaskCustodyPort(Protocol):
+    """Retain historical TASK ancestry before call locks or ART foreign-key writes."""
+
+    async def lock_model_evidence_scope(self, selector: CheckerOutputSelector) -> None:
+        """Require exact owners without requiring the original run to remain active."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +130,8 @@ class CheckerOutputArtifactResult:
     status: str
     content_id: UUID | None
     verification_receipt_id: UUID | None
+    content_sha256: str
+    byte_count: int
     replayed: bool
 
 
@@ -134,12 +158,101 @@ class CheckerOutputBindingPort(Protocol):
 class CheckerArtifactOutputPort(Protocol):
     """Store generated output for one fixed checker execution."""
 
-    async def store(
-        self, request: CheckerOutputArtifactRequest
-    ) -> CheckerOutputArtifactResult:
+    async def store(self, request: CheckerOutputArtifactRequest) -> CheckerOutputArtifactResult:
         """Store one generated checker artifact."""
 
-    async def recover(
-        self, selector: CheckerOutputSelector
-    ) -> CheckerOutputArtifactResult | None:
+    async def recover(self, selector: CheckerOutputSelector) -> CheckerOutputArtifactResult | None:
         """Recover a lost output response without a byte source or regeneration."""
+
+    async def read_response(
+        self,
+        selector: CheckerOutputSelector,
+        evidence: ModelCallEvidence,
+    ) -> bytes:
+        """Read one authorized private response with exact byte/hash verification."""
+
+
+GeneratedOutputSelector = CheckerOutputSelector | SetupModelOutputSelector
+GeneratedOutputReservation = CheckerOutputReservation | SetupModelOutputReservation
+GENERATED_OUTPUT_SELECTOR = TypeAdapter(GeneratedOutputSelector)
+GENERATED_OUTPUT_RESERVATION = TypeAdapter(GeneratedOutputReservation)
+
+
+@dataclass(frozen=True, slots=True)
+class GeneratedOutputSubject:
+    """Closed native lineage for the shared ART generated-output pipeline."""
+
+    producer_request_type: Literal["checker_output", "setup_model_output"]
+    project_id: UUID
+    task_id: UUID | None
+    submission_id: UUID | None
+    submission_version: int | None
+    resource_type: Literal["checker_model_call", "setup_model_call"]
+    resource_id: UUID
+    logical_role: Literal["model_request", "model_response"]
+    operation_identity: str
+    request_digest_facts: dict[str, object]
+
+
+def generated_output_subject(
+    reservation: GeneratedOutputReservation,
+) -> GeneratedOutputSubject:
+    """Preserve checker identities and add one exact setup-effect subject."""
+    reservation = GENERATED_OUTPUT_RESERVATION.validate_python(reservation)
+    selector, slot = reservation.selector, reservation.slot
+    if isinstance(reservation, SetupModelOutputReservation):
+        key = selector.slot_key
+        return GeneratedOutputSubject(
+            "setup_model_output",
+            key.project_id,
+            None,
+            None,
+            None,
+            "setup_model_call",
+            selector.model_call_attempt_id,
+            slot.key,
+            canonical_json_hash(
+                {
+                    "request_type": "setup_model_output",
+                    "model_call_attempt_id": str(selector.model_call_attempt_id),
+                    "logical_role": slot.key,
+                }
+            ),
+            {
+                "slot_key": key.model_dump(mode="json"),
+                "model_call_slot_id": str(selector.model_call_slot_id),
+                "model_call_attempt_id": str(selector.model_call_attempt_id),
+                "content_sha256": selector.content_sha256,
+                "role": slot.key,
+                "media_type": slot.media_type,
+                "maximum_bytes": slot.maximum_bytes,
+            },
+        )
+    paid = selector.paid_slot
+    return GeneratedOutputSubject(
+        "checker_output",
+        paid.project_id,
+        selector.task_id,
+        paid.submission_id,
+        paid.submission_version,
+        "checker_model_call",
+        selector.model_call_attempt_id,
+        slot.key,
+        canonical_json_hash(
+            {
+                "request_type": "checker_output",
+                "model_call_attempt_id": str(selector.model_call_attempt_id),
+                "logical_role": slot.key,
+            }
+        ),
+        {
+            "model_call_slot_id": str(selector.model_call_slot_id),
+            "model_call_attempt_id": str(selector.model_call_attempt_id),
+            "paid_slot": paid.model_dump(mode="json"),
+            "task_id": str(selector.task_id),
+            "content_sha256": selector.content_sha256,
+            "slot_key": slot.key,
+            "media_type": slot.media_type,
+            "maximum_bytes": slot.maximum_bytes,
+        },
+    )

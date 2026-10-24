@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "ce2d08c29f50493ccdb80798db1f65c9690dcd614304c8bdbef80a12c2268e37",
+  "canonical_sha256": "a72e8ae2d0139701a2cb3a2be6e3b0a9888c023e2ff21fbcbb97498e0db8a366",
   "components": {
     "schemas": {
       "ApiError": {
@@ -87,7 +87,7 @@
             "type": "array"
           },
           "total": {
-            "const": 82,
+            "const": 95,
             "title": "Total",
             "type": "integer"
           }
@@ -119,6 +119,19 @@
           "checker.pre_submit.finalize",
           "checker.post_submit.execute",
           "checker.post_submit.finalize",
+          "checker.model_call.prepare",
+          "checker.model_call.dispatch",
+          "checker.model_call.recover",
+          "checker.model_call.observe",
+          "checker.model_call.complete",
+          "checker.model_call.grant",
+          "project.guide_compilation.model.prepare",
+          "project.guide_compilation.model.dispatch",
+          "project.guide_compilation.model.observe",
+          "project.guide_compilation.model.complete",
+          "project.model_profile.manage",
+          "project.model_budget.manage",
+          "project.model_call.recovery_child.authorize",
           "outbox.dispatch",
           "actor.service.provision",
           "admin_role.read",
@@ -393,7 +406,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "authorization.permission_catalogue.read",
-    "backend_git_sha": "7326dc95e59f59fc9f6dee438857091e73c370aa",
+    "backend_git_sha": "3a1d2b53062c534d199f7d7087832b66d2c0b72a",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/authorization/permissions"

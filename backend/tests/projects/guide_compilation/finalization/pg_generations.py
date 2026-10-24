@@ -10,7 +10,7 @@ from app.modules.projects.api.guide_documents import GuideDocumentManifestReques
 from app.modules.projects.api.guide_proposals import GuideProposalCorrection
 from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
 
-from ..helpers import context
+from ..helpers import context, manager_runtime_configuration
 from ..proposals.pg_support import ProposalAuthority, read_package, request_corrected_attempt
 from .pg_support import finalize
 
@@ -63,7 +63,11 @@ async def second_generation(factory, values, first):
                 setup_generation=correction.successor_setup_generation,
             )
         )
-    compilation_context = context(values, generation=2).model_copy(
+    compilation_context = context(
+        values,
+        generation=2,
+        configuration=manager_runtime_configuration(),
+    ).model_copy(
         update={
             "setup_run_id": correction.successor_setup_run_id,
             "setup_generation": correction.successor_setup_generation,

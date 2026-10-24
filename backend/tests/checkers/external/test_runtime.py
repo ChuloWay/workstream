@@ -262,6 +262,7 @@ async def test_unix_adapter_revalidates_exact_result_and_factory_is_closed(
             writer.close()
             return
         assert received["request"]["request_digest"] == request.request_digest
+        assert received["model_grant"] is None
         body = json.dumps(
             {
                 "protocol_version": "external_checker_service.v1",

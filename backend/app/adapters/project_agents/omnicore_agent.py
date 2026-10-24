@@ -34,6 +34,7 @@ from app.adapters.project_agents.openrouter_policy import (
 )
 from app.adapters.project_agents.provider_resilience import ModelCircuitAdmission
 from app.adapters.project_agents.result_validation import validate_project_guide_runtime_result
+from app.adapters.project_agents.setup_model_proxy import SetupModelProxyUnavailable
 from app.interfaces.external_services import ExternalServiceAdapterIdentity
 from app.interfaces.project_agents import (
     ProjectAgentRuntimeConfigurationError,
@@ -46,7 +47,6 @@ from app.interfaces.project_agents import (
 )
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.projects.api.guide_documents import GuideRuntimeCapabilities
-
 
 _OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
 _READ_DESCRIPTION = "Read bounded text from an assigned original using its exact opaque handle."
@@ -136,6 +136,7 @@ _ALLOWED_BODY_FIELDS = frozenset(
         "messages",
         "temperature",
         "max_tokens",
+        "reasoning_effort",
         "top_p",
         "stream",
         "tools",
@@ -184,17 +185,16 @@ class OmniCoreAgentProjectGuideRuntime:
             raise ProjectAgentRuntimeConfigurationError(
                 "project guide runtime requires draft and review turns"
             )
-        credential = os.environ.get("OPENROUTER_API_KEY")
-        if not credential:
-            raise ProjectAgentRuntimeConfigurationError(
-                "project guide model credentials are unavailable"
-            )
+        test_upstream = _validated_test_upstream(_test_upstream, _test_authority)
+        credential = (
+            os.environ.get("OPENROUTER_API_KEY") if test_upstream is not None else None
+        ) or "setup-model-proxy-" + secrets.token_hex(16)
         self._profile = require_omnicore_agent_adapter_profile(
             configuration.adapter_profile_values()
         )
         self._configuration = configuration
         self._credential = credential
-        self._test_upstream = _validated_test_upstream(_test_upstream, _test_authority)
+        self._test_upstream = test_upstream
         self._admission: ModelCircuitAdmission | None = None
         self._closed = False
         self._close_task: asyncio.Task[None] | None = None
@@ -318,6 +318,8 @@ class OmniCoreAgentProjectGuideRuntime:
         admission = self._admission
         if admission is None:
             raise ProjectAgentRuntimeError("project guide runtime was not admitted")
+        if capabilities.model is None:
+            raise ProjectAgentRuntimeError("project guide model capability is unavailable")
         maximum_requests = configuration.maximum_turns * OMNICORE_PROVIDER_ATTEMPTS
         guard = _LoopbackOpenRouterGuard(
             credential=self._credential,
@@ -328,6 +330,9 @@ class OmniCoreAgentProjectGuideRuntime:
             maximum_logical_turns=configuration.maximum_turns,
             io_timeout_seconds=max(1, min(300, configuration.timeout_seconds)),
             upstream=self._test_upstream,
+            dispatch=None if self._test_upstream is not None else capabilities.model,
+            reasoning_effort=capabilities.model.reasoning_effort,
+            text_verbosity=capabilities.model.text_verbosity,
         )
         agents: list[Any] = []
         await guard.start()
@@ -375,6 +380,7 @@ class OmniCoreAgentProjectGuideRuntime:
 
             async def run_phase(phase: str, phase_prompt: str, turn_ceiling: int) -> dict:
                 nonlocal corrections
+                guard.phase = "draft" if phase == "checker_specification" else "review"
                 guard.phase_turn_ceiling = turn_ceiling
                 while True:
                     remaining = turn_ceiling - guard.logical_turns
@@ -389,6 +395,9 @@ class OmniCoreAgentProjectGuideRuntime:
                         base_url=guard.base_url,
                         registry=registry,
                         maximum_steps=remaining,
+                        reasoning_effort=capabilities.model.reasoning_effort,
+                        text_verbosity=capabilities.model.text_verbosity,
+                        maximum_output_tokens=capabilities.model.maximum_output_tokens,
                         phase_instruction=(
                             "Return only one complete JSON object matching this exact "
                             "checker-specification schema: "
@@ -419,6 +428,7 @@ class OmniCoreAgentProjectGuideRuntime:
                     if corrections >= 2 or turn_ceiling - guard.logical_turns < 2:
                         raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
                     corrections += 1
+                    guard.phase = "correction"
                     phase_prompt = json.dumps(
                         {
                             "phase": phase,
@@ -475,7 +485,9 @@ class OmniCoreAgentProjectGuideRuntime:
                 raise cleanup_error
 
     def _require_credential_unchanged(self) -> None:
-        """Reject SDK lifecycle drift without rewriting process-global state."""
+        """Keep fake-upstream tests pinned without reading provider secrets in production."""
+        if self._test_upstream is None:
+            return
         current = os.environ.get("OPENROUTER_API_KEY")
         if current is None or not hmac.compare_digest(current, self._credential):
             raise ProjectAgentRuntimeError("project guide model credential changed")
@@ -490,6 +502,9 @@ def _build_agent(
     base_url: str,
     registry: Any,
     maximum_steps: int,
+    reasoning_effort: str,
+    text_verbosity: str,
+    maximum_output_tokens: int,
     phase_instruction: str,
 ) -> Any:
     """Construct one phase with a fresh private in-memory session and no extras."""
@@ -533,7 +548,9 @@ def _build_agent(
             "api_key": credential,
             "base_url": base_url,
             "temperature": 0,
-            "max_tokens": OMNICORE_MAX_TOKENS,
+            "max_tokens": min(OMNICORE_MAX_TOKENS, maximum_output_tokens),
+            "reasoning_effort": reasoning_effort,
+            "verbosity": text_verbosity,
         },
         mcp_tools=[],
         local_tools=registry,
@@ -656,6 +673,9 @@ class _LoopbackOpenRouterGuard:
         maximum_logical_turns: int,
         io_timeout_seconds: int,
         upstream: _UpstreamTarget | None,
+        dispatch=None,
+        reasoning_effort: str = "medium",
+        text_verbosity: str = "low",
     ) -> None:
         """Bind one attempt's credential, model, limits, and fixed upstream."""
         self._credential = credential
@@ -665,8 +685,12 @@ class _LoopbackOpenRouterGuard:
         self._maximum_requests = maximum_requests
         self._maximum_logical_turns = maximum_logical_turns
         self.phase_turn_ceiling = maximum_logical_turns
+        self.phase = "draft"
         self._io_timeout_seconds = io_timeout_seconds
         self._upstream_url = (upstream or _PRODUCTION_UPSTREAM).url
+        self._dispatch = dispatch
+        self._reasoning_effort = reasoning_effort
+        self._text_verbosity = text_verbosity
         self._path_token = secrets.token_urlsafe(32)
         self._server: asyncio.AbstractServer | None = None
         self._tasks: set[asyncio.Task[None]] = set()
@@ -699,15 +723,16 @@ class _LoopbackOpenRouterGuard:
         return self._logical_turns
 
     async def start(self) -> None:
-        """Open the bounded loopback listener and proxy-free upstream client."""
-        import httpx
+        """Open the bounded loopback listener and an optional fake-test upstream."""
+        if self._dispatch is None:
+            import httpx
 
-        self._client = httpx.AsyncClient(
-            trust_env=False,
-            follow_redirects=False,
-            timeout=self._io_timeout_seconds,
-        )
-        self._client.headers.clear()
+            self._client = httpx.AsyncClient(
+                trust_env=False,
+                follow_redirects=False,
+                timeout=self._io_timeout_seconds,
+            )
+            self._client.headers.clear()
         try:
             self._server = await asyncio.start_server(
                 self._accepted,
@@ -717,13 +742,15 @@ class _LoopbackOpenRouterGuard:
                 start_serving=True,
             )
         except BaseException:
-            await self._client.aclose()
+            if self._client is not None:
+                await self._client.aclose()
             raise
         sockets = self._server.sockets or []
         if len(sockets) != 1:
             self._server.close()
             await self._server.wait_closed()
-            await self._client.aclose()
+            if self._client is not None:
+                await self._client.aclose()
             raise RuntimeError("OpenRouter guard listener is invalid")
         self._port = int(sockets[0].getsockname()[1])
 
@@ -882,7 +909,11 @@ class _LoopbackOpenRouterGuard:
             raise _GuardRejection(400) from None
         if not isinstance(body, dict):
             raise _GuardRejection(400)
-        _validate_request_body(body, expected_model=self._model)
+        _validate_request_body(
+            body,
+            expected_model=self._model,
+            expected_reasoning_effort=self._reasoning_effort,
+        )
         return _ParsedRequest(body=body)
 
     async def _forward(self, request: _ParsedRequest) -> tuple[int, Mapping[str, str], bytes]:
@@ -896,13 +927,50 @@ class _LoopbackOpenRouterGuard:
             self._logical_request_active = True
             self._logical_turns += 1
             self._last_upstream_transient_failure = False
-        outbound = _rebuild_openrouter_body(request.body, model=self._model)
+        outbound = _rebuild_openrouter_body(
+            request.body,
+            model=self._model,
+            reasoning_effort=self._reasoning_effort,
+            text_verbosity=self._text_verbosity,
+        )
         request_body = json.dumps(
             outbound,
             ensure_ascii=False,
             allow_nan=False,
             separators=(",", ":"),
         ).encode("utf-8")
+        if self._dispatch is not None:
+            try:
+                reply = await self._dispatch.dispatch(self.phase, outbound)
+            except SetupModelProxyUnavailable:
+                self._last_upstream_transient_failure = True
+                raise _GuardRejection(502) from None
+            assert reply.status_code is not None and reply.response_json is not None
+            response_body = reply.response_json.encode("utf-8")
+            self._last_upstream_transient_failure = (
+                reply.status_code in {408, 409, 429} or reply.status_code >= 500
+            )
+            if len(response_body) > self._profile.maximum_response_bytes:
+                self._last_upstream_transient_failure = False
+                return 422, {}, _SANITIZED_PROVIDER_ERROR_BODY
+            if not 200 <= reply.status_code < 300:
+                return (
+                    reply.status_code,
+                    dict(reply.response_headers),
+                    _SANITIZED_PROVIDER_ERROR_BODY,
+                )
+            try:
+                response_body = _rebuild_provider_success_body(
+                    response_body,
+                    expected_model=self._model,
+                )
+            except (UnicodeDecodeError, ValueError, RecursionError, _GuardRejection):
+                self._last_upstream_transient_failure = False
+                return 422, {}, _SANITIZED_PROVIDER_ERROR_BODY
+            self._admission.request_succeeded()
+            self._logical_request_active = False
+            return reply.status_code, dict(reply.response_headers), response_body
+        assert self._client is not None
         self._client.cookies.clear()
         try:
             async with self._client.stream(
@@ -1003,7 +1071,12 @@ class _GuardRejection(Exception):
         self.status = status
 
 
-def _validate_request_body(body: dict[str, Any], *, expected_model: str) -> None:
+def _validate_request_body(
+    body: dict[str, Any],
+    *,
+    expected_model: str,
+    expected_reasoning_effort: str,
+) -> None:
     """Accept only the pinned LiteLLM request fields and configured model."""
     if set(body) - _ALLOWED_BODY_FIELDS:
         raise _GuardRejection(400)
@@ -1014,6 +1087,8 @@ def _validate_request_body(body: dict[str, Any], *, expected_model: str) -> None
     if body.get("usage") != {"include": True}:
         raise _GuardRejection(400)
     if body.get("stream", False) is not False:
+        raise _GuardRejection(400)
+    if body.get("reasoning_effort") != expected_reasoning_effort:
         raise _GuardRejection(400)
     if "tool_choice" in body and body["tool_choice"] != "auto":
         raise _GuardRejection(400)
@@ -1096,7 +1171,13 @@ def _validate_tool_call(call: object) -> None:
         raise _GuardRejection(400)
 
 
-def _rebuild_openrouter_body(body: dict[str, Any], *, model: str) -> dict[str, Any]:
+def _rebuild_openrouter_body(
+    body: dict[str, Any],
+    *,
+    model: str,
+    reasoning_effort: str,
+    text_verbosity: str,
+) -> dict[str, Any]:
     """Build trusted OpenRouter state instead of forwarding caller objects."""
     rebuilt = {
         key: body[key]
@@ -1115,6 +1196,8 @@ def _rebuild_openrouter_body(body: dict[str, Any], *, model: str) -> dict[str, A
             "model": model,
             "tools": _MODEL_TOOLS,
             "usage": {"include": True},
+            "reasoning_effort": reasoning_effort,
+            "verbosity": text_verbosity,
             **openrouter_request_options(),
         }
     )

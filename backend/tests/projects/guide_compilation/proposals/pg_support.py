@@ -238,7 +238,9 @@ async def read_package(factory, command, actor, grant_id):
         raise exc from exc.__context__
 
 
-async def request_corrected_attempt(factory, actor, correction, *, capabilities=None):
+async def request_corrected_attempt(
+    factory, actor, correction, *, capabilities=None, configuration=None
+):
     """Enter the existing production human request port; no provider is invoked."""
     from app.adapters.artifacts import guide_document_manifest_port
     from app.modules.authorization.guide_compilation import (
@@ -255,7 +257,7 @@ async def request_corrected_attempt(factory, actor, correction, *, capabilities=
     from tests.checkers.external.support import capability_projection
     from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs
     from app.modules.projects.guide_compilation.service import GuideCompilationService
-    from tests.projects.guide_compilation.helpers import runtime_configuration
+    from tests.projects.guide_compilation.helpers import manager_runtime_configuration
 
     ctx = HumanAuthorizationContext(
         actor_profile_id=actor.actor_profile_id,
@@ -276,7 +278,7 @@ async def request_corrected_attempt(factory, actor, correction, *, capabilities=
             request_inputs=CompilationRequestInputs(
                 guide_document_manifest_port(session),
                 capabilities or capability_projection(),
-                runtime_configuration(),
+                configuration or manager_runtime_configuration(),
             ),
         )
         return await service.request_correction(
@@ -284,7 +286,9 @@ async def request_corrected_attempt(factory, actor, correction, *, capabilities=
         )
 
 
-async def finalize_corrected_attempt(factory, values, actor, correction, *, outcome=None):
+async def finalize_corrected_attempt(
+    factory, values, actor, correction, *, outcome=None, configuration=None
+):
     """Run a scripted result through actual execution, projections and finalization."""
     from app.adapters.artifacts import guide_document_manifest_port
     from app.adapters.auth import (
@@ -299,7 +303,7 @@ async def finalize_corrected_attempt(factory, values, actor, correction, *, outc
     from app.modules.projects.api import ProjectGuideSetupFinalizationCommand
     from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDelivery
     from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
-    from tests.projects.guide_compilation.helpers import runtime_configuration
+    from tests.projects.guide_compilation.helpers import manager_runtime_configuration
     from tests.projects.guide_compilation.runtime_fixtures import (
         ScriptedGuideRuntime,
         document_tools,
@@ -307,20 +311,34 @@ async def finalize_corrected_attempt(factory, values, actor, correction, *, outc
 
     async with factory() as session, session.begin():
         capabilities = await external_checker_capability_projection(session)
-    await request_corrected_attempt(factory, actor, correction, capabilities=capabilities)
+    configuration = configuration or manager_runtime_configuration()
+    await request_corrected_attempt(
+        factory,
+        actor,
+        correction,
+        capabilities=capabilities,
+        configuration=configuration,
+    )
     async with factory() as session:
         setup = await session.get(ProjectSetupRun, str(correction.successor_setup_run_id))
-    runtime = ScriptedGuideRuntime()
+    runtime = ScriptedGuideRuntime(configuration)
     if outcome is not None:
         runtime.outcome = outcome
+
+    @asynccontextmanager
+    async def no_model_session(_state, _context):
+        yield None
+
     coordinator = project_guide_compilation_delivery_port(
         factory,
         material_factory=guide_document_manifest_port,
         document_tools_factory=document_tools(factory),
+        model_session_factory=no_model_session,
         checker_capabilities=capabilities,
         request_authority=guide_compilation_request_authority,
         execution_authority=guide_compilation_execution_authority,
-        configuration_factory=runtime_configuration,
+        configuration_factory=lambda: configuration,
+        model_profiles=lambda _session: None,
         runtime_factory=lambda configuration: runtime,
         sufficiency_authorization_factory=guide_sufficiency_projection_authorization,
         policy_authorization_factory=artifact_policy_projection_authorization,

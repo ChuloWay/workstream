@@ -1,6 +1,7 @@
 """Explicit catalogue expectations, independent of production definitions."""
 
 from app.modules.actors.api import ServiceIdentity
+from app.modules.authorization.schemas import AdminRole, AdminScope
 
 FIXED_SERVICE_ACTION_EXPECTATIONS = {
     ServiceIdentity.TASK_REVISION_EXPIRER: {"task.revision.expire", "task.revision.recover"},
@@ -25,11 +26,24 @@ FIXED_SERVICE_ACTION_EXPECTATIONS = {
         "checker.pre_submit.execute",
         "checker.pre_submit.finalize",
     },
-    ServiceIdentity.CHECKER_POST_SUBMIT: {"checker.post_submit.execute", "checker.post_submit.finalize"},
+    ServiceIdentity.CHECKER_POST_SUBMIT: {
+        "checker.post_submit.execute",
+        "checker.post_submit.finalize",
+        "checker.model_call.prepare",
+        "checker.model_call.dispatch",
+        "checker.model_call.recover",
+        "checker.model_call.observe",
+        "checker.model_call.complete",
+        "checker.model_call.grant",
+    },
     ServiceIdentity.ARTIFACT_CHECKER_OUTPUT: {"artifact.checker_output.write"},
     ServiceIdentity.PROJECT_SETUP: {
         "project.guide_compilation.request_automatic",
         "project.guide_compilation.execute",
+        "project.guide_compilation.model.prepare",
+        "project.guide_compilation.model.dispatch",
+        "project.guide_compilation.model.observe",
+        "project.guide_compilation.model.complete",
         "project.guide_sufficiency.run",
         "project.submission_artifact_policy.derive",
         "project.post_submit_checker_policy.derive",
@@ -122,7 +136,11 @@ ART_CUSTODY_EXPECTATIONS = {
         "WS-XINT-002-06A",
         "active",
     ),
-    "artifact.submission.binding.create": ("artifact.binding.create", "WS-AUTH-001-ART-05", "active"),
+    "artifact.submission.binding.create": (
+        "artifact.binding.create",
+        "WS-AUTH-001-ART-05",
+        "active",
+    ),
     "artifact.post_submit.checker_input.materialize": (
         "artifact.checker_input.materialize",
         "WS-AUTH-001-ART-06A",
@@ -131,7 +149,7 @@ ART_CUSTODY_EXPECTATIONS = {
     "artifact.checker_output.write": (
         "artifact.checker_output.write",
         "WS-AUTH-001-ART-06B",
-        "planned",
+        "active",
     ),
     "artifact.review_packet.materialize": (
         "artifact.review_packet.materialize",
@@ -146,7 +164,7 @@ ART_CUSTODY_EXPECTATIONS = {
     "artifact.checker_output.binding.create": (
         "artifact.binding.create",
         "WS-AUTH-001-ART-06B",
-        "planned",
+        "active",
     ),
 }
 
@@ -235,7 +253,8 @@ REV_CUSTODY_EXPECTATIONS = {
     ),
 }
 
-historical_permissions = frozenset("""actor.profile.read_self actor.profile.update_self actor.profile.read_any
+historical_permissions = frozenset(
+    """actor.profile.read_self actor.profile.update_self actor.profile.read_any
     actor.profile.suspend actor.profile.reactivate actor.profile.deactivate
     actor.identity_link.read actor.identity_link.revoke actor.identity_link.reactivate
     actor.service.provision admin_role.read admin_role.grant admin_role.revoke
@@ -249,7 +268,8 @@ historical_permissions = frozenset("""actor.profile.read_self actor.profile.upda
     compensation.adapter_binding.manage compensation.award.read
     compensation.delivery.reconcile operations.status.read operations.timer.run
     operations.reconcile.run operations.outbox.retry operations.projection.rebuild
-    audit.read audit.export""".split())
+    audit.read audit.export""".split()
+)
 
 new_permissions = frozenset(
     """
@@ -262,24 +282,49 @@ new_permissions = frozenset(
     artifact.verification.execute artifact.pending_work.scan artifact.put_attempt.resolve
     artifact.guide_source.read artifact.checker_input.materialize
     artifact.checker_output.write artifact.review_packet.materialize
-    review.queue.override project.guide_compilation.request project.guide_compilation.execute""".split()
+    review.queue.override project.guide_compilation.request project.guide_compilation.execute
+    checker.model_call.prepare checker.model_call.dispatch checker.model_call.recover
+    checker.model_call.observe checker.model_call.complete checker.model_call.grant
+    project.guide_compilation.model.prepare
+    project.guide_compilation.model.dispatch
+    project.guide_compilation.model.observe
+    project.guide_compilation.model.complete
+    project.model_profile.manage project.model_budget.manage
+    project.model_call.recovery_child.authorize""".split()
 )
 
 expected = {
     "actor.project.list": ("actor.profile.read_self", "PILOT-READ-2"),
     "project.catalogue.list": ("project.read", "WS-CLI-001-46"),
-    **dict.fromkeys((
-        "actor.assignment.list", "actor.submission.list", "actor.work_summary.read",
-        "task.submission_bundle_preparation.list", "task.submission_bundle_preparation.read",
-    ), ("submission.read_own", "PILOT-READ-2")),
-    **dict.fromkeys((
-        "project.guide.list", "project.guide.read", "project.guide.activation_readiness.read",
-        "project.guide.document.read",
-    ), ("project.guide.manage", "PILOT-READ-3")),
-    **dict.fromkeys((
-        "project.submission.list", "project.assignment.list", "project.summary.read",
-        "project.task.import_batch.list", "project.submission_bundle_preparation.list",
-    ), ("project.task.manage", "PILOT-READ-3")),
+    **dict.fromkeys(
+        (
+            "actor.assignment.list",
+            "actor.submission.list",
+            "actor.work_summary.read",
+            "task.submission_bundle_preparation.list",
+            "task.submission_bundle_preparation.read",
+        ),
+        ("submission.read_own", "PILOT-READ-2"),
+    ),
+    **dict.fromkeys(
+        (
+            "project.guide.list",
+            "project.guide.read",
+            "project.guide.activation_readiness.read",
+            "project.guide.document.read",
+        ),
+        ("project.guide.manage", "PILOT-READ-3"),
+    ),
+    **dict.fromkeys(
+        (
+            "project.submission.list",
+            "project.assignment.list",
+            "project.summary.read",
+            "project.task.import_batch.list",
+            "project.submission_bundle_preparation.list",
+        ),
+        ("project.task.manage", "PILOT-READ-3"),
+    ),
     "contribution.policy.list": ("compensation.policy.manage", "PILOT-READ-3"),
     "contribution.read_self": ("contribution.read_self", "PILOT-10"),
     "contribution.read_project": ("contribution.read_project", "PILOT-10"),
@@ -290,6 +335,35 @@ expected = {
     "checker.pre_submit.finalize": ("checker.pre_submit.finalize", "PILOT-04"),
     "checker.post_submit.execute": ("checker.post_submit.execute", "WS-ARCH-001-04D2"),
     "checker.post_submit.finalize": ("checker.post_submit.finalize", "WS-ARCH-001-04D2"),
+    "checker.model_call.prepare": ("checker.model_call.prepare", "PILOT-05"),
+    "checker.model_call.dispatch": ("checker.model_call.dispatch", "PILOT-05"),
+    "checker.model_call.recover": ("checker.model_call.recover", "PILOT-05"),
+    "checker.model_call.observe": ("checker.model_call.observe", "PILOT-05"),
+    "checker.model_call.complete": ("checker.model_call.complete", "PILOT-05"),
+    "checker.model_call.grant": ("checker.model_call.grant", "PILOT-05"),
+    "project.guide_compilation.model.prepare": (
+        "project.guide_compilation.model.prepare",
+        "PILOT-05",
+    ),
+    "project.guide_compilation.model.dispatch": (
+        "project.guide_compilation.model.dispatch",
+        "PILOT-05",
+    ),
+    "project.guide_compilation.model.observe": (
+        "project.guide_compilation.model.observe",
+        "PILOT-05",
+    ),
+    "project.guide_compilation.model.complete": (
+        "project.guide_compilation.model.complete",
+        "PILOT-05",
+    ),
+    "project.model_profile.provision": ("project.model_profile.manage", "PILOT-05"),
+    "project.model_budget.configure": ("project.model_budget.manage", "PILOT-05"),
+    "project.model_usage.read": ("project.model_budget.manage", "PILOT-05"),
+    "project.model_call.recovery_child.authorize": (
+        "project.model_call.recovery_child.authorize",
+        "PILOT-05",
+    ),
     "checker.registry.register": ("operations.reconcile.run", "PILOT-04"),
     "checker.registry.read": ("operations.status.read", "PILOT-04"),
     "task.submission.list": ("submission.read_own", "task-checker-auth-cleanup"),
@@ -300,11 +374,17 @@ expected = {
     "project.submission.read": ("project.task.manage", "task-checker-auth-cleanup"),
     "project.submission.checker_run.list": ("project.task.manage", "task-checker-auth-cleanup"),
     "project.checker_run.read": ("project.task.manage", "task-checker-auth-cleanup"),
-    "task.assignment.authority_reconcile": ("task.assignment.authority_reconcile", "WS-ARCH-001-03C1"),
+    "task.assignment.authority_reconcile": (
+        "task.assignment.authority_reconcile",
+        "WS-ARCH-001-03C1",
+    ),
     "outbox.dispatch": ("outbox.dispatch", "WS-AUTH-001-OUTBOX-01"),
     "actor.profile.read_self": ("actor.profile.read_self", "WS-AUTH-001-07B"),
     "actor.profile.update_self": ("actor.profile.update_self", "WS-AUTH-001-07B"),
-    "operations.task.start_override": ("operations.task.start_override", "task-project-grant-authorization"),
+    "operations.task.start_override": (
+        "operations.task.start_override",
+        "task-project-grant-authorization",
+    ),
     "task.claim": ("task.claim", "task-project-grant-authorization"),
     "task.start": ("task.claim", "task-project-grant-authorization"),
     "task.work_context.read": ("task.queue.read", "task-project-grant-authorization"),
@@ -336,13 +416,16 @@ expected = {
     ),
     "operations.checker.retry": ("operations.checker.retry", "WS-AUTH-001-14"),
     "operations.checker_retry_source.list": (
-        "operations.status.read", "WS-AUTH-001-14",
+        "operations.status.read",
+        "WS-AUTH-001-14",
     ),
     "operations.post_submit_delivery.list": (
-        "operations.status.read", "WS-AUTH-001-14",
+        "operations.status.read",
+        "WS-AUTH-001-14",
     ),
     "operations.post_submit_delivery.reconcile": (
-        "operations.reconcile.run", "WS-AUTH-001-14",
+        "operations.reconcile.run",
+        "WS-AUTH-001-14",
     ),
     "submission.create": ("submission.create", "WS-AUTH-001-14"),
     **{
@@ -417,10 +500,16 @@ expected = {
     "project.guide.create": ("project.guide.manage", "WS-AUTH-001-12D"),
     "project.guide.update": ("project.guide.manage", "WS-AUTH-001-12D"),
     "project.guide_source_snapshot.create": ("project.guide.manage", "WS-AUTH-001-12D"),
-    "project.guide_compilation.request_automatic": ("project.guide_compilation.execute", "WS-AUTH-001-12I"),
+    "project.guide_compilation.request_automatic": (
+        "project.guide_compilation.execute",
+        "WS-AUTH-001-12I",
+    ),
     "project.guide_compilation.request": ("project.guide_compilation.request", "WS-AUTH-001-12I"),
     "project.guide_compilation.review_package.read": ("project.guide.manage", "WS-AUTH-001-12F4"),
-    "project.guide_compilation.correction.request": ("project.guide_compilation.request", "WS-AUTH-001-12F4"),
+    "project.guide_compilation.correction.request": (
+        "project.guide_compilation.request",
+        "WS-AUTH-001-12F4",
+    ),
     "project.guide_compilation.execute": ("project.guide_compilation.execute", "WS-AUTH-001-12I"),
     "project.review_policy.update": (
         "project.review_policy.manage",
@@ -446,9 +535,9 @@ expected = {
         "project.effective_policy.manage",
         "WS-AUTH-001-12F2",
     ),
-        "project.submission_artifact_policy.derive": (
-            "project.effective_policy.manage",
-            "WS-AUTH-001-12F3",
+    "project.submission_artifact_policy.derive": (
+        "project.effective_policy.manage",
+        "WS-AUTH-001-12F3",
     ),
     "project.submission_artifact_policy.update": (
         "project.effective_policy.manage",
@@ -470,14 +559,45 @@ expected = {
         "project.effective_policy.manage",
         "WS-AUTH-001-12G",
     ),
-    "project.setup_run.update": ("project.guide.manage", "WS-AUTH-001-12B2"), "project.guide.activate": ("project.guide.manage", "WS-AUTH-001-12H"),  # noqa: E501
-    **dict.fromkeys((f"compensation.adapter_binding.{op}" for op in ("read", "create", "suspend", "resume")), ("compensation.adapter_binding.manage", "WS-ARCH-001-CP01A")),  # noqa: E501
-    **dict.fromkeys((f"contribution.policy.{op}" for op in ("read", "create_draft", "update_draft", "publish", "retire")), ("compensation.policy.manage", "WS-ARCH-001-CP01B")),  # noqa: E501
-    "contribution.compensation_unit.create": ("compensation.policy.manage", "project-points-unit-creation"),
+    "project.setup_run.update": ("project.guide.manage", "WS-AUTH-001-12B2"),
+    "project.guide.activate": ("project.guide.manage", "WS-AUTH-001-12H"),  # noqa: E501
+    **dict.fromkeys(
+        (f"compensation.adapter_binding.{op}" for op in ("read", "create", "suspend", "resume")),
+        ("compensation.adapter_binding.manage", "WS-ARCH-001-CP01A"),
+    ),  # noqa: E501
+    **dict.fromkeys(
+        (
+            f"contribution.policy.{op}"
+            for op in ("read", "create_draft", "update_draft", "publish", "retire")
+        ),
+        ("compensation.policy.manage", "WS-ARCH-001-CP01B"),
+    ),  # noqa: E501
+    "contribution.compensation_unit.create": (
+        "compensation.policy.manage",
+        "project-points-unit-creation",
+    ),
 }
 
 
 AUDIT_ALLOWED_ACTION_VALUES = {
+    "project.catalogue.list",
+    "checker.model_call.prepare",
+    "checker.model_call.dispatch",
+    "checker.model_call.recover",
+    "checker.model_call.observe",
+    "checker.model_call.complete",
+    "checker.model_call.grant",
+    "project.guide_compilation.model.prepare",
+    "project.guide_compilation.model.dispatch",
+    "project.guide_compilation.model.observe",
+    "project.guide_compilation.model.complete",
+    "project.model_profile.provision",
+    "project.model_budget.configure",
+    "project.model_usage.read",
+    "project.model_call.recovery_child.authorize",
+    "artifact.checker_output.write",
+    "artifact.checker_output.binding.create",
+
     "task.revision.expire",
     "task.revision.recover",
     "checker.pre_submit.execute",
@@ -490,7 +610,6 @@ AUDIT_ALLOWED_ACTION_VALUES = {
     "contribution.read_self",
     "contribution.read_project",
     "actor.project.list",
-    "project.catalogue.list",
     "actor.assignment.list",
     "actor.submission.list",
     "actor.work_summary.read",
@@ -630,4 +749,46 @@ AUDIT_ALLOWED_ACTION_VALUES = {
     "project_role_grant.read",
     "project_role_grant.revoke",
     "submission.create",
+}
+
+
+ADMIN_ROLE_PERMISSION_EXPECTATIONS = {
+    AdminRole.ACCESS_ADMINISTRATOR: """actor.profile.read_any actor.profile.suspend
+        actor.profile.reactivate actor.profile.deactivate actor.identity_link.read
+        actor.identity_link.revoke actor.identity_link.reactivate actor.service.provision
+        admin_role.read admin_role.grant admin_role.revoke audit.read audit.export""".split(),
+    AdminRole.OPERATOR: """project.read project.setup_diagnostic.read
+        project.effective_policy.read review.queue.inspect review.lease.force_release
+        contribution.read_project operations.status.read operations.timer.run operations.reconcile.run operations.outbox.retry
+        operations.projection.rebuild operations.task.start_override
+        operations.submission_gate.repair operations.checker.retry
+        project.model_profile.manage project.model_budget.manage
+        project.model_call.recovery_child.authorize artifact.binding.read
+        artifact.replica.read artifact.receipt.read artifact.verification_job.read
+        artifact.verification_job.retry artifact.recovery_attempt.read artifact.audit.read
+        audit.read""".split(),
+    AdminRole.PROJECT_MANAGER: """project.create project.read project.setup_diagnostic.read
+        project.effective_policy.read project.update project.archive project.guide.manage
+        project.guide_compilation.request project.effective_policy.manage project.task.manage
+        project.review_policy.manage project.role_grant.read project.role_grant.manage
+        artifact.guide_source.ingest
+        review.queue.inspect contribution.read_project compensation.award.read
+        audit.read""".split(),
+    AdminRole.FINANCE_AUTHORITY: """project.read contribution.read_project
+        compensation.policy.manage compensation.adapter_binding.manage
+        compensation.award.read compensation.delivery.reconcile audit.read""".split(),
+    AdminRole.AUDIT_AUTHORITY: """actor.profile.read_any actor.identity_link.read
+        admin_role.read project.read project.setup_diagnostic.read
+        project.effective_policy.read project.role_grant.read review.queue.inspect
+        review.chain.read contribution.read_project compensation.award.read audit.read
+        audit.export""".split(),
+}
+
+
+ADMIN_ROLE_SCOPE_EXPECTATIONS = {
+    AdminRole.ACCESS_ADMINISTRATOR: [AdminScope.SYSTEM],
+    AdminRole.OPERATOR: [AdminScope.SYSTEM],
+    AdminRole.PROJECT_MANAGER: [AdminScope.SYSTEM, AdminScope.PROJECT],
+    AdminRole.FINANCE_AUTHORITY: [AdminScope.SYSTEM, AdminScope.PROJECT],
+    AdminRole.AUDIT_AUTHORITY: [AdminScope.SYSTEM, AdminScope.PROJECT],
 }

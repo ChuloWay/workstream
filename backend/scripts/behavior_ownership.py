@@ -117,6 +117,41 @@ AUTH_ART_OPERATOR_TARGETS = frozenset({
     "backend/app/modules/authorization/artifact_operator_authorization.py",
     "backend/app/modules/authorization/domain/artifact_operator.py",
 })
+CHECKER_MODEL_RUNTIME_TARGETS = frozenset({
+    "backend/app/adapters/checkers/model_execution.py",
+    "backend/app/adapters/checkers/model_provider.py",
+    "backend/app/adapters/checkers/model_proxy.py",
+    "backend/app/adapters/checkers/model_proxy_transport.py",
+    "backend/app/adapters/checkers/model_runtime.py",
+    "backend/app/adapters/project_agents/setup_model_handler.py",
+    "backend/app/adapters/project_agents/setup_model_proxy.py",
+    "backend/app/api/deps/checker_models.py",
+    "backend/app/interfaces/checker_model_provider.py",
+    "backend/app/interfaces/checker_model_proxy.py",
+    "backend/app/interfaces/setup_model_proxy.py",
+    "backend/app/modules/artifacts/api/checker_output_authority.py",
+    "backend/app/modules/artifacts/checker_model_evidence.py",
+    "backend/app/modules/authorization/action_definitions.py",
+    "backend/app/modules/authorization/checker_output_authorization.py",
+    "backend/app/modules/authorization/domain/checker_outputs.py",
+    "backend/app/modules/authorization/domain/model_usage.py",
+    "backend/app/modules/authorization/domain/prepared_checker_runtime.py",
+    "backend/app/modules/authorization/model_usage_authorization.py",
+    "backend/app/modules/checkers/api/model_profiles.py",
+    "backend/app/modules/checkers/model_usage_custody.py",
+    "backend/app/modules/model_usage/api.py",
+    "backend/app/modules/model_usage/grants.py",
+    "backend/app/modules/model_usage/inspection.py",
+    "backend/app/modules/model_usage/models.py",
+    "backend/app/modules/model_usage/output_custody.py",
+    "backend/app/modules/model_usage/owner_ports.py",
+    "backend/app/modules/model_usage/profiles.py",
+    "backend/app/modules/model_usage/repository.py",
+    "backend/app/modules/model_usage/service.py",
+    "backend/app/modules/model_usage/setup.py",
+    "backend/app/modules/projects/guide_compilation/model_usage.py",
+    "backend/app/workers/checker_model_proxy.py",
+})
 PILOT_READ_1_TARGETS = frozenset({
     "backend/app/modules/tasks/submission_attempts.py",
 })
@@ -1051,6 +1086,7 @@ def _validate_additive_partition_transition(
         | PILOT_READ_1_TARGETS
         | AWS_ARTIFACT_ACTIVATION_TARGETS
         | AUTH_ART_OPERATOR_TARGETS
+        | CHECKER_MODEL_RUNTIME_TARGETS
         | CHECKER_IMAGE_PUBLISH_TARGETS
         | PILOT_READ_2_TARGETS
         | PILOT_READ_3_TARGETS

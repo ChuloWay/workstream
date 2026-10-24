@@ -53,6 +53,26 @@
       "target": "backend/app/adapters/checkers/external_service.py"
     },
     {
+      "group": "artifacts",
+      "target": "backend/app/adapters/checkers/model_execution.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/adapters/checkers/model_provider.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/adapters/checkers/model_proxy.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/adapters/checkers/model_proxy_transport.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/adapters/checkers/model_runtime.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/adapters/guide_document_tools/child.py"
     },
@@ -122,6 +142,14 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/setup_model_handler.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/setup_model_proxy.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/adapters/projects/contribution_validation.py"
     },
     {
@@ -151,6 +179,10 @@
     {
       "group": "shared",
       "target": "backend/app/api/deps/authorization.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/api/deps/checker_models.py"
     },
     {
       "group": "artifacts",
@@ -378,6 +410,14 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/interfaces/checker_model_provider.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/interfaces/checker_model_proxy.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/interfaces/external_checker_execution.py"
     },
     {
@@ -399,6 +439,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/interfaces/project_guide_runtime.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/interfaces/setup_model_proxy.py"
     },
     {
       "group": "shared",
@@ -458,6 +502,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/artifacts/api/checker_output_authority.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/artifacts/api/operator_authority.py"
     },
     {
@@ -479,6 +527,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/artifacts/authorization.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/checker_model_evidence.py"
     },
     {
       "group": "artifacts",
@@ -626,6 +678,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/action_definitions.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/adapter_binding_authorization.py"
     },
     {
@@ -730,6 +786,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/checker_output_authorization.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/checker_registry_authorization.py"
     },
     {
@@ -779,6 +839,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/audit_targets.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/checker_outputs.py"
     },
     {
       "group": "auth",
@@ -838,6 +902,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/domain/model_usage.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/outbox_dispatch.py"
     },
     {
@@ -863,6 +931,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/prepared_adapter_bindings.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/prepared_checker_runtime.py"
     },
     {
       "group": "auth",
@@ -971,6 +1043,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/management_read.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/model_usage_authorization.py"
     },
     {
       "group": "auth",
@@ -1182,6 +1258,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/model_profiles.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/checkers/api/output_custody.py"
     },
     {
@@ -1243,6 +1323,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/checkers/history.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/model_usage_custody.py"
     },
     {
       "group": "artifacts",
@@ -1446,6 +1530,46 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/modules/model_usage/api.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/model_usage/grants.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/model_usage/inspection.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/model_usage/models.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/model_usage/output_custody.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/model_usage/owner_ports.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/model_usage/profiles.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/model_usage/repository.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/model_usage/service.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/model_usage/setup.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/modules/outbox/api.py"
     },
     {
@@ -1627,6 +1751,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/projects/guide_compilation/live.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/model_usage.py"
     },
     {
       "group": "lifecycle",
@@ -2197,6 +2325,10 @@
       "target": "backend/app/workers/celery_app.py"
     },
     {
+      "group": "artifacts",
+      "target": "backend/app/workers/checker_model_proxy.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/workers/errors.py"
     },
@@ -2377,7 +2509,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "8a42d5c62f07ce625a6f837dddeb7ae6e0f1c159bb74d81cb5f9820bf03c333f",
+  "authority_digest": "cbc1693904d86116e7bc0038d353d79e933be2778aa44d9e4cf3dbef06d6867c",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
