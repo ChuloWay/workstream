@@ -28,7 +28,14 @@ from .pg_support import prepare_post_policy, operate
 
 
 @pytest.mark.parametrize('origin', ['post_policy', 'unified'])
-async def test_corrected_generation_replaces_policy_and_retains_original_receipts(clean_postgres_database, origin):
+async def test_corrected_generation_replaces_policy_and_retains_original_receipts(
+    clean_postgres_database, monkeypatch, origin
+):
+    monkeypatch.setenv(
+        "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET",
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    )
+    get_settings.cache_clear()
     async with proposal_case(clean_postgres_database) as (values, factory, command, actor, grant):
         operator, _ = await seed_review_actor(factory, None, role="operator", scope="system")
         configuration = scripted_runtime_configuration(
