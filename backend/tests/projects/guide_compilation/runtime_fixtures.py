@@ -8,6 +8,7 @@ from collections.abc import Callable, Mapping
 from contextlib import asynccontextmanager
 from io import BytesIO
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
@@ -123,7 +124,7 @@ async def publish_scripted_model_profile(client, project_id, configuration):
     spec = scripted_model_profile_spec(project_id, configuration)
     published = await client.post(
         f"/api/v1/operations/projects/{project_id}/model-profiles",
-        headers=auth_headers(),
+        headers=auth_headers() | {"Idempotency-Key": str(uuid4())},
         json=spec.model_dump(mode="json"),
     )
     assert published.status_code == 201, published.text
