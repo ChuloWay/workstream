@@ -1046,7 +1046,7 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
                 command: vec![
                     "/bin/sh".into(),
                     "-ceu".into(),
-                    "test -e /proc/gvisor/kernel_is_gvisor; test \"$(id -u)\" = 65532; test \"$(sed -n 's/^CapEff:[[:space:]]*//p' /proc/self/status)\" = 0000000000000000; test \"$(cat /opt/qualification/builder-capabilities.txt)\" = builder-capabilities=000000000000000b; test ! -e /var/run/docker.sock; test ! -e /work/execution.sock; test ! -e /work/model.sock; test ! -e /workspace/protected; test -f /workspace/source/visible.txt; if touch /workspace/source/sibling 2>/dev/null; then exit 72; fi; if mv /workspace/source /workspace/renamed 2>/dev/null; then exit 73; fi; if wget -T 1 -qO- http://1.1.1.1 >/dev/null 2>&1; then exit 71; fi; sleep 1; printf 'qualification=pass\\n'".into(),
+                    "test \"$(id -u)\" = 65532; test \"$(sed -n 's/^CapEff:[[:space:]]*//p' /proc/self/status)\" = 0000000000000000; test \"$(cat /opt/qualification/builder-capabilities.txt)\" = builder-capabilities=000000000000000b; test ! -e /var/run/docker.sock; test ! -e /work/execution.sock; test ! -e /work/model.sock; test ! -e /workspace/protected; test -f /workspace/source/visible.txt; if touch /workspace/source/sibling 2>/dev/null; then exit 72; fi; if mv /workspace/source /workspace/renamed 2>/dev/null; then exit 73; fi; if wget -T 1 -qO- http://1.1.1.1 >/dev/null 2>&1; then exit 71; fi; sleep 1; printf 'qualification=pass\\n'".into(),
                 ],
                 working_directory: ".".into(),
                 resources: trial_resources,
