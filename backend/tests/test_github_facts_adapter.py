@@ -27,6 +27,7 @@ from app.interfaces.external_services import (
 from app.interfaces.github_facts import (
     GitHubFactsAccessDeniedError,
     GitHubFactsIncompleteError,
+    GitHubFactsInconsistentError,
     GitHubFactsProtocolError,
     GitHubFactsUnavailableError,
     GitHubPullRequestFacts,
@@ -124,7 +125,7 @@ class FakeGitHub:
                     {
                         "id": 10,
                         "name": "backend",
-                        "status": "completed",
+                        "head_sha": HEAD_SHA, "status": "completed",
                         "conclusion": "success",
                         "app": {"id": 15368},
                     }
@@ -134,7 +135,7 @@ class FakeGitHub:
         self.route(
             "GET",
             f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/status",
-            {"state": "success", "statuses": [{"id": 21, "context": "lint", "state": "success"}]},
+            {"sha": HEAD_SHA, "state": "success", "statuses": [{"id": 21, "context": "lint", "state": "success"}]},
         )
 
     def route(self, method: str, path: str, *responses: object) -> None:
@@ -267,7 +268,9 @@ async def test_happy_path_returns_facts_with_response_digests() -> None:
                 "app_bound": True,
                 "conclusion": "success",
                 "check_run_app_id": 15368,
+                "check_run_head_sha": HEAD_SHA,
                 "commit_status_judged": False,
+                "commit_status_sha": None,
             },
             {
                 "name": "lint",
@@ -275,7 +278,9 @@ async def test_happy_path_returns_facts_with_response_digests() -> None:
                 "app_bound": False,
                 "conclusion": "success",
                 "check_run_app_id": None,
+                "check_run_head_sha": None,
                 "commit_status_judged": True,
+                "commit_status_sha": HEAD_SHA,
             },
         ],
         "fetched_at": "2027-01-15T08:00:00Z",
@@ -319,6 +324,10 @@ async def test_happy_path_returns_facts_with_response_digests() -> None:
                     fake.bodies[f"{API}/repos/{REPOSITORY}/commits/{HEAD_SHA}/status?per_page=100"]
                 ),
             },
+            {
+                "request": "pull_request_final",
+                "sha256": _sha(fake.bodies[f"{API}/repos/{REPOSITORY}/pulls/12"]),
+            },
         ],
     }
     lookup, exchange, *facts_requests = fake.requests
@@ -358,7 +367,7 @@ async def test_pagination_follows_same_origin_next_links() -> None:
             200,
             json={
                 "check_runs": [
-                    {"id": 4, "name": "other", "status": "completed", "conclusion": "failure"}
+                    {"id": 4, "name": "other", "head_sha": HEAD_SHA, "status": "completed", "conclusion": "failure"}
                 ]
             },
             headers={"link": f'<{page_two}>; rel="next"'},
@@ -368,7 +377,7 @@ async def test_pagination_follows_same_origin_next_links() -> None:
                 {
                     "id": 11,
                     "name": "backend",
-                    "status": "completed",
+                    "head_sha": HEAD_SHA, "status": "completed",
                     "conclusion": "failure",
                     "app": {"id": 15368},
                 }
@@ -412,9 +421,9 @@ async def test_required_check_conclusions_fail_closed() -> None:
         f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/check-runs",
         {
             "check_runs": [
-                {"id": 1, "name": "backend", "status": "completed", "conclusion": "success"},
-                {"id": 2, "name": "e2e", "status": "in_progress", "conclusion": None},
-                {"id": 3, "name": "wrong-app", "status": "completed", "conclusion": "skipped"},
+                {"id": 1, "name": "backend", "head_sha": HEAD_SHA, "status": "completed", "conclusion": "success"},
+                {"id": 2, "name": "e2e", "head_sha": HEAD_SHA, "status": "in_progress", "conclusion": None},
+                {"id": 3, "name": "wrong-app", "head_sha": HEAD_SHA, "status": "completed", "conclusion": "skipped"},
             ]
         },
     )
@@ -422,7 +431,7 @@ async def test_required_check_conclusions_fail_closed() -> None:
         "GET",
         f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/status",
         {
-            "statuses": [
+            "sha": HEAD_SHA, "statuses": [
                 {"id": 23, "context": "backend", "state": "failure"},
                 {"id": 24, "context": "lint", "state": "error"},
             ]
@@ -449,7 +458,7 @@ async def test_only_the_latest_rerun_of_a_required_check_counts(
 ) -> None:
     fake = FakeGitHub()
     runs_path = f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/check-runs"
-    run = {"name": "backend", "status": "completed", "app": {"id": 15368}}
+    run = {"name": "backend", "head_sha": HEAD_SHA, "status": "completed", "app": {"id": 15368}}
     # The newer run is on the first page and the older on the second, so
     # response order cannot decide the result.
     fake.route(
@@ -466,7 +475,7 @@ async def test_only_the_latest_rerun_of_a_required_check_counts(
         "GET",
         f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/status",
         {
-            "statuses": [
+            "sha": HEAD_SHA, "statuses": [
                 {"id": 31, "context": "lint", "state": "failure"},
                 {"id": 32, "context": "lint", "state": "success"},
             ]
@@ -507,7 +516,7 @@ async def test_app_restricted_check_ignores_other_apps_and_statuses() -> None:
                 {
                     "id": 12,
                     "name": "backend",
-                    "status": "completed",
+                    "head_sha": HEAD_SHA, "status": "completed",
                     "conclusion": "success",
                     "app": {"id": 999},
                 }
@@ -517,7 +526,7 @@ async def test_app_restricted_check_ignores_other_apps_and_statuses() -> None:
     fake.route(
         "GET",
         f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/status",
-        {"statuses": [{"id": 22, "context": "backend", "state": "success"}, {"id": 21, "context": "lint", "state": "success"}]},
+        {"sha": HEAD_SHA, "statuses": [{"id": 22, "context": "backend", "state": "success"}, {"id": 21, "context": "lint", "state": "success"}]},
     )
     facts = await _fetch(_adapter(fake))
     assert facts.required_checks[0].conclusion == "missing"
@@ -885,14 +894,14 @@ async def test_check_run_app_and_status_source_are_recorded() -> None:
                 {
                     "id": 5,
                     "name": "lint",
-                    "status": "completed",
+                    "head_sha": HEAD_SHA, "status": "completed",
                     "conclusion": "success",
                     "app": {"id": 777},
                 }
             ]
         },
     )
-    fake.route("GET", f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/status", {"statuses": []})
+    fake.route("GET", f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/status", {"sha": HEAD_SHA, "statuses": []})
     facts = await _fetch(_adapter(fake))
     check = facts.required_checks[0]
     assert (check.app_bound, check.check_run_app_id, check.commit_status_judged) == (
@@ -900,3 +909,69 @@ async def test_check_run_app_and_status_source_are_recorded() -> None:
         777,
         False,
     )
+
+
+def _pull_reads(fake: FakeGitHub) -> int:
+    return sum(1 for r in fake.requests if r.url.path == f"/repos/{REPOSITORY}/pulls/12")
+
+
+async def test_pull_request_moving_once_is_reread_and_bound_to_one_state() -> None:
+    fake = FakeGitHub()
+    moved = _pull(head={"sha": "c" * 40})
+    # The first whole read ends on a moved head; the second sees one state.
+    fake.route("GET", f"/repos/{REPOSITORY}/pulls/12", _pull(), moved, _pull())
+    facts = await _fetch(_adapter(fake))
+    assert facts.head_sha == HEAD_SHA
+    assert _pull_reads(fake) == 4
+    labels = [item.request for item in facts.responses]
+    assert labels[0] == "pull_request" and labels[-1] == "pull_request_final"
+    assert labels.count("pull_request") == 1
+
+
+async def test_head_that_keeps_moving_fails_closed_as_inconsistent() -> None:
+    fake = FakeGitHub()
+    shas = [f"{index:x}" * 40 for index in range(1, 8)]
+    for sha in shas:
+        fake.route("GET", f"/repos/{REPOSITORY}/commits/{sha}/check-runs", {"check_runs": []})
+        fake.route("GET", f"/repos/{REPOSITORY}/commits/{sha}/status", {"sha": sha, "statuses": []})
+    fake.route("GET", f"/repos/{REPOSITORY}/pulls/12", *(_pull(head={"sha": sha}) for sha in shas))
+    with pytest.raises(GitHubFactsInconsistentError) as caught:
+        await _fetch(_adapter(fake))
+    assert caught.value.retryable is True
+    assert _pull_reads(fake) == 6
+
+
+async def test_merged_flag_flipping_during_the_read_is_inconsistent() -> None:
+    fake = FakeGitHub()
+    open_pull = _pull(state="open", merged=False)
+    fake.route(
+        "GET",
+        f"/repos/{REPOSITORY}/pulls/12",
+        open_pull, _pull(), open_pull, _pull(), open_pull, _pull(),
+    )
+    with pytest.raises(GitHubFactsInconsistentError):
+        await _fetch(_adapter(fake))
+
+
+async def test_check_run_for_another_commit_is_a_protocol_error() -> None:
+    fake = FakeGitHub()
+    fake.route(
+        "GET",
+        f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/check-runs",
+        {"check_runs": [{"id": 9, "name": "backend", "head_sha": "c" * 40,
+                         "status": "completed", "conclusion": "success",
+                         "app": {"id": 15368}}]},
+    )
+    with pytest.raises(GitHubFactsProtocolError):
+        await _fetch(_adapter(fake))
+
+
+async def test_combined_status_for_another_commit_is_a_protocol_error() -> None:
+    fake = FakeGitHub()
+    fake.route(
+        "GET",
+        f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/status",
+        {"sha": "c" * 40, "statuses": []},
+    )
+    with pytest.raises(GitHubFactsProtocolError):
+        await _fetch(_adapter(fake))

@@ -39,6 +39,7 @@ from app.interfaces.github_facts import (
     GitHubActorFact,
     GitHubChangedFileFact,
     GitHubFactsIncompleteError,
+    GitHubFactsInconsistentError,
     GitHubPullRequestFacts,
     GitHubPullRequestNotFoundError,
     GitHubRequiredCheckFact,
@@ -60,6 +61,16 @@ JWT_LIFETIME_SECONDS = 540
 # Refresh an installation token this long before GitHub's stated expiry.
 TOKEN_REFRESH_MARGIN_SECONDS = 300
 INITIAL_BACKOFF_SECONDS = 0.5
+# Whole facts reads attempted when the pull request moves during a read.
+FACTS_CONSISTENCY_ATTEMPTS = 3
+_BOUND_PULL_FIELDS = (
+    "head_sha",
+    "merged",
+    "merge_commit_sha",
+    "base_ref",
+    "state",
+    "changed_files_count",
+)
 _CHECK_RUN_CONCLUSIONS = frozenset(
     {
         "success",
@@ -196,7 +207,6 @@ class GitHubAppFactsAdapter:
         ):
             raise ExternalServiceConfigurationError(_IDENTITY)
         deadline = _Deadline(self._configuration.total_deadline_seconds, self._monotonic)
-        digests: list[GitHubResponseDigest] = []
         async with httpx.AsyncClient(
             transport=self._transport,
             follow_redirects=False,
@@ -206,49 +216,84 @@ class GitHubAppFactsAdapter:
                 "User-Agent": "workstream-github-facts",
             },
         ) as client:
-            session = _FactsSession(self, client, repository, deadline, digests)
-            pull = await session.read_json(
-                "pull_request",
-                f"/repos/{repository}/pulls/{pull_request_number}",
-                not_found=GitHubPullRequestNotFoundError,
-            )
-            pull_facts = _pull_request_facts(pull, repository, pull_request_number)
-            required = _required_checks(
-                await session.read_json(
-                    "required_status_checks",
-                    f"/repos/{repository}/branches/"
-                    f"{quote(pull_facts['base_ref'], safe='')}"
-                    "/protection/required_status_checks",
-                    not_found=GitHubRequiredChecksNotConfiguredError,
+            for _attempt in range(FACTS_CONSISTENCY_ATTEMPTS):
+                digests: list[GitHubResponseDigest] = []
+                session = _FactsSession(self, client, repository, deadline, digests)
+                facts = await self._read_consistent_facts(
+                    session, repository, pull_request_number, digests
                 )
+                if facts is not None:
+                    return facts
+                if deadline.remaining() <= 0:
+                    break
+        raise GitHubFactsInconsistentError(_IDENTITY)
+
+    async def _read_consistent_facts(
+        self,
+        session: _FactsSession,
+        repository: str,
+        pull_request_number: int,
+        digests: list[GitHubResponseDigest],
+    ) -> GitHubPullRequestFacts | None:
+        """Read every fact once, bracketed by two pull-request reads.
+
+        Reviews and files are listed by pull request number, not by commit, and
+        protection can change between calls. The final pull-request read must
+        repeat the first one exactly (head SHA, merged flag, merge commit SHA,
+        base branch, state, changed-file count), so every fact belongs to one
+        pull-request state. Returns None when the state moved.
+        """
+        pull_path = f"/repos/{repository}/pulls/{pull_request_number}"
+        pull = await session.read_json(
+            "pull_request", pull_path, not_found=GitHubPullRequestNotFoundError
+        )
+        pull_facts = _pull_request_facts(pull, repository, pull_request_number)
+        required = _required_checks(
+            await session.read_json(
+                "required_status_checks",
+                f"/repos/{repository}/branches/"
+                f"{quote(pull_facts['base_ref'], safe='')}"
+                "/protection/required_status_checks",
+                not_found=GitHubRequiredChecksNotConfiguredError,
             )
-            head_sha = pull_facts["head_sha"]
-            changed_files_count = pull_facts["changed_files_count"]
-            if changed_files_count > GITHUB_MAXIMUM_LISTED_FILES:
-                raise GitHubFactsIncompleteError(_IDENTITY)
-            reviews = await session.read_pages(
-                "reviews",
-                f"/repos/{repository}/pulls/{pull_request_number}/reviews",
-                item_key=None,
-            )
-            files = await session.read_pages(
-                "files",
-                f"/repos/{repository}/pulls/{pull_request_number}/files",
-                item_key=None,
-                maximum_pages=GITHUB_MAXIMUM_LISTED_FILES // PAGE_SIZE,
-            )
-            if len(files) != changed_files_count:
-                raise GitHubFactsIncompleteError(_IDENTITY)
-            check_runs = await session.read_pages(
-                "check_runs",
-                f"/repos/{repository}/commits/{head_sha}/check-runs",
-                item_key="check_runs",
-            )
-            statuses = await session.read_pages(
-                "commit_status",
-                f"/repos/{repository}/commits/{head_sha}/status",
-                item_key="statuses",
-            )
+        )
+        head_sha = pull_facts["head_sha"]
+        changed_files_count = pull_facts["changed_files_count"]
+        if changed_files_count > GITHUB_MAXIMUM_LISTED_FILES:
+            raise GitHubFactsIncompleteError(_IDENTITY)
+        reviews = await session.read_pages(
+            "reviews", f"{pull_path}/reviews", item_key=None
+        )
+        files = await session.read_pages(
+            "files",
+            f"{pull_path}/files",
+            item_key=None,
+            maximum_pages=GITHUB_MAXIMUM_LISTED_FILES // PAGE_SIZE,
+        )
+        check_runs = await session.read_pages(
+            "check_runs",
+            f"/repos/{repository}/commits/{head_sha}/check-runs",
+            item_key="check_runs",
+        )
+        statuses = await session.read_pages(
+            "commit_status",
+            f"/repos/{repository}/commits/{head_sha}/status",
+            item_key="statuses",
+            require_sha=head_sha,
+        )
+        final = _pull_request_facts(
+            await session.read_json(
+                "pull_request_final", pull_path, not_found=GitHubPullRequestNotFoundError
+            ),
+            repository,
+            pull_request_number,
+        )
+        if any(final[key] != pull_facts[key] for key in _BOUND_PULL_FIELDS):
+            return None
+        if len(files) != changed_files_count:
+            raise GitHubFactsIncompleteError(_IDENTITY)
+        if any(run.get("head_sha") != head_sha for run in check_runs):
+            raise GitHubFactsProtocolError(_IDENTITY)
         try:
             return GitHubPullRequestFacts(
                 repository=pull_facts["repository"],
@@ -270,7 +315,7 @@ class GitHubAppFactsAdapter:
                     for item in files
                 ),
                 required_checks=tuple(
-                    _required_check_fact(name, app_id, check_runs, statuses)
+                    _required_check_fact(name, app_id, check_runs, statuses, head_sha)
                     for name, app_id in required
                 ),
                 fetched_at=datetime.fromtimestamp(self._wall_clock(), UTC),
@@ -411,11 +456,13 @@ class _FactsSession:
         *,
         item_key: str | None,
         maximum_pages: int = MAXIMUM_PAGES,
+        require_sha: str | None = None,
     ) -> list[dict]:
         """Follow same-origin ``next`` links for a bounded number of pages.
 
         ``item_key`` names the list inside an object body; None means the body
         itself is the list. More pages than ``maximum_pages`` fail closed.
+        ``require_sha`` requires each page body's ``sha`` to equal that commit.
         """
         url = self._url(path) + f"?per_page={PAGE_SIZE}"
         items: list[dict] = []
@@ -423,6 +470,10 @@ class _FactsSession:
             response = await self._installation_get(url, not_found=GitHubFactsProtocolError)
             self._record(f"{label}.page.{page}", response)
             body = _json(response)
+            if require_sha is not None and (
+                not isinstance(body, dict) or body.get("sha") != require_sha
+            ):
+                raise GitHubFactsProtocolError(_IDENTITY)
             if item_key is None:
                 page_items = body
             else:
@@ -660,6 +711,7 @@ def _required_check_fact(
     app_id: int | None,
     check_runs: list[dict],
     statuses: list[dict],
+    head_sha: str,
 ) -> GitHubRequiredCheckFact:
     """Judge only the latest check run and latest status for one required check.
 
@@ -676,7 +728,9 @@ def _required_check_fact(
             runs.append(run)
     run = _latest(runs)
     check_run_app_id = None
+    check_run_head_sha = None
     if run is not None:
+        check_run_head_sha = run.get("head_sha")
         app = run.get("app")
         check_run_app_id = app.get("id") if isinstance(app, dict) else None
         if check_run_app_id is not None and type(check_run_app_id) is not int:
@@ -710,5 +764,7 @@ def _required_check_fact(
         app_bound=app_id is not None,
         conclusion=conclusion,
         check_run_app_id=check_run_app_id,
+        check_run_head_sha=check_run_head_sha,
         commit_status_judged=status_judged,
+        commit_status_sha=head_sha if status_judged else None,
     )

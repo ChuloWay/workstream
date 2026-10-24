@@ -118,8 +118,10 @@ class GitHubRequiredCheckFact(_FactsValue):
 
     ``app_id`` is the requirement's App restriction and ``app_bound`` says
     whether one exists. ``check_run_app_id`` is the App that produced the judged
-    latest check run (null when no run was judged). ``commit_status_judged`` is
-    true when a commit status, which carries no App identity, was judged.
+    latest check run (null when no run was judged) and ``check_run_head_sha`` the
+    commit GitHub reports for that run. ``commit_status_judged`` is true when a
+    commit status, which carries no App identity, was judged;
+    ``commit_status_sha`` is the commit of that combined status.
     """
 
     name: Annotated[StrictStr, Field(min_length=1, max_length=255)]
@@ -127,7 +129,9 @@ class GitHubRequiredCheckFact(_FactsValue):
     app_bound: StrictBool
     conclusion: GitHubCheckConclusion
     check_run_app_id: StrictInt | None
+    check_run_head_sha: GitSha | None
     commit_status_judged: StrictBool
+    commit_status_sha: GitSha | None
 
 
 class GitHubResponseDigest(_FactsValue):
@@ -141,7 +145,10 @@ class GitHubPullRequestFacts(_FactsValue):
     """Immutable ``workstream.github_facts.v1`` value for one pull request.
 
     ``merge_commit_sha`` is null unless the pull request is merged, because
-    GitHub reports a test-merge commit for open pull requests. Serialize with
+    GitHub reports a test-merge commit for open pull requests. ``head_sha`` and
+    ``merge_commit_sha`` are the single pull-request state every other fact was
+    bound to: the adapter re-reads the pull request after all other reads and
+    discards the read if that state moved. Serialize with
     ``model_dump(mode="json")`` to place the value in checker request input.
     """
 
@@ -194,6 +201,15 @@ class GitHubFactsProtocolError(ExternalServiceProtocolError):
     """GitHub returned a response outside the supported facts protocol."""
 
     code = "github_facts_protocol_invalid"
+
+
+class GitHubFactsInconsistentError(ExternalServiceUnavailableError):
+    """The pull request kept changing while facts were read, within the deadline.
+
+    Retryable: a later read may observe one stable state.
+    """
+
+    code = "github_facts_inconsistent"
 
 
 class GitHubFactsIncompleteError(GitHubFactsProtocolError):

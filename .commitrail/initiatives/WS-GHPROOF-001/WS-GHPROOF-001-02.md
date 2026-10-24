@@ -115,6 +115,23 @@ chunk adds no transport, credential or retry logic of its own.
   files. If the pull request's `changed_files` exceeds 3,000, or the listing
   length differs from it, the read raises `GitHubFactsIncompleteError` (a
   protocol error), so a protected-path rule can never miss a file.
+- **One pull-request state (security review, time-of-check binding).** Facts
+  come from several calls; reviews and files are listed by pull-request number,
+  not by commit, and protection can change between calls, so one object could
+  mix two states. After every other read the adapter re-reads the pull request
+  (`pull_request_final`, hashed like the first read) and requires `head_sha`,
+  `merged`, `merge_commit_sha`, `base_ref`, `state` and `changed_files` to equal
+  the first read exactly. If they differ, it discards the whole read and starts
+  again, up to three whole reads within the same deadline, then raises the
+  retryable `GitHubFactsInconsistentError` (an availability error, so chunk 04
+  maps it to an infrastructure failure). The changed-file listing must match
+  the count both reads reported. Every check run returned for the head SHA
+  must report that `head_sha`, and every combined-status page must report it as
+  its `sha`; otherwise the read is a protocol error. The facts' `head_sha` and
+  `merge_commit_sha` are the single state all facts were bound to; each
+  required check records `check_run_head_sha` and `commit_status_sha` so the
+  checker can verify the binding. Reviews keep their own `commit_id`; the
+  checker counts only reviews of the head SHA.
 - **Check provenance.** Each required check also records `app_bound` (the
   requirement names an App), `check_run_app_id` (the App that produced the
   judged latest run, or null) and `commit_status_judged` (a commit status, which
@@ -134,6 +151,9 @@ chunk adds no transport, credential or retry logic of its own.
 - [x] Author, all reviews (paginated, unfiltered) and all changed files
   (paginated) are returned and hashed; more files than GitHub can list, or a
   short listing, fails as incomplete.
+- [x] A pull request that moves during a read is re-read and bound to one
+  state; one that keeps moving, or whose merged flag flips, fails as
+  inconsistent; check runs or statuses for another commit fail.
 - [x] Each required check records its App binding and the producing App or
   status source of the judged result.
 - [x] Happy path returns the exact facts, response digests, a verifiable JWT
@@ -163,7 +183,7 @@ chunk adds no transport, credential or retry logic of its own.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Adapter behavior and secret custody | `pytest tests/test_github_facts_adapter.py` | 48 passed | Uses `httpx.MockTransport`; the re-run rule comes from a separate live read, not from this suite |
+| Adapter behavior and secret custody | `pytest tests/test_github_facts_adapter.py` | 53 passed | Uses `httpx.MockTransport`; the re-run rule comes from a separate live read, not from this suite |
 | Re-run test detects order-based selection | Temporarily selecting the last listed run made both re-run cases fail | Detected | Manual negative control |
 | Secret tests detect leaks | Temporarily unredacting the token repr, and logging the Authorization value, each made one test fail | Detected | Manual negative control |
 | Lane catalogue, boundaries, ownership | `tests/test_ci_lane_catalogue.py`, `tests/architecture/test_module_boundaries.py`, `tests/test_behavior_ownership.py`, `scripts.behavior_ownership validate`, `module_boundaries`, `authorization_boundary`, `test_structure_boundary` | Pass | None |
