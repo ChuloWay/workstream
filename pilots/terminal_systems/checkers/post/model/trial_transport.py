@@ -411,11 +411,7 @@ def _validate_exit(
     elif outcome == "disk_exceeded" and export_outcome == "capacity_exceeded":
         valid = exited or signalled
     else:
-        valid = (
-            exit_code is None
-            and (signal is None or signalled)
-            and export_outcome == "unavailable"
-        )
+        valid = exit_code is None and signal is None and export_outcome == "unavailable"
     if not valid:
         raise TrialTransportError("invalid_response")
 

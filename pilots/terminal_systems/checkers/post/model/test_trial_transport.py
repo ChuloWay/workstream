@@ -331,6 +331,9 @@ class TrialTransportTests(unittest.TestCase):
                 step["exit_code"] = 137
                 with self.assertRaisesRegex(TrialTransportError, "invalid_response"):
                     self.exchange(response)
+                step.update(exit_code=None, signal=9)
+                with self.assertRaisesRegex(TrialTransportError, "invalid_response"):
+                    self.exchange(response)
 
     def test_export_failures_preserve_real_child_status(self):
         for build in (False, True):
