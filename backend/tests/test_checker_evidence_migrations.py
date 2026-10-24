@@ -11,6 +11,9 @@ import asyncpg
 import pytest
 
 from app.db import session as db_session
+from app.modules.actors.api import ServiceIdentity
+from app.modules.artifacts.preparation import ArtifactScratchManager
+from tests.checkers.execution.support import provision_post_submit_service
 from scripts.bootstrap_access_administrator import _run as run_bootstrap
 from tests import conftest as suite_fixtures
 from tests.authentication.fixtures import (
@@ -24,6 +27,7 @@ from tests.checker_output_custody_helpers import output_custody_harness
 from tests.checkers_model_calls.test_setup_model_handler_postgresql import (
     _Journey,
     _StorageCase,
+    _setup_output_preparation_limits,
     _journey,
     _state,
 )
@@ -192,26 +196,41 @@ async def _arrange_retained_lineages(
             await _arrange_historical_checker_run_output(session, legacy)
             await session.execute(_INSERT_BINDING, legacy_values)
 
+        setup_effect_id = await _arrange_retained_setup(
+            tmp_path, database_url, harness, setup_values, admin_access
+        )
+        return str(legacy_values["id"]), str(model_bound.binding_id), setup_effect_id
+
+
+async def _arrange_retained_setup(tmp_path, database_url, harness, values, access) -> str:
+    """Retain a real setup effect using its admitted actors and source bounds."""
+    for identity in (
+        ServiceIdentity.ARTIFACT_CHECKER_OUTPUT,
+        ServiceIdentity.ARTIFACT_BINDING,
+        ServiceIdentity.ARTIFACT_PUT_RESOLVER,
+        ServiceIdentity.ARTIFACT_VERIFIER,
+    ):
+        await provision_post_submit_service(harness.factory, identity)
+    manager = ArtifactScratchManager(
+        root=tmp_path / "retained-setup-scratch",
+        limits=_setup_output_preparation_limits(),
+    )
+    try:
         storage = _StorageCase(
-            database_url,
-            harness.factory,
-            harness.engine,
-            harness.bootstrap,
-            harness.manager,
-            harness.settings,
-            harness.namespace,
-            harness.store,
-            setup_values,
+            database_url, harness.factory, harness.engine, harness.bootstrap,
+            manager, harness.settings, harness.namespace, harness.store, values,
         )
         setup_access = replace(
-            admin_access,
-            target=await admin_access.signed.actor("retained-setup-operator"),
+            access, target=await access.signed.actor("retained-setup-operator"),
         )
         setup: _Journey = await _journey(storage, setup_access)
         assert (await setup.handler().handle(setup.request)).outcome == "unavailable"
-        assert (await setup.handler().handle(setup.request)).outcome == "completed"
+        replay = await setup.handler().handle(setup.request)
+        assert replay.outcome == "completed", (replay, setup.stages, setup.failures)
         setup_effect = await _state(setup)
-        return str(legacy_values["id"]), str(model_bound.binding_id), str(setup_effect.id)
+        return str(setup_effect.id)
+    finally:
+        manager.close()
 
 
 async def _assert_head_lineage_projection(
