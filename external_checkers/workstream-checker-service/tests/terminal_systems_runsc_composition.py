@@ -110,6 +110,8 @@ def _required_environment() -> dict[str, str]:
     names = (
         "WORKSTREAM_TS_RUNSC_COMPOSITION_ROOT",
         "WORKSTREAM_TS_RUNSC_INNER_COMPOSITION_ROOT",
+        "WORKSTREAM_TS_RUNSC_SOCKET_ROOT",
+        "WORKSTREAM_TS_RUNSC_INNER_SOCKET_ROOT",
         "WORKSTREAM_TS_RUNSC_CONTAINER",
         "WORKSTREAM_TS_RUNSC_DAEMON_DIGEST",
         "WORKSTREAM_TS_RUNSC_PLATFORM_IDENTITY",
@@ -659,8 +661,10 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
             ),
         )
 
-        proxy_root = root / "private-proxy"
-        service_root = root / "service"
+        socket_root = Path(env["WORKSTREAM_TS_RUNSC_SOCKET_ROOT"]).resolve(strict=True)
+        inner_socket_root = env["WORKSTREAM_TS_RUNSC_INNER_SOCKET_ROOT"]
+        proxy_root = socket_root / "private-proxy"
+        service_root = socket_root / "service"
         for directory in (
             proxy_root,
             service_root,
@@ -673,8 +677,8 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
         proxy_path = proxy_root / "proxy.sock"
         service_socket = service_root / "checker.sock"
         service_config = {
-            "socket_path": f"{inner}/service/checker.sock",
-            "model_proxy_socket": f"{inner}/private-proxy/proxy.sock",
+            "socket_path": f"{inner_socket_root}/service/checker.sock",
+            "model_proxy_socket": f"{inner_socket_root}/private-proxy/proxy.sock",
             "model_relay_root": f"{inner}/model-relay",
             "trial_authority_manifest_path": f"{inner}/trial-authority.json",
             "trial_authority_manifest_digest": manifest_digest,

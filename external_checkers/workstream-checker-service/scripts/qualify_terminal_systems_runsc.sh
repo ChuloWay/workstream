@@ -15,6 +15,9 @@ readonly RUN_ID="${WORKSTREAM_TS_RUNSC_RUN_ID:?set the prepared PILOT-00 run ID}
 readonly CHECKER_IMAGE="${WORKSTREAM_TS_RUNSC_CHECKER_IMAGE:-ws-terminal-systems-post:qualification}"
 readonly REGISTRY_IMAGE="${WORKSTREAM_TS_RUNSC_REGISTRY_IMAGE:-registry:2}"
 readonly INNER_ROOT="/workstream-state"
+# Host AF_UNIX paths must stay below 108 bytes even in a deep checkout.
+readonly SOCKET_ROOT="$(mktemp -d /tmp/ws493-sockets.XXXXXX)"
+readonly INNER_SOCKET_ROOT="/workstream-sockets"
 readonly COMPOSITION_ROOT="${SHARED_ROOT}/terminal-systems-runsc-composition"
 readonly INNER_COMPOSITION_ROOT="${INNER_ROOT}/terminal-systems-runsc-composition"
 readonly ORIGINAL_CONFIG="$(mktemp /tmp/ws493-runsc-daemon.XXXXXX.json)"
@@ -109,6 +112,9 @@ cleanup() {
     remove_composition_root || status=1
   fi
   rm -f -- "${ORIGINAL_CONFIG}" "${BUILD_MESSAGES}"
+  # This unique private root is created by this invocation and contains only
+  # the trusted service/proxy sockets, never submitted material.
+  rm -rf -- "${SOCKET_ROOT}" || status=1
   printf '%s\n' "${status}" >"${EXIT_SIDECAR}"
   exit "${status}"
 }
@@ -167,6 +173,7 @@ docker create \
   --security-opt label=disable \
   --mount "type=bind,src=${STATE_ROOT}/dind-state,dst=/var/lib/docker" \
   --mount "type=bind,src=${STATE_ROOT}/tools,dst=/opt/gvisor,readonly" \
+  --mount "type=bind,src=${SOCKET_ROOT},dst=${INNER_SOCKET_ROOT}" \
   --mount "type=bind,src=${SHARED_ROOT},dst=${INNER_ROOT}" \
   --mount "type=bind,src=${SHARED_ROOT}/daemon.json,dst=/etc/docker/pilot-daemon.json,readonly" \
   --mount "type=bind,src=${REPOSITORY_ROOT}/experiments/pilot00_gvisor_offline,dst=/pilot,readonly" \
@@ -437,6 +444,8 @@ b=json.dumps(facts,sort_keys=True,separators=(",", ":")).encode(); print("sha256
 ')"
 
 export WORKSTREAM_TS_RUNSC_INNER_ROOT="${INNER_ROOT}"
+export WORKSTREAM_TS_RUNSC_SOCKET_ROOT="${SOCKET_ROOT}"
+export WORKSTREAM_TS_RUNSC_INNER_SOCKET_ROOT="${INNER_SOCKET_ROOT}"
 export WORKSTREAM_TS_RUNSC_COMPOSITION_ROOT="${COMPOSITION_ROOT}"
 export WORKSTREAM_TS_RUNSC_INNER_COMPOSITION_ROOT="${INNER_COMPOSITION_ROOT}"
 export WORKSTREAM_TS_RUNSC_CONTAINER="${CONTAINER}"
