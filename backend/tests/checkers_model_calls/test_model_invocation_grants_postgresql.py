@@ -24,17 +24,21 @@ from app.modules.authorization.domain.resource_digest import authorization_resou
 from app.modules.model_usage.api import (
     ModelActionEvidence,
     ModelCallExecutionFacts,
+    ModelCallUsage,
     ModelCallUnavailable,
     ModelPaidSlotKey,
+    PreparedModelCallAttempt,
     model_action_digest,
 )
 from app.modules.model_usage.grants import ModelInvocationGrants
+from app.modules.model_usage.models import ModelUsageBudgetAccount, ModelUsageEffect
 from tests.checkers_model_calls.model_usage_pg_support import (
     DatabaseFacts,
     model_database as _ledger_database,
 )
 from tests.checkers_model_calls.model_usage_boundary_support import BoundaryPorts
 from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
+    evidence,
     execution,
     provision,
     service,
@@ -59,6 +63,7 @@ class GrantDatabase:
     facts: DatabaseFacts
     execution: ModelCallExecutionFacts
     slot: ModelPaidSlotKey
+    prepared: PreparedModelCallAttempt
     prepared_attempt_id: UUID
     prepared_request_sha256: str
 
@@ -247,6 +252,7 @@ async def grant_database(ledger_database_fixture: DatabaseFacts) -> GrantDatabas
         ledger_database,
         current,
         paid_slot,
+        prepared,
         prepared.attempt_id,
         request_sha256,
     )
@@ -375,7 +381,37 @@ async def test_renewed_and_successor_grants_reattach_the_same_paid_effect(
                 request_sha256=grant_database.prepared_request_sha256,
                 prepared_attempt_id=grant_database.prepared_attempt_id,
             )
-            renewed = await _issue(grant_database, boundaries=boundaries, session=session)
+            renewed_execution = grant_database.execution.model_copy(
+                update={
+                    "worker_lease_id": new_record_id(),
+                    "worker_lease_generation": (
+                        grant_database.execution.worker_lease_generation + 1
+                    ),
+                    "worker_lease_expires_at": datetime.now(UTC) + timedelta(minutes=10),
+                }
+            )
+            await session.execute(
+                text(
+                    "update checker_runs set worker_lease_id=:lease,"
+                    "worker_lease_generation=:generation,worker_lease_expires_at=:expires "
+                    "where id=:run"
+                ),
+                {
+                    "lease": renewed_execution.worker_lease_id,
+                    "generation": renewed_execution.worker_lease_generation,
+                    "expires": renewed_execution.worker_lease_expires_at,
+                    "run": renewed_execution.checker_run_id,
+                },
+            )
+            renewed_database = GrantDatabase(
+                grant_database.facts,
+                renewed_execution,
+                grant_database.slot,
+                grant_database.prepared,
+                grant_database.prepared_attempt_id,
+                grant_database.prepared_request_sha256,
+            )
+            renewed = await _issue(renewed_database, boundaries=boundaries, session=session)
             renewed_facts = await owner.resolve(renewed.grant_id, renewed.binding_digest)
             await owner.consume_prepared(
                 renewed_facts,
@@ -394,7 +430,40 @@ async def test_renewed_and_successor_grants_reattach_the_same_paid_effect(
                 == 2
             )
 
-            successor = grant_database.execution.model_copy(
+            request_art = evidence(
+                "renewed-dispatch-request", grant_database.prepared_request_sha256
+            )
+            dispatched = await service(session, BoundaryPorts()).reserve_dispatch(
+                renewed_execution,
+                grant_database.prepared,
+                request_art,
+            )
+            completed = await service(session, BoundaryPorts()).complete_known_failure(
+                dispatched.effect,
+                provider_response_id="resp_renewed_dispatch",
+                provider_model_snapshot="gpt-example-2026-10-01",
+                response_evidence=evidence(
+                    "renewed-dispatch-response", sha("renewed-dispatch-response")
+                ),
+                usage=ModelCallUsage(
+                    input_tokens=22,
+                    cached_input_tokens=2,
+                    output_tokens=3,
+                    reasoning_tokens=1,
+                ),
+            )
+            effect = await session.get(ModelUsageEffect, str(completed.effect.attempt_id))
+            account = await session.get(
+                ModelUsageBudgetAccount, str(grant_database.facts.project_id)
+            )
+            assert effect.prepared_execution_facts == grant_database.execution.model_dump(
+                mode="json"
+            )
+            assert effect.dispatch_execution_facts == renewed_execution.model_dump(mode="json")
+            assert account.lifetime_reserved_nanodollars == 0
+            assert account.lifetime_settled_nanodollars == completed.settled_nanodollars
+
+            successor = renewed_execution.model_copy(
                 update={
                     "checker_run_id": new_record_id(),
                     "evaluation_request_id": new_record_id(),
@@ -423,6 +492,7 @@ async def test_renewed_and_successor_grants_reattach_the_same_paid_effect(
                 grant_database.facts,
                 successor,
                 grant_database.slot,
+                grant_database.prepared,
                 grant_database.prepared_attempt_id,
                 grant_database.prepared_request_sha256,
             )
