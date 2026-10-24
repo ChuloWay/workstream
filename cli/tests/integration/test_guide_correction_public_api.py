@@ -27,6 +27,10 @@ from test_guide_post_approval_public_api import (
 from test_public_self_service import _ready
 from app.core.identifiers import new_record_id
 from tests.project_create_fixtures import seed_historical_project
+from tests.projects.guide_compilation.helpers import runtime_configuration
+from tests.projects.guide_compilation.runtime_fixtures import (
+    scripted_model_profile_spec,
+)
 
 
 @pytest.mark.asyncio
@@ -63,6 +67,9 @@ async def test_guide_correction_public_save_dispatch_replay_and_authority(
         )
         administrator, _ = await seed_review_actor(
             factory, None, role="access_administrator", scope="system"
+        )
+        model_operator, _ = await seed_review_actor(
+            factory, None, role="operator", scope="system"
         )
         foreign_id = new_record_id()
         async with factory() as session, session.begin():
@@ -227,6 +234,18 @@ async def test_guide_correction_public_save_dispatch_replay_and_authority(
                 )
                 source = await direct.get(prefix + "/proposal", headers=headers)
                 assert source.status_code == 200, source.text
+                profile = scripted_model_profile_spec(
+                    command.project_id, runtime_configuration()
+                )
+                published = await direct.post(
+                    f"/api/v1/operations/projects/{command.project_id}/model-profiles",
+                    headers={
+                        "Authorization": "Bearer " + token(model_operator),
+                        "Idempotency-Key": str(uuid4()),
+                    },
+                    json=profile.model_dump(mode="json"),
+                )
+                assert published.status_code == 201, published.text
                 body = {
                     "target": source.json()["target"],
                     "reason": "  Clarify café evidence.  ",
