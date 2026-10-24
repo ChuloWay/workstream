@@ -52,6 +52,11 @@ async def test_lost_post_policy_correction_discovered_and_dispatched_by_new_mana
     )
 
     monkeypatch.setattr(project_agents, "project_guide_runtime_configuration", scripted_runtime_configuration)
+    monkeypatch.setenv(
+        "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET",
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    )
+    get_settings.cache_clear()
     dispatched = []
     def enqueue(**values):
         dispatched.append(values)

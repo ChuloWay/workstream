@@ -339,6 +339,8 @@ async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_
     first = await coordinator.run(delivery)
     replay = await coordinator.run(delivery)
     assert first == replay
+    # The scripted runtime re-enters once for uncertain delivery. Production
+    # model custody separately prevents repeating the same paid provider effect.
     assert runtime.calls == (2 if outcome == "uncertain" else 1)
     assert first["status"] == (
         "compilation_invalid_terminal" if outcome == "invalid" else "provider_outcome_unresolved"
