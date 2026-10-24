@@ -16,6 +16,8 @@ RULESET_NAME = "Workstream CLI immutable tags"
 def validate_environment(environment: dict, branches: dict) -> None:
     if environment.get("name") != "cli-release":
         raise ValueError("release environment identity mismatch")
+    if environment.get("can_admins_bypass") is not False:
+        raise ValueError("release environment must disable administrator bypass")
     policy = environment.get("deployment_branch_policy") or {}
     if policy.get("custom_branch_policies") is not True:
         raise ValueError("release environment must restrict deployment branches")
