@@ -888,8 +888,8 @@ RATE_DEPENDENCIES = {
     enforce_admin_mutation_rate_limit,
     enforce_authorization_read_rate_limit,
 }
-# These 67 bindings are the explicit unchanged production baseline from main.
-# Registry and recovery routes extend it through their owner-specific maps below.
+# These bindings form the exact production inventory; registry and recovery routes
+# extend it through their owner-specific maps below.
 ESTABLISHED_ADMIN_MUTATION_RATE_ROUTES = {
     ("POST", "/actor-identity-links/{identity_link_id}/reactivate"),
     ("POST", "/actor-identity-links/{identity_link_id}/revoke"),
@@ -913,6 +913,7 @@ ESTABLISHED_AUTHORIZATION_READ_RATE_ROUTES = {
     ("GET", "/audit/projects/{project_id}/tasks/{task_id}/locked-context"),
     ("GET", "/operations/projects/{project_id}/tasks"),
     ("GET", "/operations/projects/{project_id}/tasks/{task_id}/locked-context"),
+    ("GET", "/projects"),
     ("GET", "/projects/{project_id}"),
     ("GET", "/projects/{project_id}/active-guide"),
     ("GET", "/projects/{project_id}/contribution-policies/current"),

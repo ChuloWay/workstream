@@ -519,6 +519,7 @@ def test_openapi_documents_request_error_and_response_context() -> None:
     new_manager_reads |= contributor_reads.keys()
     project = "/api/v1/projects/{project_id}"
     project_reads = {
+        "GET /api/v1/projects": "project.catalogue.list",
         f"GET {project}/guides": "project.guide.list",
         f"GET {project}/guides/{{guide_id}}": "project.guide.read",
         f"GET {project}/guides/{{guide_id}}/activation-readiness": "project.guide.activation_readiness.read",
@@ -633,13 +634,13 @@ def test_openapi_documents_request_error_and_response_context() -> None:
     assert repair_operation["x-workstream-action-id"] == "project.task.revision.repair"
     assert repair_operation["security"]
     new_manager_reads.add(revision_repair)
-    assert len(route_inventory) == 129
+    assert len(route_inventory) == 130
     retained_routes = sorted(set(route_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys() - public_entry_actions.keys() - registry_actions.keys() - recovery_actions.keys())
     retained_protected = sorted(set(protected_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys() - public_entry_actions.keys() - registry_actions.keys() - recovery_actions.keys())
     assert sha256("\n".join(retained_routes).encode()).hexdigest() == (
         "793237012e9256d308dd5d1e9c1a65e41381cf6306888fdd175dc9794b118444"
     )
-    assert len(protected_inventory) == 127
+    assert len(protected_inventory) == 128
     assert sha256("\n".join(retained_protected).encode()).hexdigest() == (
         "0953ae6392b81a4a7ba7c9f6b7fccc17768f34cd1f958572fdc553cd204ec82e"
     )
