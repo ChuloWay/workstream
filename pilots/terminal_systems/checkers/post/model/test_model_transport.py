@@ -93,9 +93,7 @@ class ModelTransportTests(unittest.TestCase):
         try:
             with ModelSession(timeout_seconds=2, socket_path=server.path) as session:
                 first = session.call("plan", required_receipt_handles=())
-                second = session.call(
-                    "assess", required_receipt_handles=(handle,)
-                )
+                second = session.call("assess", required_receipt_handles=(handle,))
         finally:
             server.finish()
         self.assertEqual((first.call_index, second.call_index), (0, 1))
@@ -175,7 +173,9 @@ class ModelTransportTests(unittest.TestCase):
         ):
             server = SessionServer([response])
             try:
-                with ModelSession(timeout_seconds=2, socket_path=server.path) as session:
+                with ModelSession(
+                    timeout_seconds=2, socket_path=server.path
+                ) as session:
                     with self.assertRaisesRegex(ModelSessionError, "invalid_response"):
                         session.call("prompt")
             finally:
@@ -186,8 +186,9 @@ class ModelTransportTests(unittest.TestCase):
         session = ModelSession(timeout_seconds=2, socket_path="/does/not/exist")
         self.addCleanup(session.close)
         for handles in ((handle, handle), ("trial_receipt_BAD",), ([],)):
-            with self.subTest(handles=handles), self.assertRaisesRegex(
-                ModelSessionError, "invalid_request"
+            with (
+                self.subTest(handles=handles),
+                self.assertRaisesRegex(ModelSessionError, "invalid_request"),
             ):
                 session.call("prompt", required_receipt_handles=handles)
         with self.assertRaisesRegex(ModelSessionError, "invalid_request"):
@@ -195,8 +196,9 @@ class ModelTransportTests(unittest.TestCase):
 
     def test_nonfinite_or_unrepresentable_session_timeout_is_rejected(self):
         for timeout in (float("nan"), float("inf"), 10**1000):
-            with self.subTest(timeout=timeout), self.assertRaisesRegex(
-                ModelSessionError, "invalid_request"
+            with (
+                self.subTest(timeout=timeout),
+                self.assertRaisesRegex(ModelSessionError, "invalid_request"),
             ):
                 ModelSession(timeout_seconds=timeout)
 

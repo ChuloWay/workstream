@@ -89,9 +89,7 @@ class CheckerCoreTests(unittest.TestCase):
         delegated = execute(
             request("author_evidence_accuracy"), self.root, self.passing_assessment
         )
-        self.assertEqual(
-            delegated["infrastructure_failure_code"], "invalid_output"
-        )
+        self.assertEqual(delegated["infrastructure_failure_code"], "invalid_output")
 
 
 if __name__ == "__main__":

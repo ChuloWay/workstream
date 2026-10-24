@@ -93,8 +93,9 @@ class EntrypointTests(unittest.TestCase):
         )
         constant = valid.replace(b"30000", b"NaN", 1)
         for raw in (duplicate, constant, b"x" * (2 * 1024 * 1024 + 1)):
-            with self.subTest(raw=raw[:50]), self.assertRaisesRegex(
-                EntrypointError, "invalid_request"
+            with (
+                self.subTest(raw=raw[:50]),
+                self.assertRaisesRegex(EntrypointError, "invalid_request"),
             ):
                 decode_request(raw)
 
@@ -106,8 +107,12 @@ class EntrypointTests(unittest.TestCase):
             sessions.append(value)
             return value
 
-        result = evaluate(request(), material_root=self.root, model_session_factory=factory)
-        self.assertEqual((result["outcome"], result["verdict"]), ("completed", "passed"))
+        result = evaluate(
+            request(), material_root=self.root, model_session_factory=factory
+        )
+        self.assertEqual(
+            (result["outcome"], result["verdict"]), ("completed", "passed")
+        )
         self.assertEqual(sessions[0].calls, 1)
         self.assertEqual(result["request_digest"], request()["request_digest"])
 

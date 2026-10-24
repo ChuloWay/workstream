@@ -121,9 +121,7 @@ def evaluate(
 
                 def assess(prompt: str) -> str:
                     try:
-                        return session.call(
-                            prompt, required_receipt_handles=()
-                        ).output
+                        return session.call(prompt, required_receipt_handles=()).output
                     except (ModelCallUnavailable, ModelSessionError) as exc:
                         raise CheckerModelUnavailable("model_call_unavailable") from exc
 

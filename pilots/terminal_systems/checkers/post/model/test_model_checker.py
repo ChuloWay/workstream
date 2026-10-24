@@ -273,6 +273,7 @@ class AssessmentTests(unittest.TestCase):
         value["findings"][0]["line"] = 1
         with self.assertRaisesRegex(AssessmentError, "invalid_output"):
             self.validate(value)
+
     def test_wrong_material_or_line_is_invalid(self):
         value = self.assessment(failed=True)
         value["material_digest"] = "sha256:" + "0" * 64

@@ -173,7 +173,9 @@ class TrialPlanTests(unittest.TestCase):
             self.evidence,
         )
 
-    def test_source_cited_plan_preserves_exact_metadata_and_three_fresh_references(self):
+    def test_source_cited_plan_preserves_exact_metadata_and_three_fresh_references(
+        self,
+    ):
         prompt = json.loads(
             build_plan_prompt(self.metadata, self.material_digest, self.evidence)
         )
@@ -216,7 +218,9 @@ class TrialPlanTests(unittest.TestCase):
             "restart_work",
         ):
             followup = next(
-                item for item in steps if item["slot_id"] == f"{identifier}_verification"
+                item
+                for item in steps
+                if item["slot_id"] == f"{identifier}_verification"
             )
             self.assertEqual(followup["state_source"], identifier)
             self.assertEqual(followup["command"], ["sh", "tests/run.sh"])
@@ -224,7 +228,9 @@ class TrialPlanTests(unittest.TestCase):
     def test_plan_digest_binds_task_metadata_without_exposing_it_as_argv_evidence(self):
         original = self.material_digest
         (self.root / "task.toml").write_text(
-            TASK_METADATA.replace("reference_timeout_seconds = 20", "reference_timeout_seconds = 21"),
+            TASK_METADATA.replace(
+                "reference_timeout_seconds = 20", "reference_timeout_seconds = 21"
+            ),
             encoding="utf-8",
         )
         changed, evidence = collect_plan_sources(self.root)
@@ -254,12 +260,8 @@ class TrialPlanTests(unittest.TestCase):
         projection = project_trial_execution_projection()
         build = projection["material_projections"][0]
         self.assertEqual(build["source_role"], "submission_archive")
-        self.assertEqual(
-            build["exclusions"], ["AUTHOR_NOTES.md", "solution", "tests"]
-        )
-        by_role = {
-            item["role"]: item for item in projection["material_projections"]
-        }
+        self.assertEqual(build["exclusions"], ["AUTHOR_NOTES.md", "solution", "tests"])
+        by_role = {item["role"]: item for item in projection["material_projections"]}
         self.assertEqual(by_role["workspace_seed"]["source_relative"], "workspace")
         self.assertEqual(by_role["workspace_seed"]["destination_relative"], "workspace")
         self.assertEqual(by_role["reference"]["projection_kind"], "state_overlay")
@@ -283,9 +285,7 @@ class TrialPlanTests(unittest.TestCase):
             ["revision_reference", "revision_verification"],
         )
         self.assertEqual(revision["steps"][0]["state_source"], "fresh")
-        self.assertEqual(
-            revision["steps"][1]["state_source"], "revision_reference"
-        )
+        self.assertEqual(revision["steps"][1]["state_source"], "revision_reference")
 
     def test_complete_plan_rejects_missing_reordered_or_invented_procedures(self):
         missing = self.proposal()
@@ -299,8 +299,9 @@ class TrialPlanTests(unittest.TestCase):
         invented["procedures"][0]["command_text"] = "queue erase-everything"
         invented["procedures"][0]["command"] = ["queue", "erase-everything"]
         for value in (missing, reordered, invented):
-            with self.subTest(value=value), self.assertRaisesRegex(
-                TrialPlanError, "invalid_output"
+            with (
+                self.subTest(value=value),
+                self.assertRaisesRegex(TrialPlanError, "invalid_output"),
             ):
                 self.validated(value)
 
@@ -308,8 +309,9 @@ class TrialPlanTests(unittest.TestCase):
         for alias in ("a//b", "a/./b", "./a"):
             value = self.proposal()
             value["procedures"][0]["working_directory"] = alias
-            with self.subTest(alias=alias), self.assertRaisesRegex(
-                TrialPlanError, "invalid_output"
+            with (
+                self.subTest(alias=alias),
+                self.assertRaisesRegex(TrialPlanError, "invalid_output"),
             ):
                 self.validated(value)
         for field, invalid in (
@@ -319,8 +321,9 @@ class TrialPlanTests(unittest.TestCase):
         ):
             value = self.proposal()
             value["procedures"][0][field] = invalid
-            with self.subTest(field=field), self.assertRaisesRegex(
-                TrialPlanError, "invalid_output"
+            with (
+                self.subTest(field=field),
+                self.assertRaisesRegex(TrialPlanError, "invalid_output"),
             ):
                 self.validated(value)
         incomplete = self.proposal()
@@ -344,10 +347,13 @@ class TrialPlanTests(unittest.TestCase):
             '"coverage_complete": true, "coverage_complete": true',
             1,
         )
-        non_json = encoded.replace('"coverage_complete": true', '"coverage_complete": NaN')
+        non_json = encoded.replace(
+            '"coverage_complete": true', '"coverage_complete": NaN'
+        )
         for raw in (duplicate, non_json):
-            with self.subTest(raw=raw), self.assertRaisesRegex(
-                TrialPlanError, "invalid_output"
+            with (
+                self.subTest(raw=raw),
+                self.assertRaisesRegex(TrialPlanError, "invalid_output"),
             ):
                 validate_plan_proposal(raw, self.material_digest, self.evidence)
 

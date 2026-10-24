@@ -248,17 +248,23 @@ class RuntimeAssessmentTests(unittest.TestCase):
             validate_runtime_assessment(self.assessment(), self.prepared, changed)
 
     def test_resource_failure_cannot_pass_execution_contract(self):
-        changed = deepcopy(self.trial)
-        step = next(
-            item
-            for item in changed.observations["steps"]
-            if item["slot_id"] == "inspect_status"
-        )
-        step["outcome"] = "deadline_exceeded"
-        step["exit_code"] = None
-        step["signal"] = 9
-        with self.assertRaisesRegex(TrialAssessmentError, "invalid_output"):
-            validate_runtime_assessment(self.assessment(), self.prepared, changed)
+        for outcome, export, exit_code in (
+            ("deadline_exceeded", "unavailable", None),
+            ("export_invalid", "invalid", 0),
+            ("disk_exceeded", "capacity_exceeded", 0),
+        ):
+            changed = deepcopy(self.trial)
+            step = next(
+                item
+                for item in changed.observations["steps"]
+                if item["slot_id"] == "inspect_status"
+            )
+            step.update(outcome=outcome, export_outcome=export, exit_code=exit_code)
+            with (
+                self.subTest(outcome=outcome),
+                self.assertRaisesRegex(TrialAssessmentError, "invalid_output"),
+            ):
+                validate_runtime_assessment(self.assessment(), self.prepared, changed)
 
 
 if __name__ == "__main__":

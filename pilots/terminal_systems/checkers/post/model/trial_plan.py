@@ -886,8 +886,7 @@ def validate_trial_configuration(
         "trial_projection_digest",
     }
     if type(configuration) is not dict or any(
-        type(key) is not str
-        or key.startswith("trial_") and key not in selector_keys
+        type(key) is not str or key.startswith("trial_") and key not in selector_keys
         for key in configuration
     ):
         raise TrialPlanError("invalid_trial_configuration")
