@@ -105,6 +105,7 @@ async def _store_verified_output(
             assert attempt.model_call_attempt_id is not None
             assert attempt.replica_id is not None
             logical_role = attempt.logical_role
+            model_call_attempt_id = attempt.model_call_attempt_id
             replica_id = attempt.replica_id
             content_id = await session.scalar(
                 text("select content_id from artifact_replicas where id=:replica_id"),
@@ -117,7 +118,7 @@ async def _store_verified_output(
                 project_id=project_id,
                 task_id=task_id,
                 checker_run_id=checker_run_id,
-                model_call_attempt_id=attempt.model_call_attempt_id,
+                model_call_attempt_id=model_call_attempt_id,
                 put_attempt_id=str(admission.attempt_id),
                 verification_job_id=str(job_id),
                 replica_id=str(replica_id),
