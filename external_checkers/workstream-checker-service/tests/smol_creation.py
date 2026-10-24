@@ -50,6 +50,10 @@ def main():
                    'populated 1' in (p / 'cgroup.events').read_text()
                    for p in groups.glob('ws-*'))
 
+    def set_depth(value):
+        subprocess.run(['sudo', 'tee', '--', str(depth)], input=value,
+                       text=True, capture_output=True, check=True, timeout=10)
+
     controller = pid()
     try:
         with ThreadPoolExecutor(max_workers=1) as pool:
@@ -61,7 +65,7 @@ def main():
                     if case == 'lease_create_denied':
                         leases.chmod(0o500)
                     else:
-                        depth.write_text('0')
+                        set_depth('0')
                     envelope = proof.request(image, 'pre_submit', 'pass')
                     response = exchange(config['socket_path'], envelope)
                     result = response['result']
@@ -73,7 +77,7 @@ def main():
                                       'unrelated_work_running': True}), flush=True)
                 finally:
                     leases.chmod(original_mode)
-                    depth.write_text(original_depth)
+                    set_depth(original_depth)
             active.result()
         proof.execute(image, 'pre_submit', 'pass')
         if pid() != controller or list(leases.iterdir()) or list(groups.glob('ws-*')):
@@ -81,7 +85,7 @@ def main():
         print(json.dumps({'creation_failures': 'recoverable', 'cleanup': 'confirmed'}), flush=True)
     finally:
         leases.chmod(original_mode)
-        depth.write_text(original_depth)
+        set_depth(original_depth)
         proof.close()
 
 
