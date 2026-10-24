@@ -1581,7 +1581,7 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
         published_model_profile = await publish_scripted_model_profile(
             client, setup_operator_token, project["id"],
         )
-        assert published_model_profile["project_id"] == project["id"]
+        assert published_model_profile["spec"]["project_id"] == project["id"]
         assert published_model_profile["spec"]["profile_version"] == 1
         await exercise_guide_setup_contract(
             client,
