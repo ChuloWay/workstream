@@ -1,6 +1,6 @@
 # Workstream MCP Adapter
 
-An independently installed adapter exposing 108 tools under the caller's authority:
+An independently installed adapter exposing 132 tools under the caller's authority:
 
 - `workstream_profile_get` calls `GET /api/v1/actors/me`.
 - `workstream_profile_update` calls the unkeyed `PATCH /api/v1/actors/me`.
@@ -64,6 +64,10 @@ An independently installed adapter exposing 108 tools under the caller's authori
 - Eighteen task-execution tools cover bounded preparation ZIPs, contributor and
   manager task context, screen/release/claim/start, guide-document reads and
   admission-backed submission creation/history.
+- Twenty-four project, task-management, import, audit, service-actor and model
+  operations complete the current public product catalogue. Task-import source
+  content uses an 8 MiB exact-byte boundary; health routes remain operational
+  liveness rather than user tools.
 
 Each call forwards the caller's bearer to its fixed public Workstream operation.
 There are no MCP resources or prompts. Workstream, not the adapter, owns every
@@ -237,7 +241,7 @@ retries. A mutation transport failure, upstream 5xx response, or unexpected
 success/redirect response is reported as non-retryable uncertain execution.
 Connections may be pooled, but
 caller credentials and results are not shared or cached. Response validation is
-pinned to the 108 selected public contracts in `contracts/`; upstream drift
+pinned to the 132 selected public contracts in `contracts/`; upstream drift
 must be reviewed, not silently accepted. There is no fallback service or
 backend-private import.
 
