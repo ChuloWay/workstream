@@ -258,11 +258,11 @@ Real API tests require the repository's isolated PostgreSQL runner, controlled
 fixture identities and a separate installed adapter process. Never supply a
 production database or real user token to a test. Integration and container
 commands are recorded in the additive MCP workflow and the
-[current chunk record](../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-12.md).
+[current chunk record](../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-13.md).
 Selected schemas are compared with the running backend OpenAPI operations;
 custom admission, lifecycle and exact-project semantics are exercised separately.
 
 Local fixture evidence does not certify the deployed Flow provider, a public
-gateway or all MCP clients. Further domain batches and the assembled release
-proof remain bounded changes in the
+gateway or all MCP clients. The assembled release proof remains a bounded
+change in the
 [initiative](../.commitrail/initiatives/WS-MCP-002/OVERVIEW.md).

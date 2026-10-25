@@ -738,8 +738,10 @@ cannot be reused as post-submission review-gate evidence. See the
   WS-MCP-002-10 adds 20 workspace/evidence/policy bindings. WS-MCP-002-11 adds
   43 guide lifecycle, checker/delivery/registry and operator-artifact bindings.
   WS-MCP-002-12 adds 18 task execution, preparation, context and submission
-  bindings. Task operations/imports and assembled release proof remain. This is still a custom
-  authentication adapter, not a public deployment or a certified release.
+  bindings. WS-MCP-002-13 adds the remaining 24 project, task, import,
+  service-actor and model-operation bindings. The assembled release proof
+  remains. This is still a custom authentication adapter, not a public
+  deployment or a certified release.
   The [CLI foundation](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-01.md)
   provides `whoami` and `project access PROJECT_ID` through those public REST
   contracts. [CLI profile editing](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-02.md)
