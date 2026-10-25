@@ -843,7 +843,7 @@ _TASK_TRANSITION_BODY = {
 _ASCII_PACKET_TEXT = {
     "type": "string",
     "maxLength": 4_096,
-    "pattern": r"^[\u0020-\u007e]*$",
+    "pattern": r"^[\u0020-\u007e]*$(?![\s\S])",
 }
 _SHA256_INPUT = {
     "type": "string",

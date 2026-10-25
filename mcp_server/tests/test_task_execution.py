@@ -300,6 +300,35 @@ def test_preparation_bundle_contract_fits_inside_mcp_ingress() -> None:
     )
 
 
+@pytest.mark.parametrize("field", ["summary", "contributor_attestation"])
+def test_preparation_header_text_rejects_trailing_newline_before_dispatch(
+    adapter: Adapter, field: str
+) -> None:
+    client, received, _ = adapter
+    arguments = {**_arguments("preparation_create"), field: "ready\n"}
+    response = client.post(
+        "/mcp",
+        headers={
+            "authorization": "Bearer fixture-token",
+            "accept": "application/json, text/event-stream",
+        },
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "workstream_preparation_create",
+                "arguments": arguments,
+            },
+        },
+    )
+
+    result = response.json()["result"]
+    assert result["isError"] is True
+    assert result["structuredContent"]["error"] == "invalid_tool_input"
+    assert received == []
+
+
 def test_incomplete_revision_preparation_selector_never_dispatches(adapter: Adapter) -> None:
     client, received, _ = adapter
     arguments = {
