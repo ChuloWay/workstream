@@ -30,6 +30,7 @@ from workstream_mcp.schemas import (
     profile_update_output_validator,
     project_grant_output_validator,
     project_output_validator,
+    task_execution_output_validator,
     workspace_read_output_validator,
 )
 
@@ -59,6 +60,7 @@ _PUBLIC_ERROR_CODES = frozenset(
         "invalid_token",
         "missing_token",
         "permission_not_granted",
+        "pre_submission_checker_failed",
         "project_authorization_resource_not_found",
         "project_slug_conflict",
         "idempotency_pending",
@@ -82,6 +84,10 @@ _PUBLIC_ERROR_CODES = frozenset(
         "last_access_administrator",
         "invalid_role_scope",
         "service_unavailable",
+        "submission_preparation_headers_invalid",
+        "submission_unavailable",
+        "submission_packet_invalid",
+        "submission_infrastructure_unavailable",
         "unsupported_subject_kind",
         "validation_error",
     }
@@ -342,6 +348,73 @@ _CHECKER_ARTIFACT_MUTATIONS = frozenset(
         "post_submit_deliveries_reconcile",
         "checker_registry_register",
         "artifact_verification_job_retry",
+    }
+)
+
+TASK_EXECUTION_OPERATIONS = {
+    "preparation_create": (
+        "POST",
+        "/api/v1/tasks/{task_id}/submission-bundle-preparations",
+        202,
+    ),
+    "preparations_list": (
+        "GET",
+        "/api/v1/tasks/{task_id}/submission-bundle-preparations",
+        200,
+    ),
+    "preparation_get": (
+        "GET",
+        "/api/v1/tasks/{task_id}/submission-bundle-preparations/{preparation_id}",
+        200,
+    ),
+    "task_get": ("GET", "/api/v1/tasks/{task_id}", 200),
+    "task_submission_requirements_get": (
+        "GET",
+        "/api/v1/tasks/{task_id}/submission-requirements",
+        200,
+    ),
+    "task_screen": ("POST", "/api/v1/tasks/{task_id}/screen", 200),
+    "task_release": ("POST", "/api/v1/tasks/{task_id}/release", 200),
+    "task_claim": ("POST", "/api/v1/tasks/{task_id}/claim", 200),
+    "task_start": ("POST", "/api/v1/tasks/{task_id}/start", 200),
+    "task_work_context_get": ("GET", "/api/v1/tasks/{task_id}/work-context", 200),
+    "task_guide_document_content_get": (
+        "GET",
+        "/api/v1/tasks/{task_id}/guide/documents/{document_id}/content",
+        200,
+    ),
+    "submission_create": ("POST", "/api/v1/tasks/{task_id}/submissions", 201),
+    "task_submissions_list": ("GET", "/api/v1/tasks/{task_id}/submissions", 200),
+    "submission_get": ("GET", "/api/v1/submissions/{submission_id}", 200),
+    "management_task_submissions_list": (
+        "GET",
+        "/api/v1/projects/{project_id}/tasks/{task_id}/submissions",
+        200,
+    ),
+    "management_submission_get": (
+        "GET",
+        "/api/v1/projects/{project_id}/submissions/{submission_id}",
+        200,
+    ),
+    "management_task_work_context_get": (
+        "GET",
+        "/api/v1/projects/{project_id}/tasks/{task_id}/work-context",
+        200,
+    ),
+    "management_task_submission_requirements_get": (
+        "GET",
+        "/api/v1/projects/{project_id}/tasks/{task_id}/submission-requirements",
+        200,
+    ),
+}
+_TASK_EXECUTION_MUTATIONS = frozenset(
+    {
+        "preparation_create",
+        "task_screen",
+        "task_release",
+        "task_claim",
+        "task_start",
+        "submission_create",
     }
 )
 
@@ -1279,6 +1352,163 @@ class WorkstreamGateway:
             )
         return False
 
+    async def task_execution_operation(
+        self,
+        name: str,
+        bearer: str,
+        arguments: dict[str, Any],
+        correlation_id: str | None = None,
+        *,
+        upload: bytes | None = None,
+    ) -> GatewayResult:
+        """Dispatch one fixed task, preparation or submission operation."""
+        method, path_template, expected_status = TASK_EXECUTION_OPERATIONS[name]
+        selectors = set(re.findall(r"{([a-z_]+)}", path_template))
+        path = path_template
+        for selector in selectors:
+            value = arguments.get(selector)
+            if not isinstance(value, str):  # guarded by the tool schema
+                return self._invalid_read_response(correlation_id)
+            path = path.replace(f"{{{selector}}}", quote(value, safe=""))
+        if name == "task_guide_document_content_get":
+            return await self._request_binary(path, bearer, correlation_id)
+
+        excluded = {
+            *selectors,
+            "body",
+            "zip_base64",
+            "assignment_id",
+            "idempotency_key",
+            "summary",
+            "contributor_attestation",
+            "predecessor_submission_id",
+            "revision_preparation_id",
+            "revision_preparation_sha256",
+        }
+        params = {
+            key: str(value)
+            for key, value in arguments.items()
+            if value is not None and key not in excluded
+        }
+        extra_headers: dict[str, str] | None = None
+        if name == "preparation_create":
+            if upload is None:
+                return GatewayResult(failure=SafeFailure("invalid_tool_input", status=400))
+            extra_headers = {"X-Task-Assignment-Id": arguments["assignment_id"]}
+            for argument, header in (
+                ("summary", "X-Submission-Summary"),
+                ("contributor_attestation", "X-Contributor-Attestation"),
+                ("predecessor_submission_id", "X-Predecessor-Submission-Id"),
+                ("revision_preparation_id", "X-Revision-Preparation-Id"),
+                ("revision_preparation_sha256", "X-Revision-Preparation-Sha256"),
+            ):
+                value = arguments.get(argument)
+                if isinstance(value, str):
+                    extra_headers[header] = value
+
+        mutation = name in _TASK_EXECUTION_MUTATIONS
+        outcome = await self._request(
+            method,
+            path,
+            bearer,
+            task_execution_output_validator(name),
+            correlation_id,
+            json_body=arguments.get("body"),
+            params=params or None,
+            idempotency_key=arguments.get("idempotency_key"),
+            expected_status=expected_status,
+            mutation=mutation,
+            raw_body=upload,
+            content_type="application/zip" if name == "preparation_create" else None,
+            operation_timeout_seconds=(
+                self._settings.document_timeout_seconds
+                if name == "preparation_create"
+                else None
+            ),
+            extra_headers=extra_headers,
+        )
+        if outcome.failure is not None:
+            return outcome
+        if self._task_execution_response_matches(name, outcome.data or {}, arguments):
+            return outcome
+        return GatewayResult(
+            failure=SafeFailure(
+                "workstream_execution_uncertain" if mutation else "invalid_api_response",
+                status=502,
+                correlation_id=outcome.correlation_id or correlation_id,
+            )
+        )
+
+    @classmethod
+    def _task_execution_response_matches(
+        cls, name: str, data: dict[str, Any], arguments: dict[str, Any]
+    ) -> bool:
+        task_id = arguments.get("task_id")
+        project_id = arguments.get("project_id")
+        if name == "preparation_create":
+            put_attempt_id = data.get("put_attempt_id")
+            if not isinstance(put_attempt_id, str):
+                return False
+            try:
+                UUID(put_attempt_id)
+            except ValueError:
+                return False
+            return True
+        if name in {"submission_get", "management_submission_get"}:
+            return cls._same_uuid(data.get("id"), arguments["submission_id"])
+        if not isinstance(task_id, str):
+            return False
+        if project_id is not None and not isinstance(project_id, str):
+            return False
+        if name == "preparations_list":
+            return cls._items_match(data, {"task_id": task_id}, unique="preparation_id")
+        if name == "preparation_get":
+            return cls._fields_match(
+                data,
+                {"task_id": task_id, "preparation_id": arguments["preparation_id"]},
+            )
+        if name in {"task_get", "task_submission_requirements_get"}:
+            return cls._same_uuid(data.get("task_id"), task_id)
+        if name in {"task_screen", "task_release", "task_start"}:
+            return cls._same_uuid(data.get("id"), task_id)
+        if name == "task_claim":
+            task = data.get("task")
+            assignment = data.get("assignment")
+            return (
+                isinstance(task, dict)
+                and isinstance(assignment, dict)
+                and cls._same_uuid(task.get("id"), task_id)
+                and cls._same_uuid(assignment.get("task_id"), task_id)
+            )
+        if name in {"task_work_context_get", "management_task_work_context_get"}:
+            task = data.get("task")
+            project = data.get("project")
+            return (
+                isinstance(task, dict)
+                and cls._same_uuid(task.get("task_id"), task_id)
+                and (
+                    project_id is None
+                    or (
+                        isinstance(project, dict)
+                        and cls._same_uuid(project.get("id"), project_id)
+                        and cls._same_uuid(task.get("project_id"), project_id)
+                    )
+                )
+            )
+        if name == "submission_create":
+            body = arguments["body"]
+            return cls._same_uuid(data.get("admission_id"), body["admission_id"])
+        if name in {"task_submissions_list", "management_task_submissions_list"}:
+            return cls._items_match(data, {"task_id": task_id}, unique="id")
+        if name == "management_task_submission_requirements_get":
+            if not isinstance(project_id, str):
+                return False
+            return cls._fields_match(
+                data,
+                {"task_id": task_id, "project_id": project_id},
+            )
+        return False
+
     async def checker_artifact_operation(
         self,
         name: str,
@@ -1608,6 +1838,7 @@ class WorkstreamGateway:
         content_type: str | None = None,
         array_envelope: bool = False,
         operation_timeout_seconds: float | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> GatewayResult:
         request_id = correlation_id or str(uuid4())
         operation_timeout = operation_timeout_seconds or self._settings.total_timeout_seconds
@@ -1626,6 +1857,8 @@ class WorkstreamGateway:
                         headers["If-Match"] = if_match
                     if content_type is not None:
                         headers["Content-Type"] = content_type
+                    if extra_headers is not None:
+                        headers.update(extra_headers)
                     async with self._client.stream(
                         method,
                         path,

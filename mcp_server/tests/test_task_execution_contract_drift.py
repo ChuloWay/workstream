@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shlex
+import subprocess
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from workstream_mcp.http_gateway import TASK_EXECUTION_OPERATIONS
+from workstream_mcp.schemas import TASK_EXECUTION_CONTRACT_NAMES
+
+ROOT = Path(__file__).resolve().parents[2]
+CONTRACTS = ROOT / "mcp_server" / "contracts"
+BACKEND = ROOT / "backend"
+
+
+def _canonical(value: object) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+
+def _selected(openapi: dict[str, Any], path: str, method: str) -> dict[str, Any]:
+    operation = openapi["paths"][path][method.lower()]
+    names: set[str] = set()
+    pending: list[Any] = [operation]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            reference = value.get("$ref")
+            if isinstance(reference, str) and reference.startswith("#/components/schemas/"):
+                name = reference.rsplit("/", 1)[-1]
+                if name not in names:
+                    names.add(name)
+                    pending.append(openapi["components"]["schemas"][name])
+            pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
+    return {
+        "operation": operation,
+        "components": {
+            "schemas": {
+                name: openapi["components"]["schemas"][name] for name in sorted(names)
+            }
+        },
+    }
+
+
+@pytest.mark.parametrize("name", TASK_EXECUTION_CONTRACT_NAMES)
+def test_task_execution_contract_is_tamper_evident_and_matches_fixed_route(
+    name: str,
+) -> None:
+    snapshot = json.loads((CONTRACTS / f"{name}.json").read_text(encoding="utf-8"))
+    captured = {"operation": snapshot["operation"], "components": snapshot["components"]}
+    method, path, status = TASK_EXECUTION_OPERATIONS[name]
+    success_codes = {
+        int(code)
+        for code in snapshot["operation"]["responses"]
+        if code.startswith("2")
+    }
+    assert snapshot["schema_version"] == 1
+    assert snapshot["source"]["method"] == method
+    assert snapshot["source"]["path"] == path
+    assert status in success_codes
+    assert hashlib.sha256(_canonical(captured)).hexdigest() == snapshot["canonical_sha256"]
+
+
+def test_exact_task_execution_contract_set_is_reviewed() -> None:
+    assert len(TASK_EXECUTION_CONTRACT_NAMES) == 18
+    assert set(TASK_EXECUTION_CONTRACT_NAMES) == set(TASK_EXECUTION_OPERATIONS)
+
+
+def test_task_execution_contracts_match_backend_openapi_when_configured() -> None:
+    command = os.environ.get("WORKSTREAM_MCP_OPENAPI_COMMAND")
+    if command is None:
+        pytest.skip("backend OpenAPI comparison is run in the isolated backend environment")
+    completed = subprocess.run(  # noqa: S603 - configured local contract probe
+        shlex.split(command),
+        cwd=BACKEND,
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    openapi = json.loads(completed.stdout)
+    for name, (method, path, _) in TASK_EXECUTION_OPERATIONS.items():
+        snapshot = json.loads((CONTRACTS / f"{name}.json").read_text(encoding="utf-8"))
+        assert snapshot["source"]["openapi_version"] == openapi["openapi"]
+        assert {
+            "operation": snapshot["operation"],
+            "components": snapshot["components"],
+        } == _selected(openapi, path, method)
