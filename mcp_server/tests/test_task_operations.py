@@ -449,6 +449,8 @@ async def test_recovery_child_accepts_server_filled_slot_default(
     body["slot"].pop("slot_index", None)
 
     async def request(_: WorkstreamGateway, *args: Any, **kwargs: Any) -> GatewayResult:
+        assert kwargs["json_body"]["slot"] == body["slot"]
+        assert "slot_index" not in kwargs["json_body"]["slot"]
         slot_key = {**body["slot"], "slot_index": 0}
         return GatewayResult(
             data={"slot_key": slot_key, "request_sha256": body["request_sha256"]}
