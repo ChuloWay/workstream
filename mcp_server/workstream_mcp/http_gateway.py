@@ -1821,7 +1821,7 @@ class WorkstreamGateway:
             )
         if name == "project_model_recovery_child_create":
             body = arguments["body"]
-            slot_matches = data.get("slot_key") == body.get("slot")
+            slot_matches = cls._payload_contains(data.get("slot_key"), body.get("slot"))
             digest_matches = data.get("request_sha256") == body.get("request_sha256")
             return bool(slot_matches and digest_matches)
         if name in {"task_import_source_declare", "task_import_source_get"}:

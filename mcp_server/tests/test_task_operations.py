@@ -439,6 +439,37 @@ async def test_revision_repair_binds_predecessor_without_confusing_new_digest(
     assert result.failure is None
 
 
+@pytest.mark.asyncio
+async def test_recovery_child_accepts_server_filled_slot_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_schema = task_operation_input_schema("project_model_recovery_child_create")
+    body_schema = input_schema["properties"]["body"]
+    body = _minimal_value(body_schema)
+    body["slot"].pop("slot_index", None)
+
+    async def request(_: WorkstreamGateway, *args: Any, **kwargs: Any) -> GatewayResult:
+        slot_key = {**body["slot"], "slot_index": 0}
+        return GatewayResult(
+            data={"slot_key": slot_key, "request_sha256": body["request_sha256"]}
+        )
+
+    monkeypatch.setattr(WorkstreamGateway, "_request", request)
+    arguments = {
+        **_arguments("project_model_recovery_child_create"),
+        "body": body,
+    }
+    async with httpx.AsyncClient(base_url="http://workstream.test") as client:
+        result = await WorkstreamGateway(
+            Settings(api_url="http://127.0.0.1:8000"), client
+        ).task_operation(
+            "project_model_recovery_child_create",
+            "Bearer opaque",
+            arguments,
+        )
+    assert result.failure is None
+
+
 def _minimal_value(schema: dict[str, Any]) -> Any:
     if "const" in schema:
         return schema["const"]
