@@ -5,12 +5,33 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc,
 };
-use workstream_checker_guest::{GuestJob, MaterialFile, CAPACITY_EXIT_CODE, MAX_JOB_BYTES};
+use workstream_checker_guest::{
+    GuestJob, GuestPurpose, MaterialFile, CAPACITY_EXIT_CODE, MAX_JOB_BYTES,
+};
 
 const CONTROL_OUTPUT: usize = 256 * 1024;
 const HOST_OVERHEAD: u64 = 512 * 1024 * 1024;
 const GUEST_OVERHEAD_MIB: u64 = 128;
 const VERSION: &str = "1.31.4";
+
+mod intake;
+pub(super) use intake::{serve as serve_intake, IntakeConfig};
+
+#[derive(Clone, Copy)]
+struct Resources {
+    cpu_millis: u64,
+    memory_bytes: u64,
+    storage_gib: u64,
+}
+impl From<&ValidatedRequest> for Resources {
+    fn from(value: &ValidatedRequest) -> Self {
+        Self {
+            cpu_millis: value.cpu_millis,
+            memory_bytes: value.memory_bytes,
+            storage_gib: 1,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -35,7 +56,7 @@ pub(super) struct SmolImage {
 struct Lease {
     name: String,
     owner: String,
-    epoch: u32,
+    epoch: String,
     expires_ms: u64,
     lifetime_ms: u64,
     root: PathBuf,
@@ -51,6 +72,9 @@ struct Machine {
 #[derive(Debug)]
 pub(super) struct Admission {
     memory: AtomicUsize,
+    slots: AtomicUsize,
+    maximum_slots: usize,
+    epoch: String,
     limit: usize,
 }
 pub(super) struct Reservation {
@@ -62,26 +86,41 @@ impl Drop for Reservation {
         self.admission
             .memory
             .fetch_sub(self.bytes, Ordering::SeqCst);
+        self.admission.slots.fetch_sub(1, Ordering::SeqCst);
     }
 }
 pub(super) fn reserve(
     config: &ServiceConfig,
     request: &ValidatedRequest,
 ) -> Result<Reservation, String> {
+    reserve_resources(config, request.into())
+}
+fn reserve_resources(config: &ServiceConfig, resources: Resources) -> Result<Reservation, String> {
     let admission = config
         .smol_admission
         .as_ref()
         .ok_or("admission unavailable")?
         .clone();
-    let bytes = usize::try_from(request.memory_bytes.saturating_add(HOST_OVERHEAD))
+    let bytes = usize::try_from(resources.memory_bytes.saturating_add(HOST_OVERHEAD))
         .map_err(|_| "capacity unavailable")?;
     admission
+        .slots
+        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |used| {
+            used.checked_add(1)
+                .filter(|next| *next <= admission.maximum_slots)
+        })
+        .map_err(|_| "capacity unavailable")?;
+    if admission
         .memory
         .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |used| {
             used.checked_add(bytes)
                 .filter(|next| *next <= admission.limit)
         })
-        .map_err(|_| "capacity unavailable")?;
+        .is_err()
+    {
+        admission.slots.fetch_sub(1, Ordering::SeqCst);
+        return Err("capacity unavailable".into());
+    }
     Ok(Reservation { admission, bytes })
 }
 fn memory_capacity(s: &SmolConfig) -> Result<usize, String> {
@@ -94,6 +133,14 @@ fn memory_capacity(s: &SmolConfig) -> Result<usize, String> {
         return Err("node memory insufficient".into());
     }
     Ok(limit - 128 * 1024 * 1024)
+}
+
+fn random_token() -> Result<String, String> {
+    let mut bytes = [0u8; 32];
+    File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut bytes))
+        .map_err(|_| "randomness unavailable")?;
+    Ok(bytes.iter().map(|v| format!("{v:02x}")).collect())
 }
 
 fn now_ms() -> Result<u64, String> {
@@ -354,6 +401,7 @@ impl Lease {
     }
     fn valid(&self) -> bool {
         valid_full_container_id(&self.owner)
+            && valid_full_container_id(&self.epoch)
             && self.name.starts_with("ws-")
             && self.name.len() == 35
             && self.name[3..]
@@ -441,53 +489,72 @@ impl Lease {
 impl Machine {
     fn create(
         config: &ServiceConfig,
-        request: &ValidatedRequest,
+        resources: Resources,
         deadline: Instant,
-    ) -> Result<Self, String> {
-        let s = settings(config)?.clone();
+    ) -> Result<Self, ExecutionFailure> {
+        let s = settings(config)
+            .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?
+            .clone();
         let root = config
             .socket_path
             .parent()
-            .ok_or("socket parent missing")?
+            .ok_or("socket parent missing")
+            .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?
             .join("smol-leases");
         let mut random = [0u8; 16];
         File::open("/dev/urandom")
             .and_then(|mut f| f.read_exact(&mut random))
-            .map_err(|_| "randomness unavailable")?;
+            .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
         let nonce: String = random.iter().map(|b| format!("{b:02x}")).collect();
-        let owner = container_owner(config)?.to_owned();
+        let owner = container_owner(config)
+            .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?
+            .to_owned();
         let lease = Lease {
             name: format!("ws-{nonce}"),
             owner,
-            epoch: std::process::id(),
-            expires_ms: now_ms()?.saturating_add(
-                deadline
-                    .saturating_duration_since(Instant::now())
-                    .as_millis() as u64,
-            ),
+            epoch: config
+                .smol_admission
+                .as_ref()
+                .ok_or_else(|| ExecutionFailure::ordinary("implementation_unavailable", false))?
+                .epoch
+                .clone(),
+            expires_ms: now_ms()
+                .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?
+                .saturating_add(
+                    deadline
+                        .saturating_duration_since(Instant::now())
+                        .as_millis() as u64,
+                ),
             lifetime_ms: deadline
                 .saturating_duration_since(Instant::now())
                 .as_millis() as u64,
             root,
             runtime: s,
         };
-        let bytes = serde_json::to_vec(&lease).map_err(|_| "lease encoding failed")?;
+        let bytes = serde_json::to_vec(&lease)
+            .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
         let mut file = OpenOptions::new()
             .create_new(true)
             .write(true)
             .mode(0o600)
             .open(lease.path())
-            .map_err(|_| "lease create failed")?;
+            .map_err(|error| {
+                if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    ExecutionFailure::unsettled(false)
+                } else {
+                    ExecutionFailure::ordinary("implementation_unavailable", false)
+                }
+            })?;
         file.write_all(&bytes)
             .and_then(|_| file.sync_all())
-            .map_err(|_| "lease persistence failed")?;
+            .map_err(|_| ExecutionFailure::unsettled(false))?;
         File::open(&lease.root)
             .and_then(|f| f.sync_all())
-            .map_err(|_| "lease persistence failed")?;
+            .map_err(|_| ExecutionFailure::unsettled(false))?;
         // Persist ownership before any runtime resource is created. The guardian
         // is a distinct exec with its own lifetime and only this lease's custody.
         let mut guardian =
-            Command::new(std::env::current_exe().map_err(|_| "service executable unavailable")?)
+            Command::new(std::env::current_exe().map_err(|_| ExecutionFailure::unsettled(false))?)
                 .arg("--smol-guardian")
                 .arg(lease.path())
                 .env_clear()
@@ -495,23 +562,24 @@ impl Machine {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .spawn()
-                .map_err(|_| "guardian unavailable")?;
+                .map_err(|_| ExecutionFailure::unsettled(false))?;
         let keeper = guardian.stdin.take();
         let mut handshake = guardian
             .stdout
             .take()
-            .ok_or("guardian handshake unavailable")?;
-        set_nonblocking(&handshake)?;
+            .ok_or_else(|| ExecutionFailure::unsettled(false))?;
+        set_nonblocking(&handshake).map_err(|_| ExecutionFailure::unsettled(false))?;
         let mut bytes = Vec::new();
         let handshake_deadline = deadline.min(Instant::now() + SOCKET_IO_TIMEOUT);
         loop {
-            read_available(&mut handshake, &mut bytes, 1)?;
+            read_available(&mut handshake, &mut bytes, 1)
+                .map_err(|_| ExecutionFailure::unsettled(false))?;
             if bytes == [1] {
                 break;
             }
             if Instant::now() >= handshake_deadline {
                 drop(keeper);
-                return Err("guardian handshake timed out".into());
+                return Err(ExecutionFailure::unsettled(false));
             }
             thread::sleep(Duration::from_millis(5));
         }
@@ -521,20 +589,23 @@ impl Machine {
             keeper,
             consumed: false,
         };
-        if machine.configure_cgroup(request).is_err() {
-            let _ = machine.close();
-            return Err("cgroup reservation unavailable".into());
+        if machine.configure_cgroup(resources).is_err() {
+            return Err(if machine.close().is_ok() {
+                ExecutionFailure::ordinary("implementation_unavailable", false)
+            } else {
+                ExecutionFailure::unsettled(false)
+            });
         }
         Ok(machine)
     }
-    fn configure_cgroup(&self, request: &ValidatedRequest) -> Result<(), String> {
+    fn configure_cgroup(&self, resources: Resources) -> Result<(), String> {
         let group = self.lease.cgroup();
         fs::create_dir(&group).map_err(|_| "cgroup allocation failed")?;
         for (file, value) in [
-            ("cpu.max", format!("{} 100000", request.cpu_millis * 100)),
+            ("cpu.max", format!("{} 100000", resources.cpu_millis * 100)),
             (
                 "memory.max",
-                request
+                resources
                     .memory_bytes
                     .saturating_add(HOST_OVERHEAD)
                     .to_string(),
@@ -550,7 +621,7 @@ impl Machine {
     fn prepare(
         &self,
         cache: &CacheEntry,
-        request: &ValidatedRequest,
+        resources: Resources,
         client: &UnixStream,
         deadline: Instant,
     ) -> Result<(), String> {
@@ -572,11 +643,11 @@ impl Machine {
                 "--label",
                 &label,
                 "--cpus",
-                &request.cpu_millis.div_ceil(1000).to_string(),
+                &resources.cpu_millis.div_ceil(1000).to_string(),
                 "--mem",
-                &(request.memory_bytes.div_ceil(1024 * 1024) + GUEST_OVERHEAD_MIB).to_string(),
+                &(resources.memory_bytes.div_ceil(1024 * 1024) + GUEST_OVERHEAD_MIB).to_string(),
                 "--storage",
-                "1",
+                &resources.storage_gib.to_string(),
             ],
             Some(&group),
             deadline,
@@ -635,6 +706,7 @@ impl Machine {
             _ => return Err("image environment invalid".into()),
         };
         let job = GuestJob {
+            purpose: GuestPurpose::Project,
             request: request.value.clone(),
             command: image_command(&value)?,
             environment,
@@ -744,9 +816,8 @@ pub(super) fn execute(
     budget: &mut RequestExecutionBudget,
 ) -> Result<ExecutedChecker, ExecutionFailure> {
     for attempt in 0..3 {
-        let mut machine = Machine::create(config, request, budget.deadline)
-            .map_err(|_| ExecutionFailure::unsettled(false))?;
-        let prepared = machine.prepare(cache, request, client, budget.deadline);
+        let mut machine = Machine::create(config, request.into(), budget.deadline)?;
+        let prepared = machine.prepare(cache, request.into(), client, budget.deadline);
         let launched = prepared.is_ok();
         let result = prepared
             .and_then(|_| machine.run(cache, config, request, workspace, client, budget.deadline));
@@ -873,6 +944,9 @@ where
     let mut config = config.clone();
     config.smol_admission = Some(Arc::new(Admission {
         memory: AtomicUsize::new(0),
+        slots: AtomicUsize::new(0),
+        maximum_slots: maximum,
+        epoch: random_token()?,
         limit: memory_capacity(settings(&config)?)?,
     }));
     let config = Arc::new(config);
@@ -885,7 +959,7 @@ where
             break;
         }
         workers.retain(|handle: &thread::JoinHandle<()>| !handle.is_finished());
-        if active.load(Ordering::SeqCst) >= maximum {
+        if active.load(Ordering::SeqCst) >= maximum + 8 {
             drop(stream);
             continue;
         }
@@ -918,12 +992,59 @@ mod tests {
     use super::*;
 
     #[test]
+    fn missing_lease_directory_does_not_poison_node_admission() {
+        let (root, mut config) = super::super::tests::test_config();
+        config.smol = Some(SmolConfig {
+            binary: root.join("unused-runtime"),
+            binary_sha256: format!("sha256:{}", "a".repeat(64)),
+            home: root.join("home"),
+            guest_binary: root.join("guest"),
+            guest_sha256: format!("sha256:{}", "b".repeat(64)),
+            cgroup_root: root.join("groups"),
+            maximum_parallel: 2,
+        });
+        config.smol_admission = Some(Arc::new(Admission {
+            memory: AtomicUsize::new(0),
+            slots: AtomicUsize::new(0),
+            maximum_slots: 2,
+            epoch: "e".repeat(64),
+            limit: 1024 * 1024 * 1024,
+        }));
+        let request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
+        let (client, _peer) = UnixStream::pair().unwrap();
+        let mut budget =
+            RequestExecutionBudget::new(Instant::now() + Duration::from_secs(1), 32768);
+        let result = execute(
+            &config,
+            &config.cache[0],
+            &request,
+            &root,
+            &client,
+            &mut budget,
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            ExecutionFailure::ordinary("implementation_unavailable", false)
+        );
+        assert!(!config
+            .socket_path
+            .parent()
+            .unwrap()
+            .join("smol-leases")
+            .exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn concurrent_capacity_is_reserved_until_its_owner_releases_it() {
         let (_, mut config) = super::super::tests::test_config();
         let request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
         let capacity = request.memory_bytes as usize + HOST_OVERHEAD as usize;
         config.smol_admission = Some(Arc::new(Admission {
             memory: AtomicUsize::new(0),
+            slots: AtomicUsize::new(0),
+            maximum_slots: 1,
+            epoch: "e".repeat(64),
             limit: capacity,
         }));
         let held = reserve(&config, &request).unwrap();

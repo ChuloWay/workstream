@@ -97,7 +97,7 @@ class Proof:
         (root / ".external-checker-grant.json").write_bytes(canonical(manifest))
         (root / ".external-checker-grant.json").chmod(0o400)
         return {"protocol_version": "external_checker_service.v1", "operation": "execute",
-                "request": request, "grant": {"grant_id": grant_id, "binding_digest": manifest["binding_digest"]}}
+                "model_grant": None, "request": request, "grant": {"grant_id": grant_id, "binding_digest": manifest["binding_digest"]}}
 
     def execute(self, image, phase, case, *, expected="passed", deadline_ms=30000):
         envelope = self.request(image, phase, case, deadline_ms=deadline_ms)
