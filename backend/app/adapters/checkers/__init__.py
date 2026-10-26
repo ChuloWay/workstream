@@ -22,6 +22,7 @@ from app.interfaces.checker_model_provider import (
     CheckerModelProvider,
 )
 from app.modules.tasks.api import TaskSubmissionContextFacts
+from app.modules.model_usage.api import ProjectModelProfile
 
 from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
 from app.modules.checkers.api.selected_post_submit import (
@@ -77,28 +78,75 @@ def external_checker_execution_factory(
     return factory
 
 
-def create_checker_model_provider(settings):
-    """Construct the sole provider registered for one locked model profile."""
-    from openai import AsyncOpenAI
+def create_checker_model_provider(
+    profile: ProjectModelProfile, *, api_key: str
+) -> CheckerModelProvider:
+    """Select one supported adapter from the exact immutable project profile."""
+    from app.modules.model_usage.api import ModelCallUnavailable
 
-    from app.adapters.checkers.model_provider import (
-        OPENAI_RESPONSES_PROVIDER_KEY,
-        OpenAIResponsesCheckerModelProvider,
-    )
+    identity = (profile.spec.provider, profile.spec.api)
+    provider_key = {
+        ("openai_responses", "responses.v1"): "openai_responses",
+        ("openrouter", "chat_completions"): "openrouter",
+    }.get(identity)
+    if provider_key is None:
+        raise ModelCallUnavailable("model_profile_provider_unavailable")
+    if not isinstance(api_key, str) or not api_key or len(api_key) > 8_192:
+        raise ModelCallUnavailable("model_provider_credentials_unavailable")
+
+    def openai_provider():
+        from openai import AsyncOpenAI
+
+        from app.adapters.checkers.model_provider import (
+            OpenAIResponsesCheckerModelProvider,
+            OpenAIResponsesSettings,
+        )
+
+        spec = profile.spec
+        settings = OpenAIResponsesSettings(
+            api_key=api_key,
+            model=spec.model_snapshot,
+            maximum_request_bytes=spec.maximum_request_bytes,
+            maximum_input_tokens=spec.maximum_input_tokens,
+            maximum_output_tokens=spec.maximum_output_tokens,
+            maximum_output_bytes=spec.maximum_output_bytes,
+            request_timeout_seconds=float(spec.deadline_ms / 1000),
+            reasoning_effort=spec.settings.reasoning_effort,
+            text_verbosity=spec.settings.text_verbosity,
+        )
+        return OpenAIResponsesCheckerModelProvider(
+            settings,
+            AsyncOpenAI(api_key=api_key, max_retries=0, timeout=settings.request_timeout_seconds),
+        )
+
+    def openrouter_provider():
+        import httpx
+
+        from app.adapters.checkers.openrouter_model_provider import OpenRouterCheckerModelProvider
+
+        from app.adapters.model_usage.openrouter import require_direct_openrouter_model
+
+        try:
+            require_direct_openrouter_model(profile.spec.model_snapshot)
+        except ValueError:
+            raise ModelCallUnavailable("model_profile_provider_unavailable") from None
+        client = httpx.AsyncClient(
+            transport=httpx.AsyncHTTPTransport(retries=0, trust_env=False),
+            trust_env=False,
+            follow_redirects=False,
+            timeout=profile.spec.deadline_ms / 1000.0,
+            headers={
+                "Authorization": "Bearer " + api_key,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+        )
+        return OpenRouterCheckerModelProvider(profile, client)
 
     factory = ExternalServiceAdapterFactory[CheckerModelProvider](CHECKER_MODEL_CAPABILITY_KEY)
-    factory.register(
-        OPENAI_RESPONSES_PROVIDER_KEY,
-        lambda: OpenAIResponsesCheckerModelProvider(
-            settings,
-            AsyncOpenAI(
-                api_key=settings.api_key,
-                max_retries=0,
-                timeout=settings.request_timeout_seconds,
-            ),
-        ),
-    )
-    return factory.create(OPENAI_RESPONSES_PROVIDER_KEY)
+    factory.register("openai_responses", openai_provider)
+    factory.register("openrouter", openrouter_provider)
+    return factory.create(provider_key)
 
 
 def configured_external_checker_execution_factory(settings):

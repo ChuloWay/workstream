@@ -520,6 +520,7 @@ CHECKER_DELIVERY_MODULES = (
     "tests/checkers_model_calls/test_setup_model_proxy_transport.py",
     "tests/checkers_model_calls/test_setup_output_custody.py",
     "tests/checkers/model_provider/test_openai_responses.py",
+    "tests/checkers/model_provider/test_openrouter.py",
     "tests/checkers/external/test_model_transport.py",
     "tests/checkers/external/test_model_proxy_transport.py",
     "tests/authorization/checker_models/test_contracts.py",

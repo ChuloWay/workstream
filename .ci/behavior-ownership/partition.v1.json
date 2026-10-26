@@ -78,6 +78,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/adapters/checkers/openrouter_model_provider.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/adapters/checkers/trial_proxy.py"
     },
     {
@@ -110,6 +114,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/adapters/model_usage/openrouter.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/adapters/observability.py"
     },
     {
@@ -139,10 +147,6 @@
     {
       "group": "lifecycle",
       "target": "backend/app/adapters/project_agents/openai_workspace.py"
-    },
-    {
-      "group": "lifecycle",
-      "target": "backend/app/adapters/project_agents/openrouter_policy.py"
     },
     {
       "group": "lifecycle",
@@ -465,12 +469,12 @@
       "target": "backend/app/interfaces/setup_model_proxy.py"
     },
     {
-      "group": "lifecycle",
-      "target": "backend/app/interfaces/trusted_submission_intake.py"
-    },
-    {
       "group": "shared",
       "target": "backend/app/interfaces/trial_execution.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/interfaces/trusted_submission_intake.py"
     },
     {
       "group": "shared",
@@ -2577,7 +2581,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "8d0ef1c834976b4ae04421058520786e897112ff40b10324735751c273d88b48",
+  "authority_digest": "26fee37a0185e847201fa80d6952664fe8c403e98648b82cab673bcd1d6399c4",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

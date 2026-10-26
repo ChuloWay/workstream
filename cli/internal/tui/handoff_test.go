@@ -27,8 +27,26 @@ func TestHandoffUsesInertArgumentsAndNoExportReads(t *testing.T) {
 	before = len(f.calls)
 	press(t, m, "c")
 	text = m.handoffText()
-	if !strings.Contains(text, "argument: submission\n  argument: findings\n  argument: "+submissionID) || len(f.calls) != before {
+	if !strings.Contains(text, "argument: submission\n  argument: show\n  argument: "+submissionID) || strings.Contains(text, "external manual") || len(f.calls) != before {
 		t.Fatal("handoff dispatched a read", text)
+	}
+	press(t, m, "esc")
+	press(t, m, "tab")
+	m.findingsPageCursor = "opaque findings cursor"
+	before = len(f.calls)
+	press(t, m, "c")
+	text = m.handoffText()
+	for _, want := range []string{
+		"argument: submission\n  argument: findings\n  argument: " + submissionID,
+		"argument: --limit\n  argument: 50",
+		"argument: --cursor\n  argument: opaque findings cursor",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatal(text)
+		}
+	}
+	if len(f.calls) != before {
+		t.Fatal("Findings handoff dispatched a read", f.calls)
 	}
 }
 

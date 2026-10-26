@@ -1,15 +1,13 @@
 package command
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 
 	"github.com/Flow-Research/workstream/cli/internal/api"
+	"github.com/Flow-Research/workstream/cli/internal/download"
 	"github.com/spf13/cobra"
 )
 
@@ -94,7 +92,7 @@ func addGuideReads(guide *cobra.Command, client func() (*api.Client, error), out
 			if !api.ValidUUID(args[2]) {
 				return errors.New("DOCUMENT_ID must be a UUID")
 			}
-			root, err := openBoundDownloadRoot(directory)
+			root, err := download.OpenRoot(directory)
 			if err != nil {
 				return err
 			}
@@ -120,9 +118,18 @@ func addGuideReads(guide *cobra.Command, client func() (*api.Client, error), out
 				return &api.Failure{Code: "guide_document_not_uploaded"}
 			}
 			name := api.TaskGuideDocument{DocumentID: selected.DocumentID, MediaType: selected.MediaType}.Filename()
-			if err := publishVerifiedDownload(root, name, func(target io.Writer) error {
-				return apiClient.DownloadProjectGuideDocument(cmd.Context(), args[0], args[1], *selected, target)
-			}); err != nil {
+			stage, err := root.Stage(name)
+			if err != nil {
+				return err
+			}
+			defer stage.Abort()
+			if err := apiClient.DownloadProjectGuideDocument(cmd.Context(), args[0], args[1], *selected, stage); err != nil {
+				return err
+			}
+			if err := stage.Seal(); err != nil {
+				return err
+			}
+			if err := stage.Publish(); err != nil {
 				return err
 			}
 			if *output == "json" {
@@ -138,56 +145,4 @@ func addGuideReads(guide *cobra.Command, client func() (*api.Client, error), out
 	}
 	document.Flags().StringVar(&directory, "download", "", "Required existing directory for the verified original (never overwrite)")
 	guide.AddCommand(document)
-}
-
-// openBoundDownloadRoot pins the checked directory before any remote read.
-// Opening by pathname may follow a symlink swapped in after Lstat; comparing
-// the opened root's inode to the checked one prevents that redirection.
-func openBoundDownloadRoot(directory string) (*os.Root, error) {
-	if directory == "" {
-		return nil, errors.New("--download must be an existing real directory")
-	}
-	directory = filepath.Clean(directory)
-	checked, err := os.Lstat(directory)
-	if err != nil || !checked.IsDir() || checked.Mode()&os.ModeSymlink != 0 {
-		return nil, errors.New("--download must be an existing real directory")
-	}
-	root, err := os.OpenRoot(directory)
-	if err != nil {
-		return nil, errors.New("cannot open download directory")
-	}
-	opened, err := root.Stat(".")
-	if err != nil || !os.SameFile(checked, opened) {
-		_ = root.Close()
-		return nil, errors.New("download directory changed during open")
-	}
-	return root, nil
-}
-
-// publishVerifiedDownload writes privately, then links the name only after
-// write reports every byte verified; it never replaces an existing file.
-func publishVerifiedDownload(root *os.Root, name string, write func(io.Writer) error) error {
-	if _, err := root.Lstat(name); !os.IsNotExist(err) {
-		return errors.New("download target already exists or is inaccessible")
-	}
-	temporary := ".workstream-guide-" + rand.Text()
-	file, err := root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-	if err != nil {
-		return errors.New("cannot create private guide download")
-	}
-	defer root.Remove(temporary)
-	defer file.Close()
-	if err := write(file); err != nil {
-		return err
-	}
-	if err := file.Sync(); err != nil {
-		return errors.New("cannot persist guide download")
-	}
-	if err := file.Close(); err != nil {
-		return errors.New("cannot close guide download")
-	}
-	if err := root.Link(temporary, name); err != nil {
-		return errors.New("cannot publish guide download without overwrite")
-	}
-	return nil
 }

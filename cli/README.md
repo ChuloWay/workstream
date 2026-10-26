@@ -26,8 +26,8 @@ non-terminal input/output and JSON mode before making an API request.
 
 Start with your exact-grant projects, then browse **Ready**, **Mine** (active
 assignments) and **Submissions**. Enter opens fresh contributor-safe task or
-owned Submission detail. Active Mine details also offer explicit Context and
-Intake reads. Each list fetches one page; filtering searches only that loaded
+owned Submission detail. Active Mine details offer Context, Intake and Guide
+sections. Submission detail also offers paged Findings. Each list fetches one page; filtering searches only that loaded
 page. Project membership, terms and action hints are observations, not authority
 for a later operation. Workstream rechecks each public read.
 
@@ -39,15 +39,21 @@ for a later operation. Workstream rechecks each public read.
 | `n` / `r` | Fetch the next page / refresh the current view |
 | `/` | Filter loaded names/titles locally; Enter finishes and Esc cancels |
 | `c` / `?` | Show inert CLI arguments / keyboard help |
-| `q` / Ctrl+C | Quit and cancel outstanding client reads |
+| `d` in Guide | Enter an existing download directory; Enter reviews the target, `y` confirms |
+| `q` / Ctrl+C | Quit and cancel outstanding client reads; `q` is text during text entry, Ctrl+C always quits |
 
-This first workspace is read-only: it does not claim/start work, prepare or
-submit ZIPs, download documents, export records, poll, acquire tokens or save
-local history. Guide metadata is not proof of downloaded-byte integrity.
-Detailed findings and contribution evidence are clearly labelled manual CLI
-handoffs, not populated TUI screens; displayed arguments never execute or copy
-automatically. Use `submission findings SUBMISSION_ID` and
-`contributions --project PROJECT_ID` explicitly when needed.
+The workspace makes no product mutation requests: it does not claim/start work,
+prepare or submit ZIPs, export records, poll, acquire tokens or save local
+history. Guide metadata is not proof of downloaded-byte integrity. In Guide,
+select one document, enter an existing real directory and confirm the exact
+target. Verified bytes are published under the document's UUID filename without
+overwriting an existing file. Cancelled or failed downloads are not published.
+PDF/Office documents are downloaded, not rendered or opened automatically.
+Findings display each returned run's identity, current flag and checker evidence;
+they do not imply acceptance. `n` fetches one next findings page.
+Contribution evidence remains a manual CLI handoff: use
+`contributions --project PROJECT_ID`. Displayed arguments never execute or copy
+automatically.
 
 A denial clears affected content; expired authentication clears the session's
 work data. Network failure is shown as unavailable, never as an empty queue or

@@ -60,8 +60,10 @@ It does not claim a tag, published binary or signed/notarized artifact.
 
 [WS-CLI-001-48](WS-CLI-001-48.md) adds the opt-in read-only contributor
 workbench: exact-grant projects, one-page Ready/active Mine/own Submissions,
-fresh details and explicit Mine context/intake reads. Detailed findings and
-contribution evidence remain inert CLI handoffs. All mutations, management
+fresh details and explicit Mine context/intake reads.
+[WS-CLI-001-49](WS-CLI-001-49.md) adds exact-Submission findings pages and
+ordered locked-guide selection with explicit verified single-document download.
+Contribution evidence remains an inert CLI handoff. Product mutations, management
 screens and operation-specific recovery remain separate TUI boundaries; this
 interface does not depend on first binary publication or system-wide discovery.
 
@@ -73,7 +75,7 @@ and separate guide-bound review/revision policy configuration. The commands
 the existing public writes with caller-owned replay keys and policy `If-Match`.
 The backend owns manager authorization for new writes, policy semantics, replay and activation;
 editing/configuring a guide does not approve or activate it. Other public API
-client gaps and the broader TUI beyond -48 remain separate work. Binary distribution's
+client gaps and the broader TUI beyond -49 remain separate work. Binary distribution's
 workflow is prepared by -44; a protected release run and public-asset audit
 remain operational work.
 
@@ -324,13 +326,14 @@ that human's credential, not a registered agent identity.
 Make every operation complete without a terminal: stable JSON output, safe
 errors, exit status, and no required prompts. Add optional terminal assistance
 only where it improves an actual workflow. The opt-in `workstream tui` browses
-the bounded contributor reads in -48 using the same client operations and never
+the bounded contributor reads in -48/-49 using the same client operations, including
+confirmed verified guide downloads and paged checker findings, and never
 becomes a second state machine. Further screens require stable public contracts
 and their own proof. Prefer
 purposeful commands over generating a flag mirror of every OpenAPI route.
 
 Go is the chosen implementation language. Cobra owns command parsing/help and
-completion. The bounded -48 workbench uses Bubble Tea, Bubbles and Lip Gloss;
+completion. The bounded -48/-49 workbench uses Bubble Tea, Bubbles and Lip Gloss;
 noninteractive commands retain their existing behavior. Do not add Python, TypeScript, or Rust duplicate
 CLIs. Keep the package independent of backend and MCP runtime dependencies.
 
@@ -422,8 +425,9 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
    journey through contribution export, with negative intake and authority checks.
    Hosted and human-review journey proof remain separate.
    Unfinished human review/revision is not current CLI implementation scope.
-26. **Optional TUI:** -48 supplies read-only contributor navigation through
-   existing typed reads. In-TUI findings/Evidence, writes and management remain
+26. **Optional TUI:** -48 supplies contributor navigation through existing typed
+   reads; -49 adds findings pages and confirmed verified guide downloads.
+   In-TUI Evidence, product writes and management remain
    separate boundaries; Evidence first needs a shared typed single-page client
    port without changing complete CLI exports. Never require a TUI for agents
    or scripts.

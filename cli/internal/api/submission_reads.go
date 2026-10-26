@@ -87,6 +87,13 @@ type SubmissionCheckerPage struct {
 	Cursor *string                `json:"next_cursor"`
 }
 
+// SubmissionFindingsResult is one typed response shape. Exactly one member is
+// populated according to whether the caller selected a page or an exact run.
+type SubmissionFindingsResult struct {
+	Page *SubmissionCheckerPage
+	Run  *SubmissionCheckerRun
+}
+
 func decodeSubmission(raw json.RawMessage, task, submission string) (SubmissionHistory, error) {
 	var value SubmissionHistory
 	bad := &Failure{Code: "invalid_api_response"}
@@ -247,9 +254,10 @@ func decodeSubmissionChecker(raw json.RawMessage, submission, run string) (Submi
 	return value, nil
 }
 
-func (c *Client) SubmissionFindings(ctx context.Context, submission, run string, limit int, cursor *string) (json.RawMessage, error) {
+func (c *Client) SubmissionFindings(ctx context.Context, submission, run string, limit int, cursor *string) (Result[SubmissionFindingsResult], error) {
+	var result Result[SubmissionFindingsResult]
 	if !submissionSelector(submission) || (run != "" && !submissionSelector(run)) {
-		return nil, errors.New("submission and run must be UUIDs")
+		return result, errors.New("submission and run must be UUIDs")
 	}
 	path := "/api/v1/submissions/" + url.PathEscape(submission) + "/checker-runs"
 	query := ""
@@ -259,43 +267,57 @@ func (c *Client) SubmissionFindings(ctx context.Context, submission, run string,
 		var err error
 		query, err = submissionPageQuery(limit, cursor)
 		if err != nil {
-			return nil, err
+			return result, err
 		}
 	}
 	raw, err := c.requestWithResponseLimit(ctx, http.MethodGet, path, query, nil, "", http.StatusOK, maxSubmissionReadBytes)
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 	bad := &Failure{Code: "invalid_api_response"}
 	if !c.safeMutationResponse(raw) {
-		return nil, bad
+		return result, bad
 	}
+	value, err := decodeSubmissionFindings(raw, submission, run, limit)
+	if err != nil {
+		return result, err
+	}
+	return Result[SubmissionFindingsResult]{Raw: raw, Value: value}, nil
+}
+
+func decodeSubmissionFindings(raw json.RawMessage, submission, run string, limit int) (SubmissionFindingsResult, error) {
+	var result SubmissionFindingsResult
+	bad := &Failure{Code: "invalid_api_response"}
 	if run != "" {
-		if _, err := decodeSubmissionChecker(raw, submission, run); err != nil {
-			return nil, err
+		value, err := decodeSubmissionChecker(raw, submission, run)
+		if err != nil {
+			return result, err
 		}
-		return raw, nil
+		result.Run = &value
+		return result, nil
 	}
 	var page SubmissionCheckerPage
 	fields, err := contextObject(raw, &page, []string{"items"}, nil)
 	if err != nil || !requiredNullable(fields, "next_cursor") || page.Items == nil || len(page.Items) > limit ||
 		(page.Cursor != nil && (!validSubmissionCursor(*page.Cursor) || len(page.Items) == 0)) {
-		return nil, bad
+		return result, bad
 	}
 	var items []json.RawMessage
 	if json.Unmarshal(fields["items"], &items) != nil {
-		return nil, bad
+		return result, bad
 	}
 	seen := map[[16]byte]bool{}
 	var task string
-	for _, item := range items {
+	for index, item := range items {
 		value, err := decodeSubmissionChecker(item, submission, "")
 		id, _ := uuidIdentity(value.ID)
 		if err != nil || seen[id] || (task != "" && !sameUUID(task, value.Task)) {
-			return nil, bad
+			return result, bad
 		}
 		seen[id] = true
 		task = value.Task
+		page.Items[index] = value
 	}
-	return raw, nil
+	result.Page = &page
+	return result, nil
 }

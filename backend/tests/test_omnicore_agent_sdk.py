@@ -26,7 +26,7 @@ from app.adapters.project_agents.omnicore_agent import (
     _validated_test_upstream,
     _validate_request_body,
 )
-from app.adapters.project_agents.openrouter_policy import openrouter_request_options
+from app.adapters.model_usage.openrouter import openrouter_request_options
 from app.adapters.project_agents.provider_resilience import (
     ProviderCircuit,
     ProviderCircuitOpen,
