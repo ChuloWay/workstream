@@ -25,6 +25,23 @@ const STATUS_SCHEMA: &str = "workstream.trial_launcher_status.v1";
 const CAP_CHOWN: u32 = 0;
 const CAP_DAC_OVERRIDE: u32 = 1;
 const CAP_FOWNER: u32 = 3;
+const CAP_KILL: u32 = 5;
+const CAP_SETGID: u32 = 6;
+const CAP_SETUID: u32 = 7;
+const CAP_SETPCAP: u32 = 8;
+const CAP_SYS_CHROOT: u32 = 18;
+const CAP_SYS_ADMIN: u32 = 21;
+const BOOTSTRAP_CAPABILITIES: [u32; 9] = [
+    CAP_CHOWN,
+    CAP_DAC_OVERRIDE,
+    CAP_FOWNER,
+    CAP_KILL,
+    CAP_SETGID,
+    CAP_SETUID,
+    CAP_SETPCAP,
+    CAP_SYS_CHROOT,
+    CAP_SYS_ADMIN,
+];
 
 type Result<T> = std::result::Result<T, LauncherError>;
 
@@ -138,6 +155,7 @@ fn main() {
 
 fn run() -> Result<()> {
     require_static_pid_one()?;
+    restrict_bootstrap_capabilities()?;
     enter_trial_cgroup()?;
     make_mounts_private()?;
     let mode = parse_arguments(env::args_os().skip(1).collect())?;
@@ -145,6 +163,44 @@ fn run() -> Result<()> {
         Mode::Builder(arguments) => run_builder(arguments),
         Mode::Step(arguments) => run_step(arguments),
     }
+}
+
+fn capability_mask(capabilities: &[u32]) -> u64 {
+    capabilities
+        .iter()
+        .fold(0_u64, |mask, capability| mask | 1_u64 << capability)
+}
+
+fn observed_capabilities() -> Result<(u64, u64, u64, u64, u64)> {
+    let status = fs::read_to_string("/proc/self/status")?;
+    let value = |name: &str| -> Result<u64> {
+        let raw = status
+            .lines()
+            .find_map(|line| line.strip_prefix(name))
+            .ok_or_else(|| failure("capability status missing"))?;
+        u64::from_str_radix(raw.trim(), 16).map_err(|_| failure("capability status invalid"))
+    };
+    Ok((
+        value("CapEff:")?,
+        value("CapPrm:")?,
+        value("CapBnd:")?,
+        value("CapInh:")?,
+        value("CapAmb:")?,
+    ))
+}
+
+fn restrict_bootstrap_capabilities() -> Result<()> {
+    drop_bounding_capabilities(&BOOTSTRAP_CAPABILITIES)?;
+    set_capabilities(&BOOTSTRAP_CAPABILITIES, &[])?;
+    verify_bootstrap_capabilities(observed_capabilities()?)
+}
+
+fn verify_bootstrap_capabilities(observed: (u64, u64, u64, u64, u64)) -> Result<()> {
+    let expected = capability_mask(&BOOTSTRAP_CAPABILITIES);
+    if observed != (expected, expected, expected, 0, 0) {
+        return Err(failure("bootstrap capability set differs"));
+    }
+    Ok(())
 }
 
 fn enter_trial_cgroup() -> Result<()> {
@@ -1944,6 +2000,65 @@ mod tests {
         ]))
         .unwrap();
         assert!(matches!(parsed, Mode::Builder(_)));
+    }
+
+    #[test]
+    fn bootstrap_rejects_missing_extra_inherited_and_ambient_capabilities() {
+        let expected = 0x24_01eb;
+        assert!(verify_bootstrap_capabilities((expected, expected, expected, 0, 0)).is_ok());
+        for observed in [
+            (expected & !(1 << CAP_SYS_ADMIN), expected, expected, 0, 0),
+            (expected, expected & !(1 << CAP_KILL), expected, 0, 0),
+            (expected, expected, expected & !(1 << CAP_SETPCAP), 0, 0),
+            (expected | (1 << 13), expected, expected, 0, 0),
+            (expected, expected | (1 << 13), expected, 0, 0),
+            (expected, expected, expected | (1 << 13), 0, 0),
+            (expected, expected, expected, 1 << CAP_CHOWN, 0),
+            (expected, expected, expected, 0, 1 << CAP_CHOWN),
+        ] {
+            assert!(verify_bootstrap_capabilities(observed).is_err());
+        }
+    }
+
+    #[test]
+    fn bootstrap_capability_restriction_checks_the_kernel_in_an_isolated_process() {
+        const CHILD: &str = "WORKSTREAM_TEST_BOOTSTRAP_CAPABILITIES";
+        if env::var_os(CHILD).is_some() {
+            let before = observed_capabilities().unwrap();
+            let expected = capability_mask(&BOOTSTRAP_CAPABILITIES);
+            let available = before.1 & expected == expected && before.2 & expected == expected;
+            let result = restrict_bootstrap_capabilities();
+            if available {
+                result.unwrap();
+                assert_eq!(
+                    observed_capabilities().unwrap(),
+                    (expected, expected, expected, 0, 0)
+                );
+                // A real capset removes a mandatory privilege. The next check
+                // must refuse the process rather than trusting its prior state.
+                set_capabilities(&BOOTSTRAP_CAPABILITIES[1..], &[]).unwrap();
+                assert!(verify_bootstrap_capabilities(observed_capabilities().unwrap()).is_err());
+            } else {
+                assert!(
+                    result.is_err(),
+                    "missing mandatory kernel authority must fail closed"
+                );
+            }
+            return;
+        }
+        let result = process::Command::new(env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "tests::bootstrap_capability_restriction_checks_the_kernel_in_an_isolated_process",
+            ])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
     }
 
     #[test]
