@@ -13,6 +13,7 @@ use std::process::Command;
 use std::sync::mpsc::{self, Sender, SyncSender};
 use std::thread;
 use std::time::Duration;
+use workstream_checker_guest::confinement::install_workload_filter;
 use workstream_checker_guest::{
     GuestCapabilities, GuestIoChannel, GuestIoHeader, GuestJob, GuestPurpose, MaterialRoot,
     CAPACITY_EXIT_CODE, EXECUTION_FRAME_MAXIMUM, EXECUTION_SOCKET, GUEST_IO_PROTOCOL, INPUT_ROOT,
@@ -530,97 +531,6 @@ fn confined_devices() -> Result<()> {
     Ok(())
 }
 
-fn syscall_filter() -> Result<()> {
-    // x86_64 is the closed node platform. Deny namespace/capability escape
-    // operations and guest management transports. clone3 returns ENOSYS so
-    // libc can use the filtered clone path for ordinary language threads.
-    const LOAD: u16 = 0x20;
-    const EQUAL: u16 = 0x15;
-    const RETURN: u16 = 0x06;
-    const AND: u16 = 0x54;
-    const ALLOW: u32 = 0x7fff0000;
-    const ERROR: u32 = 0x00050000;
-    fn op(code: u16, jt: u8, jf: u8, k: u32) -> libc::sock_filter {
-        libc::sock_filter { code, jt, jf, k }
-    }
-    let mut filter = vec![
-        op(LOAD, 0, 0, 4),
-        op(EQUAL, 1, 0, 0xc000003e),
-        op(RETURN, 0, 0, 0x80000000),
-        op(LOAD, 0, 0, 0),
-        op(0x35, 0, 1, 0x40000000),
-        op(RETURN, 0, 0, ERROR | libc::ENOSYS as u32),
-    ];
-    for call in [
-        libc::SYS_mount,
-        libc::SYS_umount2,
-        libc::SYS_pivot_root,
-        libc::SYS_unshare,
-        libc::SYS_setns,
-        libc::SYS_bpf,
-        libc::SYS_perf_event_open,
-        libc::SYS_userfaultfd,
-        libc::SYS_ptrace,
-        libc::SYS_reboot,
-        libc::SYS_kexec_load,
-        libc::SYS_init_module,
-        libc::SYS_finit_module,
-        libc::SYS_delete_module,
-        libc::SYS_open_by_handle_at,
-        libc::SYS_keyctl,
-        libc::SYS_add_key,
-        libc::SYS_request_key,
-        libc::SYS_mount_setattr,
-        libc::SYS_fsopen,
-        libc::SYS_fsmount,
-        libc::SYS_move_mount,
-        libc::SYS_open_tree,
-        // io_uring can issue socket/connect operations without passing through
-        // the socket syscall rule below. No management-transport bypass.
-        libc::SYS_io_uring_setup,
-        libc::SYS_io_uring_enter,
-        libc::SYS_io_uring_register,
-    ] {
-        filter.extend([
-            op(EQUAL, 0, 1, call as u32),
-            op(RETURN, 0, 0, ERROR | libc::EPERM as u32),
-        ]);
-    }
-    filter.extend([
-        op(EQUAL, 0, 1, libc::SYS_clone3 as u32),
-        op(RETURN, 0, 0, ERROR | libc::ENOSYS as u32),
-        op(EQUAL, 0, 4, libc::SYS_clone as u32),
-        op(LOAD, 0, 0, 16),
-        op(
-            AND,
-            0,
-            0,
-            (libc::CLONE_NEWUSER
-                | libc::CLONE_NEWNS
-                | libc::CLONE_NEWCGROUP
-                | libc::CLONE_NEWPID
-                | libc::CLONE_NEWNET
-                | libc::CLONE_NEWIPC
-                | libc::CLONE_NEWUTS) as u32,
-        ),
-        op(EQUAL, 1, 0, 0),
-        op(RETURN, 0, 0, ERROR | libc::EPERM as u32),
-        op(LOAD, 0, 0, 0),
-        op(EQUAL, 0, 5, libc::SYS_socket as u32),
-        op(LOAD, 0, 0, 16),
-        op(EQUAL, 3, 0, libc::AF_UNIX as u32),
-        op(EQUAL, 2, 0, libc::AF_INET as u32),
-        op(EQUAL, 1, 0, libc::AF_INET6 as u32),
-        op(RETURN, 0, 0, ERROR | libc::EAFNOSUPPORT as u32),
-        op(RETURN, 0, 0, ALLOW),
-    ]);
-    let program = libc::sock_fprog {
-        len: filter.len() as u16,
-        filter: filter.as_mut_ptr(),
-    };
-    syscall_ok(unsafe { libc::prctl(libc::PR_SET_SECCOMP, 2, &program) })
-}
-
 fn readonly_filesystem() -> Result<()> {
     // mount_setattr recursively freezes every existing mount, including image
     // overlays and material. Then install the sole writable, bounded scratch.
@@ -787,7 +697,7 @@ fn run_project(
         }
         drop(stdout_child);
         drop(stderr_child);
-        syscall_filter().map_err(|error| format!("syscall policy: {error}"))?;
+        install_workload_filter().map_err(|error| format!("syscall policy: {error}"))?;
         let mut command = Command::new(&job.command[0]);
         command
             .args(&job.command[1..])
@@ -1332,7 +1242,7 @@ fn run() -> Result<()> {
         )?;
     }
     drop_privileges(job.uid, job.gid).map_err(|e| format!("privileges: {e}"))?;
-    syscall_filter().map_err(|e| format!("syscall policy: {e}"))?;
+    install_workload_filter().map_err(|e| format!("syscall policy: {e}"))?;
     let mut command = Command::new(&job.command[0]);
     command.args(&job.command[1..]).env_clear();
     // Trusted intake retains the remaining host command stream as stdin.

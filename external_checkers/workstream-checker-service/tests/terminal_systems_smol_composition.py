@@ -1176,6 +1176,7 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
                     item["slot_id"]: item["outcome"] for item in execution["steps"]
                 }
                 assert len(outcomes) == 17
+                assert outcomes["qualification_status"] == "succeeded"
                 assert outcomes["starter_verification"] == "exit_nonzero"
                 assert outcomes["reference_verify_1"] == "succeeded"
                 assert outcomes["reference_verify_2"] == "succeeded"
