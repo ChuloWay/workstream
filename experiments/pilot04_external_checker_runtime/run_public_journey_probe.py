@@ -975,10 +975,13 @@ async def _one_mode(client, factory, env, *,
     # has a result backend; neither path changes the production worker.
     before_delivery = await _outbox_snapshot(factory, completion_id)
     if attachment:
-        duplicate_result = (await attachment.deliver_duplicate(completion_id, project_id))['result']
+        duplicate_receipt = await attachment.deliver_duplicate(completion_id, project_id)
+        duplicate_result = duplicate_receipt['result']
+        duplicate_task_id = duplicate_receipt['task_id']
     else:
         duplicate = await asyncio.to_thread(deliver_event.apply_async,
                                           args=(str(completion_id), project_id))
+        duplicate_task_id = duplicate.id
         try:
             duplicate_result = await asyncio.to_thread(
                 duplicate.get, timeout=120, propagate=True,
@@ -1023,8 +1026,10 @@ async def _one_mode(client, factory, env, *,
         ),
         "outcome": outcome,
         "submitted_inputs": expected_inputs,
-        'duplicate_delivery': {'task_id': duplicate.id,
-                               'observation': 'production_worker_log' if attachment else 'result_backend'},
+        'duplicate_delivery': {
+            'task_id': duplicate_task_id,
+            'observation': 'scoped_worker_events' if attachment else 'result_backend',
+        },
         "late_revocation": late_revocation,
     }
 

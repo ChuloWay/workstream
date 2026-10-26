@@ -119,6 +119,15 @@ source review passed. The failed hosted attempt remains retained; the next
 baseline uses a fresh owned database and Redis logical database before any paid
 claim.
 
+The second hosted baseline observed the actual duplicate OUTBOX delivery and
+verified unchanged retained outcome, then failed while assembling its report:
+the hosted branch still referenced the local result-backend task variable. The
+report now retains the actual task UUID returned by the scoped event observer;
+the local branch retains its result-backend UUID. Its observation label is also
+corrected to `scoped_worker_events`. The complete hosted branch, including report
+assembly, must pass on fresh owned fixtures; neither partial run is a baseline
+PASS and neither made a paid model call. Product services and images are unchanged.
+
 Root plan review of `e07f28b4a`: PASS WITH LOW RISKS for implementation only. The review required exact numeric identity, native/Compose path parity in both directions, native health before API/worker release and explicit drain ordering. Runtime signoff remains separate. The root subsequently approved one trusted deployment-root selector and explicit pinned native binary path because fixed production paths prevented an isolated rendered-topology proof without touching shared resources. Exact UID/GID and live health requirements remain unchanged.
 
 Cold-start inspection found a schema/activation/proxy/node cycle: the proxy reads the activated ART namespace, the native node requires its model socket, and API normally applies migrations. The fixed `migrate`, AWS `proof` and exact proxy-only `up -d model-proxy` stages therefore validate static custody while releasing no application producer/worker; full `up` still requires both typed native health checks. AWS proof itself uses DB/AWS directly and retains its exact existing credential-separated observations.
