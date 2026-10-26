@@ -1111,3 +1111,36 @@ retention including a real exclusive 0600 failure file. The opt-in physical
 wrapper still collects exactly one case with the qualification plugins. Python
 compilation and diff checks passed, and independent frozen-source review found
 no defect. Actual nested marker/fault/cleanup/capacity results are still pending.
+
+Recovery 017 reached no marker or injected fault and ended with CleanupUnsettled.
+Its owned lease/HOME metadata and six small DB files were retained before exact
+cleanup. A no-VM discriminator proved that machine ls against an absent HOME
+creates the DB/WAL/SHM directory tree, matching the observed DB-only orphan
+(`sha256:a1b2bd6de0f8d45e4d63f4f885f6b9326e3bb755888442176881ade46f766d53`).
+The exact empty owned disk directory was removed, the pinned guardian removed
+its current lease/HOME, and the recorded DB-only orphan was removed under its
+verified root. Final cleanup receipt is
+`sha256:7a6383095be677da5272a5f5cc68113c0671be505a70a456e8a5bff54a221891`.
+The hosted VM window was released; no negative recovery case is qualified.
+
+The next test-only repair remains limited to tests/smol_recovery.py and this
+record: remove CLI calls from marker polling. Copy only bounded existing DB/WAL
+bytes through nofollow read descriptors, query only observer-owned copies, and
+send one fixed bounded VmExec marker request to the existing exact agent socket.
+Source consistency, selected authority, PID/start/executable/cgroup/socket
+custody and finite deadlines remain required. Absent/retired targets must create
+nothing; focused fail-old no-target-write and protocol controls precede review.
+No production runtime, image or grant protocol changes are included.
+
+The corrected observer passed four focused tests, including committed WAL
+metadata, unchanged original DB/WAL/SHM bytes/mtime/mode, source SQLite and CLI
+refusal, actual marker polling of empty and retired owned HOMEs, exact fixed
+VmExec frames, malformed/oversized/truncated/base64/stderr responses and an
+absolute partial-frame deadline. SQLite connections close before temporary
+copy removal. Proven lease/PID retirement remains pending within the original
+90-second window; malformed active frames and live identity mismatches fail.
+A narrow control loaded the actual afef marker on the same valid published
+empty-HOME fixture: it invoked the forbidden CLI, while the corrected marker
+returned pending without a CLI call or target mutation. Independent frozen
+source review passed. Physical cancellation/death cases are still pending;
+the hosted baseline and paid stage retain the VM window.
