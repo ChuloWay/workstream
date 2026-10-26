@@ -52,6 +52,24 @@ struct Measurements {
     peak_pids: u64,
 }
 
+fn require_publishable_measurements(
+    limits: TrialChildLimits,
+    forced: Option<TrialTermination>,
+    measurements: &Measurements,
+) -> Result<()> {
+    // A resource stop already observed while the child ran keeps its original
+    // cause and terminal facts. After a normally completed child, the current
+    // protocol cannot express a cleanup-only resource cause alongside that real
+    // exit/signal. Refuse publication rather than inventing either fact.
+    if forced.is_none()
+        && (measurements.elapsed_ms >= limits.timeout_ms
+            || measurements.cpu_time_ms >= limits.cpu_time_ms)
+    {
+        return Err("trial finalization exceeded the publishable operation allowance".into());
+    }
+    Ok(())
+}
+
 impl TrialEnvelope {
     pub(crate) fn prepare(job: &GuestJob) -> Result<Self> {
         let request: TrialRequest = serde_json::from_value(job.request.clone())?;
@@ -1382,6 +1400,7 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, mut envelope: TrialEnvelop
         filesystem.cleanup()?;
     }
     let measurements = envelope.finish()?;
+    require_publishable_measurements(limits, forced, &measurements)?;
     cpu_time_ms = cpu_time_ms.max(measurements.cpu_time_ms);
     peak_memory_bytes = peak_memory_bytes.max(measurements.peak_memory_bytes);
     peak_pids = peak_pids.max(measurements.peak_pids);
@@ -1540,6 +1559,59 @@ mod tests {
             std::env::temp_dir().join(format!("workstream-guest-{name}-{}", std::process::id()));
         fs::create_dir(&root).unwrap();
         root
+    }
+
+    #[test]
+    fn late_finalization_limit_cannot_publish_a_successful_terminal_result() {
+        let limits = TrialChildLimits {
+            cpu_quota_millis: 1000,
+            cpu_time_ms: 100,
+            finalization_cpu_time_ms: 120,
+            memory_bytes: 1024 * 1024,
+            pids: MINIMUM_TRIAL_PIDS,
+            timeout_ms: 500,
+            finalization_timeout_ms: 550,
+            output_bytes: 4096,
+        };
+        let child = TrialChildOutcome {
+            exit_code: Some(0),
+            signal: None,
+        };
+        for (elapsed_ms, cpu_time_ms, publishable) in [
+            (499, 99, true),
+            (500, 99, false),
+            (499, 100, false),
+            (501, 101, false),
+        ] {
+            let measurements = Measurements {
+                elapsed_ms,
+                cpu_time_ms,
+                peak_memory_bytes: 1024,
+                peak_pids: 3,
+            };
+            let mut terminal_bytes = Vec::new();
+            let publication = (|| {
+                require_publishable_measurements(limits, None, &measurements)?;
+                write_json_frame(&mut terminal_bytes, &child, &|| Ok(()))
+            })();
+            assert_eq!(publication.is_ok(), publishable);
+            assert_eq!(!terminal_bytes.is_empty(), publishable);
+            assert_eq!(child.exit_code, Some(0));
+            assert_eq!(child.signal, None);
+        }
+        // An actual forced cause is not rewritten by the publication guard.
+        for forced in [
+            TrialTermination::CpuExceeded,
+            TrialTermination::DeadlineExceeded,
+        ] {
+            let measurements = Measurements {
+                elapsed_ms: 510,
+                cpu_time_ms: 110,
+                peak_memory_bytes: 1024,
+                peak_pids: 3,
+            };
+            require_publishable_measurements(limits, Some(forced), &measurements).unwrap();
+        }
     }
 
     #[test]
