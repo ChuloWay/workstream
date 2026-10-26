@@ -20,9 +20,8 @@ custody adds linear migrations 0063 and 0064 after that dependency.
 ## Bounded change
 
 The execution target is the Smol microVM service. Its controlled native
-composition, direct predecessor custody and guest resource enforcement have
-qualified evidence below; the three active nested cancellation/death cases
-remain pending. Earlier gVisor evidence applies only to its recorded historical
+composition, direct predecessor custody, guest resource enforcement and three
+active nested cancellation/death cases have qualified evidence below. Earlier gVisor evidence applies only to its recorded historical
 implementation. Preserve the existing Smol guest, lease and resource owners,
 generic model ledger, ART custody and project image contracts. The independently
 owned hosted and full-project journey work remains separate.
@@ -1218,3 +1217,48 @@ secondary cleanup notes. No new KVM result is claimed.
 Root frozen-diff review passed. Inventory-retention failure is also recorded as
 a bounded secondary note, so failed evidence-file creation cannot mask the
 original observer error or skip the physical drain.
+
+### Active nested interruption qualification on real KVM
+
+The final reconciliation remains limited to this record, the external-checker
+and project checker READMEs, WS-EXEC-001 overview and affected roadmap claims.
+Proof source `8012f279281f4f6caa471eac82587134186bb5b9` (tree
+`ec6ed42dcf51b6c35e0b2581d5352756b6f6d52d`) passed all three physical cases
+using the unchanged static native build `b2ce3fa45` and its recorded service,
+guest, launcher and filesystem-tool pins. The observer changes are test-only;
+this is not a new native build or image. Raw evidence is retained under
+`/home/ubuntu/workstream-smol-trial-20261026/evidence/recovery-026` through
+`recovery-028`; each `result.json` lists the four raw log/JUnit/metadata/summary
+hashes. Independent cleanup receipts rehash those files and the exact node and
+build manifests.
+
+| Case | Runtime | Summary SHA-256 | Independent cleanup receipt SHA-256 |
+| --- | --- | --- | --- |
+| 026 caller disconnect | 47.75 s | `e88a044024200efaa98cc928d962613dc2940b3e6f172376d67cb9c397d31855` | `ce3ff896813a8d42cfae4da5dd44c5dd64bec3a9b63bb61b16a5bade54f1b39c` |
+| 027 exact child VMM death | 47.39 s | `541bcbfd5f6c8d538659f73341c6a813ebefe2e6effc5d522387d963932d86a1` | `31cb2da850a51d2f60410c10dd3c7ee5b3bfe0ac180f0f4aa755e2a4130250f1` |
+| 028 controller death/restart | 47.18 s | `1a068c0a61fdd4bfcb30d73f9c66fd6df59314c38c31390e4607da3b03cf785b` | `8a922a2b2a0e6d197c577ea826378fb644f96c8bf2bb512cae8fb2b3f74c817e` |
+
+Each case reached the actual sleeping candidate workload with Seccomp mode 2,
+exact private lease/HOME/owner/network/PID-start/cgroup custody, then injected
+only its authorized failure. Caller cancellation produced no result; child and
+controller death produced infrastructure failure. None produced a completed
+work verdict, trial receipt, trial artifact binding or artifact PUT attempt.
+Each retained only its authorized NULL-content trial address and one completed
+controlled planning-model effect; real provider calls were zero. Two simultaneous
+real trusted-intake preparations proved both admission slots reusable, including
+after controller restart. Successful teardown required marker-only typed relay,
+scratch and child-home roots, empty leases/VM directories, absent owned cgroup,
+and database/MinIO cleanup. These passes required no manual cleanup. The exclusive
+VM window was released after the final independent filesystem check.
+
+The retained 020/023 observer failures remain failed pre-marker cases and their
+manual cleanup remains distinct. Together with direct proof 36 and composition
+013, these three cases qualify the disclosed controlled native boundaries; they
+do not establish every host/ART forced-stop classification, an approved public
+revision journey, hosted delivery in this PR, a live-provider verdict or the full
+Terminal Systems contribution journey. Hosted integration and scoped AWS evidence
+remain separately tracked in PR #692.
+
+The root reviewer independently rehashed all twelve raw artifacts, parsed three
+JUnit passes with zero failures/errors/skips, and verified the isolated-test
+metadata and all three full filesystem cleanup receipts.

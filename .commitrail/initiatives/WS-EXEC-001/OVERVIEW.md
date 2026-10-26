@@ -22,7 +22,11 @@ checker execution, cancellation/deadlines and request-process recovery. Current
 native build `b2ce3fa45` additionally has controlled model/trial KVM composition,
 verified ART receipts, no-call replay and direct predecessor/resource evidence;
 its [recorded limits](../../changes/terminal-systems-project-checkers.md#repaired-confinement-and-resource-qualification-on-real-kvm)
-keep the three active nested cancellation/death cases pending. Smol now forwards
+remain explicit. Active nested caller cancellation, child VMM death and controller
+death/restart also passed physical cases 026–028 at test proof source `8012f2792`,
+with no false completion/trial ART effects, full owned cleanup and both admission
+slots reused ([evidence](../../changes/terminal-systems-project-checkers.md#active-nested-interruption-qualification-on-real-kvm)).
+Smol now forwards
 authorized POST model/trial capabilities through the trusted guest stream to
 the existing private relays. The shared model owner retains gateway, budget and
 grant custody; no provider credential or host socket enters the guest. Trusted

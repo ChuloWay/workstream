@@ -98,8 +98,11 @@ candidate-step paths checked the shared syscall filter. Direct KVM proof 36
 also qualified distinct predecessor custody and guest resource ceilings.
 Exact pins, cleanup and limits are in the
 [qualification record](../../../.commitrail/changes/terminal-systems-project-checkers.md#repaired-confinement-and-resource-qualification-on-real-kvm).
-The three active nested cancellation/death cases remain pending; ordinary
-cleanup and interruption evidence does not substitute for those cases.
+Active nested caller cancellation, exact child VMM death and controller death/restart
+also passed in physical cases 026–028 at test proof source `8012f2792`, using the
+same native build. Each reached a filtered workload, admitted no trial receipt or
+false completion, cleaned owned VM/relay resources and reused both admission slots.
+See the [scoped interruption evidence](../../../.commitrail/changes/terminal-systems-project-checkers.md#active-nested-interruption-qualification-on-real-kvm).
 
 The earlier gVisor composition at `3e67d39c8` applies only to that historical
 implementation. Smol is the deployment target, with no Docker/runsc trial
