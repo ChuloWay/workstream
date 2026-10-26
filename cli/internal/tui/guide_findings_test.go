@@ -151,6 +151,53 @@ func TestGuideRefreshAbortsDownloadAndReloadsFreshContext(t *testing.T) {
 	}
 }
 
+func TestGuideReloadClampsSelectionBeforeConfirmation(t *testing.T) {
+	for _, reload := range []string{"refresh", "tab"} {
+		for _, empty := range []bool{false, true} {
+			name := reload + "/shorter"
+			if empty {
+				name = reload + "/empty"
+			}
+			t.Run(name, func(t *testing.T) {
+				documents := []api.TaskGuideDocument{
+					{DocumentID: actorID, Label: "Remaining", MediaType: "text/markdown"},
+					{DocumentID: policyID, Label: "Removed", MediaType: "text/markdown"},
+				}
+				f := &fakeClient{context: func(context.Context, string) (api.Result[api.WorkContext], error) {
+					return api.Result[api.WorkContext]{Value: guideContext(documents...)}, nil
+				}}
+				m := openMineGuide(t, f)
+				press(t, m, "down")
+				documents = documents[:1]
+				if empty {
+					documents = nil
+				}
+				if reload == "refresh" {
+					press(t, m, "r")
+				} else {
+					for range 4 {
+						press(t, m, "tab")
+					}
+				}
+				before := len(f.calls)
+				press(t, m, "d")
+				if empty {
+					if m.guideMode != guideBrowse || len(f.calls) != before {
+						t.Fatal("empty guide opened a download", m.guideMode, f.calls)
+					}
+					return
+				}
+				press(t, m, t.TempDir())
+				press(t, m, "enter")
+				confirmation := m.detailText()
+				if !strings.Contains(confirmation, "Document: "+actorID) || strings.Contains(confirmation, "Document: "+policyID) || len(f.calls) != before {
+					t.Fatal("confirmation did not bind the refreshed document without I/O", confirmation, f.calls)
+				}
+			})
+		}
+	}
+}
+
 func TestFindingsNavigationPaginationAndMisbinding(t *testing.T) {
 	cursor := "next-page"
 	requests := 0

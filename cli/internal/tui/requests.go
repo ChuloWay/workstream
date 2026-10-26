@@ -343,6 +343,7 @@ func (m *Model) receive(msg response) tea.Cmd {
 			return bad()
 		}
 		m.context = &value
+		m.guideSelected = max(0, min(m.guideSelected, len(value.GuideDocuments)-1))
 	case api.SubmissionRequirements:
 		if r.kind != intakeRead || !sameID(value.TaskID, r.task) || !sameID(value.ProjectID, r.project) ||
 			(m.context != nil && value.GuideVersion != m.context.Guide.Version) {
