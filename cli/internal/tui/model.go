@@ -265,13 +265,6 @@ func (m *Model) key(key tea.KeyPressMsg) tea.Cmd {
 		return m.begin(pageRead)
 	}
 	if k == "r" {
-		if m.loading {
-			if m.detail && m.tab == mine && m.section == 3 && m.request.kind == guideDownloadRead {
-				m.context, m.guideMode, m.guideNotice = nil, guideBrowse, ""
-				return m.begin(contextRead)
-			}
-			return nil
-		}
 		if m.detail {
 			m.guideNotice = ""
 			if m.tab == submissions && m.section == 1 {

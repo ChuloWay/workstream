@@ -9,7 +9,14 @@ func (m *Model) handoffText() string {
 	} else if m.detail {
 		if selected, ok := m.selectedRow(); ok {
 			if m.tab == submissions {
-				args = append(args, "submission", "show", selected.id)
+				if m.section == 1 {
+					args = append(args, "submission", "findings", selected.id, "--limit", "50")
+					if m.findingsPageCursor != "" {
+						args = append(args, "--cursor", m.findingsPageCursor)
+					}
+				} else {
+					args = append(args, "submission", "show", selected.id)
+				}
 			} else {
 				verb := "show"
 				if m.section == 1 {
@@ -55,14 +62,6 @@ func (m *Model) handoffText() string {
 		out.WriteString("\nEvidence: CLI handoff only - not available in this workbench.\n")
 		for _, arg := range []string{"workstream", "contributions", "--project", m.project} {
 			out.WriteString("  argument: " + m.clean(arg) + "\n")
-		}
-	}
-	if m.detail && m.tab == submissions && m.section == 0 {
-		if selected, ok := m.selectedRow(); ok {
-			out.WriteString("\nDetailed findings: external manual read only.\n")
-			for _, arg := range []string{"workstream", "submission", "findings", selected.id} {
-				out.WriteString("  argument: " + m.clean(arg) + "\n")
-			}
 		}
 	}
 	return out.String()

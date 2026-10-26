@@ -40,7 +40,7 @@ for a later operation. Workstream rechecks each public read.
 | `/` | Filter loaded names/titles locally; Enter finishes and Esc cancels |
 | `c` / `?` | Show inert CLI arguments / keyboard help |
 | `d` in Guide | Enter an existing download directory; Enter reviews the target, `y` confirms |
-| `q` / Ctrl+C | Quit and cancel outstanding client reads |
+| `q` / Ctrl+C | Quit and cancel outstanding client reads; `q` is text during text entry, Ctrl+C always quits |
 
 The workspace makes no product mutation requests: it does not claim/start work,
 prepare or submit ZIPs, export records, poll, acquire tokens or save local

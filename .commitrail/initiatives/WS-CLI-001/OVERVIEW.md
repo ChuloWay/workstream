@@ -75,7 +75,7 @@ and separate guide-bound review/revision policy configuration. The commands
 the existing public writes with caller-owned replay keys and policy `If-Match`.
 The backend owns manager authorization for new writes, policy semantics, replay and activation;
 editing/configuring a guide does not approve or activate it. Other public API
-client gaps and the broader TUI beyond -48 remain separate work. Binary distribution's
+client gaps and the broader TUI beyond -49 remain separate work. Binary distribution's
 workflow is prepared by -44; a protected release run and public-asset audit
 remain operational work.
 
@@ -326,13 +326,14 @@ that human's credential, not a registered agent identity.
 Make every operation complete without a terminal: stable JSON output, safe
 errors, exit status, and no required prompts. Add optional terminal assistance
 only where it improves an actual workflow. The opt-in `workstream tui` browses
-the bounded contributor reads in -48 using the same client operations and never
+the bounded contributor reads in -48/-49 using the same client operations, including
+confirmed verified guide downloads and paged checker findings, and never
 becomes a second state machine. Further screens require stable public contracts
 and their own proof. Prefer
 purposeful commands over generating a flag mirror of every OpenAPI route.
 
 Go is the chosen implementation language. Cobra owns command parsing/help and
-completion. The bounded -48 workbench uses Bubble Tea, Bubbles and Lip Gloss;
+completion. The bounded -48/-49 workbench uses Bubble Tea, Bubbles and Lip Gloss;
 noninteractive commands retain their existing behavior. Do not add Python, TypeScript, or Rust duplicate
 CLIs. Keep the package independent of backend and MCP runtime dependencies.
 

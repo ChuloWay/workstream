@@ -139,8 +139,10 @@ def open_guide(terminal):
     terminal.wait(SECRET)
     terminal.send("\t")
     terminal.wait("CONTEXT")
+    terminal.wait("Locked guide version: guide-1")
     terminal.send("\t")
     terminal.wait("INTAKE")
+    terminal.wait("answer.md")
     terminal.send("\t")
     terminal.wait("GUIDE")
     terminal.wait("Locked instructions")
@@ -340,6 +342,83 @@ def test_findings_explicit_pagination_preserves_run_identity():
         terminal.quit()
 
 
+@pytest.mark.parametrize("delayed_page", ["first", "next"])
+def test_refresh_pending_findings_restarts_first_page_and_discards_late_result(
+    delayed_page,
+):
+    reads = Reads()
+    calls = []
+    started, release, returned = Event(), Event(), Event()
+    stale = deepcopy(CHECKER)
+    stale["results"][0]["worker_message"] = "STALE_FINDING_AFTER_REFRESH"
+    fresh = deepcopy(CHECKER)
+    fresh["results"][0]["worker_message"] = "Fresh findings after refresh"
+
+    def findings(query):
+        calls.append(query)
+        should_delay = len(calls) == (1 if delayed_page == "first" else 2)
+        if should_delay:
+            started.set()
+            assert release.wait(10)
+            returned.set()
+            return 200, page(stale)
+        if delayed_page == "next" and len(calls) == 1:
+            return 200, page(CHECKER, CURSOR)
+        assert query == {"limit": ["50"]}
+        return 200, page(fresh)
+
+    reads.overrides[f"/api/v1/submissions/{SUBMISSION}/checker-runs"] = findings
+    with (
+        socket_peer(reads) as (origin, _),
+        Terminal(origin, TOKEN, "--plain", rows=60) as terminal,
+    ):
+        try:
+            open_findings(terminal)
+            if delayed_page == "next":
+                terminal.wait("quality.output")
+                terminal.send("n")
+            assert started.wait(5)
+            terminal.send("r")
+            terminal.wait("Fresh findings after refresh")
+            assert len(calls) == (2 if delayed_page == "first" else 3)
+            release.set()
+            assert returned.wait(5)
+            terminal.pump(0.3)
+            assert "STALE_FINDING_AFTER_REFRESH" not in terminal.screen
+            assert "Fresh findings after refresh" in terminal.screen
+            terminal.quit()
+        finally:
+            release.set()
+
+
+@pytest.mark.parametrize("surface", ["guide", "findings"])
+def test_guide_and_findings_remain_navigable_in_narrow_terminal(surface):
+    reads = guide_reads()
+    reads.overrides[f"/api/v1/submissions/{SUBMISSION}/checker-runs"] = lambda _: (
+        200,
+        page(CHECKER),
+    )
+    with (
+        socket_peer(reads) as (origin, _),
+        Terminal(origin, TOKEN, "--plain", columns=60, rows=24) as terminal,
+    ):
+        if surface == "guide":
+            open_guide(terminal)
+            terminal.send("d")
+            terminal.wait("Download directory")
+            terminal.send("\x1b")
+            terminal.wait("Locked instructions")
+        else:
+            open_findings(terminal)
+            terminal.wait("FINDINGS")
+            terminal.wait(RUN)
+            terminal.send("c")
+            terminal.wait("argument: findings")
+            assert "argument: show" not in terminal.screen
+        assert TOKEN.encode() not in terminal.raw
+        terminal.quit()
+
+
 @pytest.mark.parametrize("field", ["task_id", "submission_id"])
 def test_findings_refuse_wrong_task_or_submission(field):
     reads = Reads()
@@ -433,8 +512,8 @@ def test_keyboard_journey_uses_only_nine_fresh_public_reads():
         terminal.wait("Exact owned submission summary")
         assert SUBMISSION in terminal.screen and TASK in terminal.screen
         terminal.send("c")
-        terminal.wait("findings")
-        assert "manual" in terminal.screen.lower()
+        terminal.wait("argument: show")
+        assert "external manual read only" not in terminal.screen.lower()
         terminal.quit()
         assert [urlsplit(target).path for _, target, _ in requests] == [
             "/api/v1/actors/me",

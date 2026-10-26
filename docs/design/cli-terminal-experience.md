@@ -462,7 +462,7 @@ private staging, verified bytes and atomic no-overwrite publication.
 
 | Boundary | Dependency and next usable result |
 |---|---|
-| Contributor read-only workbench | Nine existing typed reads and merged backend guards → project/Ready/active Mine/Submissions browse/inspect with explicit pagination; detailed findings and Evidence are manual CLI handoffs; no API-client edit or catalogue dependency |
+| Contributor read-only workbench foundation (-48) | Nine existing typed reads and merged backend guards → project/Ready/active Mine/Submissions browse/inspect with explicit pagination; extended by the guide/findings slice below; no catalogue dependency |
 | Guide/findings extension | Existing WorkContext and verified document reader plus typed existing checker-run result → ordered guide selection, confirmed download and findings pagination; no backend changes or product writes |
 | Later in-TUI contribution Evidence | Narrow shared typed single-page contribution port and preserved complete-export regressions → explicit per-page evidence browsing; not a first-slice prerequisite |
 | Claim/start | Read workbench + reviewed per-operation private receipt and exact-key recovery → separate claim and start confirmations |

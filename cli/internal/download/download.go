@@ -62,7 +62,7 @@ func (r *Root) Stage(name string) (*Stage, error) {
 		return nil, errors.New("download target already exists or is inaccessible")
 	}
 	temporary := ".workstream-download-" + rand.Text()
-	file, err := r.root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	file, err := createPrivateFile(r.root, temporary)
 	if err != nil {
 		return nil, errors.New("cannot create private download")
 	}

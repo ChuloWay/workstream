@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/Flow-Research/workstream/cli/internal/api"
 )
 
@@ -44,15 +46,25 @@ func TestGuidePreservesOrderAndPublishesOnlyAfterConfirmation(t *testing.T) {
 	}}
 	m := openMineGuide(t, f)
 	text := m.detailText()
-	if strings.Index(text, "First") > strings.Index(text, "Second") || !strings.Contains(text, "bytes not downloaded") {
+	for _, want := range []string{"Label: First", "Order: 2", doc1.SHA256, "Label: Second", "Order: 7", doc2.SHA256, "bytes not downloaded"} {
+		if !strings.Contains(text, want) {
+			t.Fatal(want, text)
+		}
+	}
+	if strings.Index(text, "Label: First") > strings.Index(text, "Label: Second") {
 		t.Fatal(text)
 	}
-	directory := filepath.Join(t.TempDir(), "q?gr")
+	directory := filepath.Join(t.TempDir(), "qgr")
 	if err := os.Mkdir(directory, 0700); err != nil {
 		t.Fatal(err)
 	}
 	press(t, m, "down")
 	press(t, m, "d")
+	press(t, m, "?")
+	if m.guideDirectory != "?" {
+		t.Fatal("question mark triggered a global key", m.guideDirectory)
+	}
+	press(t, m, "backspace")
 	for _, character := range directory {
 		press(t, m, string(character))
 	}
@@ -64,8 +76,14 @@ func TestGuidePreservesOrderAndPublishesOnlyAfterConfirmation(t *testing.T) {
 	}
 	before := len(f.calls)
 	press(t, m, "enter")
-	if !strings.Contains(m.detailText(), "Confirm download") || len(f.calls) != before || m.loading {
-		t.Fatal(m.detailText())
+	confirmation := m.detailText()
+	for _, want := range []string{"Confirm download", "Task: " + taskID, "Document: " + doc2.DocumentID, "Filename: " + doc2.Filename()} {
+		if !strings.Contains(confirmation, want) {
+			t.Fatal(want, confirmation)
+		}
+	}
+	if len(f.calls) != before || m.loading {
+		t.Fatal(confirmation)
 	}
 	if entries, _ := os.ReadDir(directory); len(entries) != 0 {
 		t.Fatal("confirmation performed I/O", entries)
@@ -143,9 +161,13 @@ func TestFindingsNavigationPaginationAndMisbinding(t *testing.T) {
 		if requests == 3 {
 			task = actorID
 		}
+		predecessor := actorID
 		page := api.SubmissionCheckerPage{Items: []api.SubmissionCheckerRun{{
 			ID: runID, Task: task, Submission: submissionID, Version: nil, Status: "completed", Attempt: nil,
-			Current: requests != 2, Results: []api.ContributorFinding{{ID: findingID, Checker: "lint", CheckID: &check, Path: &path, Line: &line, Status: "coverage_incomplete", Severity: "medium", Message: &message, Fix: &fix}},
+			Current: requests != 2, Predecessor: &predecessor, Results: []api.ContributorFinding{
+				{ID: findingID, Checker: "lint", CheckID: &check, Path: &path, Line: &line, Status: "coverage_incomplete", Severity: "medium", Message: &message, Fix: &fix},
+				{ID: policyID, Checker: "format", Status: "passed", Severity: "info"},
+			},
 		}}}
 		if next == nil {
 			page.Cursor = &cursor
@@ -161,7 +183,7 @@ func TestFindingsNavigationPaginationAndMisbinding(t *testing.T) {
 	press(t, m, "enter")
 	press(t, m, "tab")
 	text := m.detailText()
-	for _, want := range []string{"Run: " + runID, "Current: true", "Checker: lint", "Check ID: lint.safe", "Finding status: coverage_incomplete", "Severity: medium", "Path: answer.md", "Line: 8", "Suggested fix: repair", "not acceptance"} {
+	for _, want := range []string{"Run: " + runID, "Current: true", "Predecessor run: " + actorID, "Checker: lint", "Check ID: lint.safe", "Finding status: coverage_incomplete", "Severity: medium", "Path: answer.md", "Line: 8", "Suggested fix: repair", "Checker: format\nCheck ID: not supplied\nFinding status: passed\nSeverity: info\nPath: not supplied\nLine: not supplied\nMessage: not supplied\nSuggested fix: not supplied", "not acceptance"} {
 		if !strings.Contains(text, want) {
 			t.Fatal(want, text)
 		}
@@ -176,6 +198,37 @@ func TestFindingsNavigationPaginationAndMisbinding(t *testing.T) {
 	press(t, m, "r")
 	if requests != 3 || m.failure == "" || m.findings != nil || m.submission != nil {
 		t.Fatal("foreign task finding retained", requests, m.failure)
+	}
+}
+
+func TestGuideAndFindingsViewsFitMinimumTerminal(t *testing.T) {
+	document := api.TaskGuideDocument{DocumentID: actorID, Order: 4, Label: strings.Repeat("wide guide label ", 20), MediaType: "text/markdown", ByteCount: 5, SHA256: "sha256:" + strings.Repeat("a", 64)}
+	guideClient := &fakeClient{context: func(context.Context, string) (api.Result[api.WorkContext], error) {
+		return api.Result[api.WorkContext]{Value: guideContext(document)}, nil
+	}}
+	guide := openMineGuide(t, guideClient)
+	guide.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
+	assertBoundedView(t, guide.View().Content, 40, 10, "GUIDE")
+
+	findings := boot(t, &fakeClient{})
+	press(t, findings, "enter")
+	press(t, findings, "tab")
+	press(t, findings, "tab")
+	press(t, findings, "enter")
+	press(t, findings, "tab")
+	findings.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
+	assertBoundedView(t, findings.View().Content, 40, 10, "FINDINGS")
+}
+
+func assertBoundedView(t *testing.T, content string, width, height int, heading string) {
+	t.Helper()
+	if !strings.Contains(content, heading) || lipgloss.Height(content) > height {
+		t.Fatal("view is not usable at minimum size", content)
+	}
+	for _, line := range strings.Split(content, "\n") {
+		if lipgloss.Width(line) > width {
+			t.Fatalf("line exceeds %d cells: %q", width, line)
+		}
 	}
 }
 
