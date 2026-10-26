@@ -777,3 +777,34 @@ prove that setting. The real metadata endpoint passes the corrected preflight
 using conservative tier/cache rates, with zero paid calls. The 63 focused POST
 and setup cases include disabled-search metadata, unknown/request fees, malformed
 prices, plugin enablement, search options, server tools and routing variants.
+
+
+### Native bounded trial output transport
+
+Canonical native composition 006 reached execution validation but could not
+publish a trial receipt: the Smol adapter paired real captured output digests
+with empty projected strings. The repair extends the existing private export
+stream with bounded raw stdout/stderr before the final terminal frame. Header
+and final receipt must agree on exact lengths and SHA-256 digests, followed by
+successful guest exit and exact EOF. The existing 1 MiB JSON frame and public
+receipt ceilings remain unchanged; combined retained output is bounded by the
+approved operation limit and the existing profile maximum of 4 MiB. Capture and
+raw transmission remain inside the finite parent envelope, before filesystem
+cleanup and final measurement. Guest and host preserve the exact UTF-8 strings
+through build and step observations, with length/hash validation at admission.
+An output-limit cut may trim only an incomplete trailing UTF-8 scalar, at most
+three bytes; the actual OutputExceeded termination remains unchanged. Intrinsic
+invalid UTF-8 fails closed as an explicit text-protocol limitation, without lossy
+replacement or fabricated empty digests. Focused tests cover real nonempty logs,
+shared byte bounds, multibyte cuts, invalid text, altered raw bytes or final
+bindings, control-frame substitution, excess output and exact EOF. New canonical
+source must pass focused native checks and direct KVM output transport before
+another full composition; prior successful direct build is not composed signoff.
+
+Validation: the full native workspace passed 188 tests with zero failures or
+ignored cases using serial test threads. An initial parallel workspace run
+retained three DeadlineExceeded failures in unchanged trial-engine fixtures;
+that target passed all 26 cases when replayed serially. The changed guest and
+service tests passed in both runs. Independent root and guest reviews found no
+custody defect. Canonical KVM output transport and composed qualification remain
+required before declaring the runtime qualified.

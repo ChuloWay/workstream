@@ -327,6 +327,17 @@ and charges virtualization overhead separately. Results are returned only after
 VM and cgroup removal is confirmed. Unknown cleanup closes admission and requires
 startup reconciliation. Failures before lease creation or after confirmed cleanup
 return recoverable infrastructure failure without stopping other checks.
+The private trial stream carries the export header, export bytes, retained stdout,
+retained stderr and final receipt in that order. Each output length and digest is
+bound by both header and final receipt; successful exit and exact EOF are required.
+The combined raw output ceiling is the approved profile's bound, at most 4 MiB;
+JSON control frames remain at most 1 MiB. Output capture and transmission stay in
+the finite guest operation envelope. Observations retain exact UTF-8 text and its
+hash. When an enforced output cut splits a trailing UTF-8 scalar, only that
+incomplete suffix (at most three bytes) is trimmed, without changing the
+`output_exceeded` outcome. Intrinsically invalid UTF-8 is an explicit unsupported
+text-protocol failure; it is never replaced, silently discarded or rehashed as
+empty output.
 Independent lease guardians survive controller death;
 `KillMode=process` preserves that cleanup lifetime. Preserve the private owner
 file and lease directory across restarts. Never clone them between running nodes.

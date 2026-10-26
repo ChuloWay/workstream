@@ -10,6 +10,7 @@ use crate::trial_relay::{
     TrialBuildObservation, TrialExportOutcome, TrialOperationOutcome, TrialRelayFailure,
     TrialStepObservation,
 };
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Instant;
@@ -41,6 +42,8 @@ pub(crate) struct SmolTrialChildResult {
     pub(crate) termination: SmolTrialTermination,
     pub(crate) exit_code: Option<i32>,
     pub(crate) signal: Option<i32>,
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
     pub(crate) stdout_sha256: String,
     pub(crate) stderr_sha256: String,
     pub(crate) stdout_bytes: u64,
@@ -381,9 +384,9 @@ impl TrialSandboxBackend for SmolTrialBackend {
                 outcome: operation_outcome(&result)?,
                 exit_code: result.exit_code,
                 signal: result.signal,
-                stdout: String::new(),
+                stdout: result.stdout.clone(),
                 stdout_sha256: result.stdout_sha256.clone(),
-                stderr: String::new(),
+                stderr: result.stderr.clone(),
                 stderr_sha256: result.stderr_sha256.clone(),
                 workspace_before_sha256,
                 workspace_after_sha256,
@@ -430,6 +433,10 @@ fn validate_child_result(
         || result.measurement_method.len() > 256
         || !valid_digest(&result.stdout_sha256)
         || !valid_digest(&result.stderr_sha256)
+        || result.stdout.len() as u64 != result.stdout_bytes
+        || result.stderr.len() as u64 != result.stderr_bytes
+        || format!("sha256:{:x}", Sha256::digest(result.stdout.as_bytes())) != result.stdout_sha256
+        || format!("sha256:{:x}", Sha256::digest(result.stderr.as_bytes())) != result.stderr_sha256
         || result
             .stdout_bytes
             .checked_add(result.stderr_bytes)
@@ -522,9 +529,9 @@ fn build_observation(
         outcome: operation_outcome(result)?,
         exit_code: result.exit_code,
         signal: result.signal,
-        stdout: String::new(),
+        stdout: result.stdout.clone(),
         stdout_sha256: result.stdout_sha256.clone(),
-        stderr: String::new(),
+        stderr: result.stderr.clone(),
         stderr_sha256: result.stderr_sha256.clone(),
         candidate_image_digest: None,
         candidate_archive_digest: None,
@@ -722,8 +729,10 @@ mod tests {
             termination: SmolTrialTermination::Exited,
             exit_code: Some(0),
             signal: None,
-            stdout_sha256: digest('a'),
-            stderr_sha256: digest('b'),
+            stdout: String::new(),
+            stderr: String::new(),
+            stdout_sha256: format!("sha256:{:x}", Sha256::digest([])),
+            stderr_sha256: format!("sha256:{:x}", Sha256::digest([])),
             stdout_bytes: 0,
             stderr_bytes: 0,
             export_outcome: TrialExportOutcome::Exported,
@@ -833,6 +842,49 @@ mod tests {
             false,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn real_output_is_preserved_and_forged_text_cannot_enter_observations() {
+        let mut value = result();
+        value.stdout = "candidate build completed\n".into();
+        value.stderr = "bounded build diagnostic\n".into();
+        value.stdout_bytes = value.stdout.len() as u64;
+        value.stderr_bytes = value.stderr.len() as u64;
+        value.stdout_sha256 = format!("sha256:{:x}", Sha256::digest(value.stdout.as_bytes()));
+        value.stderr_sha256 = format!("sha256:{:x}", Sha256::digest(value.stderr.as_bytes()));
+        validate_child_result(
+            &value,
+            100,
+            100,
+            1000,
+            4,
+            1000,
+            10,
+            1024,
+            &overruns(),
+            false,
+        )
+        .unwrap();
+        let observation = build_observation(&value).unwrap();
+        assert_eq!(observation.stdout, value.stdout);
+        assert_eq!(observation.stderr, value.stderr);
+        assert_eq!(observation.stdout_sha256, value.stdout_sha256);
+        assert_eq!(observation.stderr_sha256, value.stderr_sha256);
+        value.stdout.clear();
+        assert!(validate_child_result(
+            &value,
+            100,
+            100,
+            1000,
+            4,
+            1000,
+            10,
+            1024,
+            &overruns(),
+            false
+        )
+        .is_err());
     }
 
     #[test]
