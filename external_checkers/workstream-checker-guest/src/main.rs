@@ -141,7 +141,13 @@ fn valid_root_name(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
 }
 
-fn stage(job: &GuestJob, roots: &[MaterialRoot], input: &mut impl Read) -> Result<StagedJob> {
+fn stage(
+    job: &GuestJob,
+    roots: &[MaterialRoot],
+    input: &mut impl Read,
+    check: impl Fn() -> Result<()>,
+) -> Result<StagedJob> {
+    check()?;
     // Mask any image-owned /work before handling untrusted paths. Only this
     // trusted process runs in the image until staging and confinement complete.
     mount_directory(Path::new("/work"))?;
@@ -160,18 +166,21 @@ fn stage(job: &GuestJob, roots: &[MaterialRoot], input: &mut impl Read) -> Resul
     let mut names = HashSet::new();
     let mut staged_roots = BTreeMap::new();
     for root in roots {
+        check()?;
         if !valid_root_name(&root.name) || !names.insert(root.name.as_str()) {
             return Err("material root invalid".into());
         }
         let root_path = Path::new("/work/.materials").join(&root.name);
         fs::create_dir(&root_path)?;
         for directory in &root.directories {
+            check()?;
             if !material_path_is_relative(directory) {
                 return Err("unsafe directory".into());
             }
             fs::create_dir_all(root_path.join(directory))?;
         }
         for entry in &root.files {
+            check()?;
             if !material_path_is_relative(&entry.normalized_path) {
                 return Err("unsafe file".into());
             }
@@ -190,10 +199,11 @@ fn stage(job: &GuestJob, roots: &[MaterialRoot], input: &mut impl Read) -> Resul
             let mut bytes = [0u8; 65536];
             while remaining > 0 {
                 let size = remaining.min(bytes.len() as u64) as usize;
-                input.read_exact(&mut bytes[..size])?;
+                read_staged_bytes(input, &mut bytes[..size], &check)?;
                 hash.update(&bytes[..size]);
                 file.write_all(&bytes[..size])?;
                 remaining -= size as u64;
+                check()?;
             }
             if format!("sha256:{:x}", hash.finalize()) != entry.sha256 {
                 return Err("material hash differs".into());
@@ -208,6 +218,28 @@ fn stage(job: &GuestJob, roots: &[MaterialRoot], input: &mut impl Read) -> Resul
         request: File::open(request)?,
         roots: staged_roots,
     })
+}
+
+// The trial input is nonblocking so a stalled host cannot hide CPU/deadline
+// checks behind read_exact. Ordinary checker inputs keep their existing stream.
+fn read_staged_bytes(
+    input: &mut impl Read,
+    mut bytes: &mut [u8],
+    check: &impl Fn() -> Result<()>,
+) -> Result<()> {
+    while !bytes.is_empty() {
+        check()?;
+        match input.read(bytes) {
+            Ok(0) => return Err("material input truncated".into()),
+            Ok(count) => bytes = &mut bytes[count..],
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(2));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    check()
 }
 
 fn bind_material_root(staged: &StagedJob, name: &str, destination: &str) -> Result<()> {
@@ -910,6 +942,28 @@ mod tests {
     }
 
     #[test]
+    fn stalled_trial_material_input_remains_interruptible() {
+        struct Stalled;
+        impl Read for Stalled {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::ErrorKind::WouldBlock.into())
+            }
+        }
+        let checks = std::cell::Cell::new(0);
+        let result = read_staged_bytes(&mut Stalled, &mut [0_u8; 1], &|| {
+            checks.set(checks.get() + 1);
+            if checks.get() >= 3 {
+                Err("cancelled".into())
+            } else {
+                Ok(())
+            }
+        });
+        assert!(result.is_err());
+        assert_eq!(checks.get(), 3);
+        assert!(read_staged_bytes(&mut std::io::empty(), &mut [0_u8; 1], &|| Ok(())).is_err());
+    }
+
+    #[test]
     fn project_material_topology_is_closed() {
         assert!(valid_project_material_roots(["current"]));
         assert!(valid_project_material_roots(["current", "predecessor"]));
@@ -1077,14 +1131,27 @@ fn run() -> Result<()> {
         return Err("image configuration invalid".into());
     }
     private_mounts().map_err(|e| format!("mount namespace: {e}"))?;
-    // Stage before applying workload memory: submitted files are immutable input,
-    // not checker heap. The enclosing VMM and disk bounds cover staging custody.
-    let staged = stage(&job, &roots, &mut input).map_err(|e| format!("staging: {e}"))?;
-    if matches!(
+    let trial_envelope = if matches!(
         purpose,
         GuestPurpose::TrialBuild { .. } | GuestPurpose::TrialStep { .. }
     ) {
-        return trial::run(&job, &staged, &mut input);
+        let envelope = trial::TrialEnvelope::prepare(&job)?;
+        trial::set_nonblocking(&input)?;
+        Some(envelope)
+    } else {
+        None
+    };
+    // Trial staging belongs to the same finite envelope as formatting, child
+    // execution and export. Other purposes retain their existing custody owner.
+    let staged = stage(&job, &roots, &mut input, || {
+        trial_envelope
+            .as_ref()
+            .map_or(Ok(()), |envelope| envelope.check())
+    })
+    .map_err(|e| format!("staging: {e}"))?;
+    if let Some(envelope) = trial_envelope {
+        drop(input);
+        return trial::run(&job, &staged, envelope);
     }
     if let GuestPurpose::Project { capabilities, .. } = &purpose {
         let request = parse_request(&serde_json::to_vec(&job.request)?)?;

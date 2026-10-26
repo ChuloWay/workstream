@@ -18,7 +18,7 @@ const INPUT_CONTEXT: &str = "/workstream-bootstrap/input/context";
 const INPUT_CACHE: &str = "/workstream-bootstrap/input/cache";
 const INPUT_WORKSPACE: &str = "/workstream-bootstrap/input/workspace";
 const INPUT_ROLES: &str = "/workstream-bootstrap/input/roles";
-const TRIAL_CGROUP: &str = "/sys/fs/cgroup/workstream-trial";
+const TRIAL_CGROUP: &str = "/sys/fs/cgroup/workstream-trial/workload";
 const INFRASTRUCTURE_EXIT: i32 = 125;
 const STATUS_SCHEMA: &str = "workstream.trial_launcher_status.v1";
 
@@ -772,7 +772,7 @@ fn require_bounded_mount(destination: &Path, limit: &FilesystemLimit) -> Result<
         .checked_mul(block_size)
         .ok_or_else(|| failure("bounded filesystem free space overflow"))?;
     validate_filesystem_statistics(
-        statistics.f_type,
+        statistics.f_type as _,
         total_bytes,
         free_bytes,
         statistics.f_ffree as u64,

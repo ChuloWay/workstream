@@ -6,15 +6,16 @@ use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, FromRawFd};
 use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use workstream_checker_guest::{
     GuestJob, GuestPurpose, MaterialFile, TrialChildLimits, TrialChildOutcome, TrialChildResult,
-    TrialExport, TrialExportOutcome, TrialFilesystemLimit, TrialRequest, TrialTermination,
-    MINIMUM_TRIAL_FILESYSTEM_BYTES, MINIMUM_TRIAL_FILESYSTEM_ENTRIES, TRIAL_CHILD_PROTOCOL,
+    TrialExport, TrialExportHeader, TrialExportOutcome, TrialFilesystemLimit, TrialRequest,
+    TrialTermination, MINIMUM_TRIAL_FILESYSTEM_BYTES, MINIMUM_TRIAL_FILESYSTEM_ENTRIES,
+    MINIMUM_TRIAL_PIDS, TRIAL_CHILD_PROTOCOL, TRIAL_EXPORT_PROTOCOL, TRIAL_REQUEST_PROTOCOL,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -26,11 +27,153 @@ const LAUNCHER: &str = "/.workstream-trial-launcher";
 const MKFS: &str = "/.workstream-mkfs.ext4";
 const FILESYSTEMS: &str = "/work/.trial-filesystems";
 const CGROUP: &str = "/sys/fs/cgroup/workstream-trial";
+const CONTROL_CGROUP: &str = "/sys/fs/cgroup/workstream-trial/control";
+const WORKLOAD_CGROUP: &str = "/sys/fs/cgroup/workstream-trial/workload";
 const LOOP_CTL_GET_FREE: libc::c_ulong = 0x4c82;
 const LOOP_SET_FD: libc::c_ulong = 0x4c00;
 const LOOP_CLR_FD: libc::c_ulong = 0x4c01;
 const STATUS_MAXIMUM: u64 = 16 * 1024;
-const REQUEST_SCHEMA: &str = "workstream.smol_trial_request.v1";
+const REQUEST_SCHEMA: &str = TRIAL_REQUEST_PROTOCOL;
+
+pub(crate) struct TrialEnvelope {
+    request: TrialRequest,
+    limits: TrialChildLimits,
+    started: Instant,
+    deadline: Instant,
+    finalization_deadline: Instant,
+    original_cgroup: PathBuf,
+    active: bool,
+}
+
+struct Measurements {
+    elapsed_ms: u64,
+    cpu_time_ms: u64,
+    peak_memory_bytes: u64,
+    peak_pids: u64,
+}
+
+impl TrialEnvelope {
+    pub(crate) fn prepare(job: &GuestJob) -> Result<Self> {
+        let request: TrialRequest = serde_json::from_value(job.request.clone())?;
+        if !matches!(
+            (&job.purpose, &request),
+            (GuestPurpose::TrialBuild { .. }, TrialRequest::Build { .. })
+                | (GuestPurpose::TrialStep { .. }, TrialRequest::Step { .. })
+        ) || job.uid == 0
+            || job.gid == 0
+        {
+            return Err("trial purpose invalid".into());
+        }
+        validate_material_contract(job, &request)?;
+        validate_request(job, &request)?;
+        let limits = request_limits(&request);
+        let started = Instant::now();
+        let memberships = fs::read_to_string("/proc/self/cgroup")?;
+        let original = memberships
+            .lines()
+            .find_map(|line| line.strip_prefix("0::"))
+            .ok_or("original cgroup missing")?;
+        if !original.starts_with('/')
+            || Path::new(original)
+                .components()
+                .any(|part| matches!(part, Component::ParentDir))
+        {
+            return Err("original cgroup invalid".into());
+        }
+        let original_cgroup = Path::new("/sys/fs/cgroup").join(original.trim_start_matches('/'));
+        configure_cgroup(limits)?;
+        let envelope = Self {
+            request,
+            limits,
+            started,
+            deadline: started + Duration::from_millis(limits.timeout_ms),
+            finalization_deadline: started + Duration::from_millis(limits.finalization_timeout_ms),
+            original_cgroup,
+            active: true,
+        };
+        envelope.check()?;
+        Ok(envelope)
+    }
+
+    fn cause(&self) -> Result<Option<TrialTermination>> {
+        Ok(if Instant::now() >= self.deadline {
+            Some(TrialTermination::DeadlineExceeded)
+        } else if cgroup_cpu_ms()? >= self.limits.cpu_time_ms {
+            Some(TrialTermination::CpuExceeded)
+        } else if cgroup_oom_kills()? > 0 {
+            Some(TrialTermination::MemoryExceeded)
+        } else if cgroup_pid_limit_hits()? > 0 {
+            Some(TrialTermination::PidExceeded)
+        } else {
+            None
+        })
+    }
+
+    pub(crate) fn check(&self) -> Result<()> {
+        self.check_finalization()?;
+        if self.cause()?.is_some() {
+            return Err("trial operation ceiling reached".into());
+        }
+        Ok(())
+    }
+
+    fn check_finalization(&self) -> Result<()> {
+        if Instant::now() >= self.finalization_deadline
+            || cgroup_cpu_ms()? >= self.limits.finalization_cpu_time_ms
+        {
+            return Err("trial finalization ceiling reached".into());
+        }
+        Ok(())
+    }
+
+    fn measurements(&self) -> Result<Measurements> {
+        Ok(Measurements {
+            elapsed_ms: self.started.elapsed().as_millis() as u64,
+            cpu_time_ms: cgroup_cpu_ms()?,
+            peak_memory_bytes: cgroup_value("memory.peak")?,
+            peak_pids: cgroup_value("pids.peak")?,
+        })
+    }
+
+    fn finish(&mut self) -> Result<Measurements> {
+        self.check_finalization()?;
+        fs::write(Path::new(WORKLOAD_CGROUP).join("cgroup.kill"), "1")?;
+        for _ in 0..1000 {
+            self.check_finalization()?;
+            if fs::read_to_string(Path::new(WORKLOAD_CGROUP).join("cgroup.events"))?
+                .lines()
+                .any(|line| line == "populated 0")
+            {
+                let measurements = self.measurements()?;
+                // The operation's final measurement ends after stream flush and
+                // filesystem cleanup. Receipt emission and cgroup removal are
+                // bounded trusted management, never another workload allowance.
+                self.leave_and_remove()?;
+                self.active = false;
+                return Ok(measurements);
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        Err("trial workload cleanup unsettled".into())
+    }
+
+    fn leave_and_remove(&self) -> Result<()> {
+        fs::write(self.original_cgroup.join("cgroup.procs"), "0")?;
+        fs::remove_dir(WORKLOAD_CGROUP)?;
+        fs::remove_dir(CONTROL_CGROUP)?;
+        fs::remove_dir(CGROUP)?;
+        Ok(())
+    }
+}
+
+impl Drop for TrialEnvelope {
+    fn drop(&mut self) {
+        if self.active {
+            let _ = fs::write(Path::new(WORKLOAD_CGROUP).join("cgroup.kill"), "1");
+            let _ = self.leave_and_remove();
+        }
+    }
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -79,6 +222,7 @@ impl OutputCapture {
     fn drain<R: Read>(&mut self, reader: &mut R, remaining: u64) -> Result<bool> {
         let mut buffer = [0_u8; 8 * 1024];
         let mut allowance = remaining;
+        let mut drained = 0_usize;
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) => {
@@ -93,8 +237,12 @@ impl OutputCapture {
                         .checked_add(retained as u64)
                         .ok_or("trial output byte count overflow")?;
                     allowance -= retained as u64;
+                    drained += count;
                     if retained != count {
                         return Ok(true);
+                    }
+                    if drained >= 65_536 {
+                        return Ok(false);
                     }
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -127,6 +275,7 @@ impl BoundedFilesystem {
         limit: TrialFilesystemLimit,
         exposed: &Path,
         mode: u32,
+        envelope: &TrialEnvelope,
     ) -> Result<Self> {
         if limit.bytes < MINIMUM_TRIAL_FILESYSTEM_BYTES
             || limit.entries < MINIMUM_TRIAL_FILESYSTEM_ENTRIES
@@ -150,7 +299,9 @@ impl BoundedFilesystem {
         };
         file.set_len(limit.bytes)?;
         let entries = limit.entries.to_string();
-        let status = Command::new(MKFS)
+        envelope.check()?;
+        let mut formatter = Command::new(MKFS);
+        formatter
             .args([
                 "-F",
                 "-q",
@@ -174,11 +325,8 @@ impl BoundedFilesystem {
             .env("MKE2FS_CONFIG", "/dev/null")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()?;
-        if !status.success() {
-            return Err("trusted ext4 formatter failed".into());
-        }
+            .stderr(Stdio::null());
+        run_formatter(&mut formatter, envelope)?;
         ensure_device_node(Path::new("/dev/loop-control"), libc::S_IFCHR, 10, 237)?;
         let control = OpenOptions::new()
             .read(true)
@@ -227,7 +375,7 @@ impl BoundedFilesystem {
         let child = filesystem.private_mount.join("child");
         fs::create_dir(&child)?;
         fs::set_permissions(&child, fs::Permissions::from_mode(mode))?;
-        reserve_surplus_inodes(&filesystem.private_mount, limit.entries)?;
+        reserve_surplus_inodes(&filesystem.private_mount, limit.entries, envelope)?;
         fs::create_dir(exposed)?;
         mount(
             child.to_str().ok_or("child path invalid")?,
@@ -240,7 +388,7 @@ impl BoundedFilesystem {
         Ok(filesystem)
     }
 
-    fn usage(&self, include_logical: bool) -> Result<(u64, u64, bool)> {
+    fn usage(&self, include_logical: bool, envelope: &TrialEnvelope) -> Result<(u64, u64, bool)> {
         let statistics = statfs(&self.private_mount)?;
         let free_bytes = (statistics.f_bavail as u64)
             .checked_mul(statistics.f_bsize as u64)
@@ -256,7 +404,7 @@ impl BoundedFilesystem {
             .checked_sub(statistics.f_ffree as u64)
             .ok_or("ext4 free inode count invalid")?;
         let (logical_bytes, logical_entries) = if include_logical {
-            logical_filesystem_usage(&self.exposed)?
+            logical_filesystem_usage(&self.exposed, &|| envelope.check_finalization())?
         } else {
             (0, 0)
         };
@@ -347,7 +495,7 @@ fn statfs(path: &Path) -> Result<libc::statfs> {
     Ok(unsafe { value.assume_init() })
 }
 
-fn reserve_surplus_inodes(root: &Path, maximum_free: u64) -> Result<()> {
+fn reserve_surplus_inodes(root: &Path, maximum_free: u64, envelope: &TrialEnvelope) -> Result<()> {
     let reserve = root.join(".workstream-reserved-inodes");
     fs::create_dir(&reserve)?;
     fs::set_permissions(&reserve, fs::Permissions::from_mode(0o000))?;
@@ -357,6 +505,7 @@ fn reserve_surplus_inodes(root: &Path, maximum_free: u64) -> Result<()> {
         return Err("ext4 inode rounding is unbounded".into());
     }
     for index in 0..surplus {
+        envelope.check()?;
         OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -415,9 +564,11 @@ fn valid_limit(limit: TrialFilesystemLimit) -> bool {
 fn valid_child_limits(limits: TrialChildLimits) -> bool {
     limits.cpu_quota_millis > 0
         && limits.cpu_time_ms > 0
+        && limits.finalization_cpu_time_ms >= limits.cpu_time_ms
         && limits.memory_bytes > 0
-        && limits.pids > 0
+        && limits.pids >= MINIMUM_TRIAL_PIDS
         && limits.timeout_ms > 0
+        && limits.finalization_timeout_ms >= limits.timeout_ms
         && limits.output_bytes > 0
 }
 
@@ -594,8 +745,21 @@ fn configure_cgroup(limits: TrialChildLimits) -> Result<()> {
         limits.memory_bytes.to_string(),
     )?;
     disable_swap(Path::new(CGROUP), Path::new("/proc/meminfo"))?;
-    fs::write(Path::new(CGROUP).join("memory.oom.group"), "1")?;
+    // A whole-parent OOM may lose the trusted supervisor; the host then rejects
+    // the incomplete exchange. Never grant an unaccounted control reservation.
+    fs::write(Path::new(CGROUP).join("memory.oom.group"), "0")?;
     fs::write(Path::new(CGROUP).join("pids.max"), limits.pids.to_string())?;
+    fs::write(
+        Path::new(CGROUP).join("cgroup.subtree_control"),
+        "+cpu +memory +pids",
+    )?;
+    fs::create_dir(CONTROL_CGROUP)?;
+    fs::create_dir(WORKLOAD_CGROUP)?;
+    fs::write(Path::new(WORKLOAD_CGROUP).join("memory.oom.group"), "1")?;
+    // Exact peaks are a required kernel capability, not a sampled substitute.
+    cgroup_value("pids.peak")?;
+    cgroup_value("memory.peak")?;
+    fs::write(Path::new(CONTROL_CGROUP).join("cgroup.procs"), "0")?;
     Ok(())
 }
 
@@ -632,29 +796,16 @@ fn cgroup_pid_limit_hits() -> Result<u64> {
         .parse()?)
 }
 
-fn cleanup_cgroup() -> Result<()> {
-    let events = Path::new(CGROUP).join("cgroup.events");
-    for _ in 0..1000 {
-        if fs::read_to_string(&events)?
-            .lines()
-            .any(|line| line == "populated 0")
-        {
-            fs::remove_dir(CGROUP)?;
-            return Ok(());
-        }
-        std::thread::sleep(Duration::from_millis(2));
-    }
-    Err("trial cgroup cleanup unsettled".into())
-}
-
 fn filesystem_usage(
     filesystems: &[BoundedFilesystem],
     include_logical: bool,
+    envelope: &TrialEnvelope,
 ) -> Result<(u64, u64, bool)> {
     filesystems
         .iter()
         .try_fold((0_u64, 0_u64, false), |total, filesystem| {
-            let usage = filesystem.usage(include_logical)?;
+            envelope.check_finalization()?;
+            let usage = filesystem.usage(include_logical, envelope)?;
             Ok((
                 total.0.checked_add(usage.0).ok_or("disk usage overflow")?,
                 total.1.checked_add(usage.1).ok_or("entry usage overflow")?,
@@ -794,7 +945,10 @@ fn filesystem_specs(
     }
 }
 
-fn create_filesystems(request: &TrialRequest) -> Result<Vec<BoundedFilesystem>> {
+fn create_filesystems(
+    request: &TrialRequest,
+    envelope: &TrialEnvelope,
+) -> Result<Vec<BoundedFilesystem>> {
     let operation = request_operation(request);
     if !valid_component(operation) {
         return Err("trial operation id invalid".into());
@@ -808,8 +962,9 @@ fn create_filesystems(request: &TrialRequest) -> Result<Vec<BoundedFilesystem>> 
                 fs::create_dir_all(parent)?;
             }
         }
+        envelope.check()?;
         result.push(BoundedFilesystem::create(
-            operation, name, limit, &exposed, mode,
+            operation, name, limit, &exposed, mode, envelope,
         )?);
     }
     Ok(result)
@@ -859,18 +1014,59 @@ fn classify_status(
     Ok((child, outcome))
 }
 
-fn digest_file(path: &Path) -> Result<(u64, String)> {
+fn digest_file(path: &Path, check: &impl Fn() -> Result<()>) -> Result<(u64, String)> {
+    check()?;
     let mut file = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW)
         .open(path)?;
     let length = file.metadata()?.len();
+    let mut remaining = length;
     let mut hash = Sha256::new();
-    std::io::copy(&mut file, &mut hash)?;
+    let mut buffer = [0_u8; 65_536];
+    while remaining > 0 {
+        check()?;
+        let maximum = remaining.min(buffer.len() as u64) as usize;
+        let count = file.read(&mut buffer[..maximum])?;
+        if count == 0 {
+            return Err("trial export changed while hashing".into());
+        }
+        hash.update(&buffer[..count]);
+        remaining -= count as u64;
+    }
+    check()?;
+    if file.read(&mut buffer[..1])? != 0 {
+        return Err("trial export grew while hashing".into());
+    }
     Ok((length, format!("sha256:{:x}", hash.finalize())))
 }
 
-fn set_nonblocking<T: AsRawFd>(value: &T) -> Result<()> {
+fn run_formatter(command: &mut Command, envelope: &TrialEnvelope) -> Result<()> {
+    envelope.check()?;
+    let mut formatter = command.spawn()?;
+    let result = (|| loop {
+        envelope.check()?;
+        if let Some(status) = formatter.try_wait()? {
+            return if status.success() {
+                Ok(())
+            } else {
+                Err("trusted ext4 formatter failed".into())
+            };
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    })();
+    if result.is_err() {
+        let _ = formatter.kill();
+        // Cleanup consumes only the existing hard finalization allowance.
+        while formatter.try_wait()?.is_none() {
+            envelope.check_finalization()?;
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+    result
+}
+
+pub(crate) fn set_nonblocking<T: AsRawFd>(value: &T) -> Result<()> {
     let descriptor = value.as_raw_fd();
     let flags = unsafe { libc::fcntl(descriptor, libc::F_GETFL) };
     if flags < 0 || unsafe { libc::fcntl(descriptor, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0
@@ -900,70 +1096,117 @@ fn drain_outputs<O: Read, E: Read>(
     Ok(exceeded)
 }
 
-fn write_frame(result: &TrialChildResult) -> Result<()> {
-    let bytes = serde_json::to_vec(result)?;
-    if bytes.is_empty() || bytes.len() > 1024 * 1024 {
-        return Err("trial result unbounded".into());
+fn write_guarded(
+    output: &mut impl Write,
+    mut bytes: &[u8],
+    check: &impl Fn() -> Result<()>,
+) -> Result<()> {
+    while !bytes.is_empty() {
+        check()?;
+        match output.write(bytes) {
+            Ok(0) => return Err("trial export output closed".into()),
+            Ok(count) => bytes = &bytes[count..],
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error.into()),
+        }
     }
-    let mut output = std::io::stdout().lock();
-    output.write_all(&(bytes.len() as u32).to_be_bytes())?;
-    output.write_all(&bytes)?;
-    match &result.export {
-        Some(TrialExport::CandidateArchive { .. }) => {
-            let mut file = OpenOptions::new()
-                .read(true)
-                .custom_flags(libc::O_NOFOLLOW)
-                .open(Path::new(EXPORT).join("candidate.tar"))?;
-            std::io::copy(&mut file, &mut output)?;
+    check()
+}
+
+fn write_json_frame(
+    output: &mut impl Write,
+    document: &impl serde::Serialize,
+    check: &impl Fn() -> Result<()>,
+) -> Result<()> {
+    check()?;
+    let bytes = serde_json::to_vec(document)?;
+    if bytes.is_empty() || bytes.len() > 1024 * 1024 {
+        return Err("trial frame unbounded".into());
+    }
+    write_guarded(output, &(bytes.len() as u32).to_be_bytes(), check)?;
+    write_guarded(output, &bytes, check)
+}
+
+fn copy_export_file(
+    output: &mut impl Write,
+    path: &Path,
+    byte_count: u64,
+    check: &impl Fn() -> Result<()>,
+) -> Result<()> {
+    check()?;
+    let mut file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)?;
+    if file.metadata()?.len() != byte_count {
+        return Err("trial export length changed".into());
+    }
+    let mut remaining = byte_count;
+    let mut buffer = [0_u8; 65_536];
+    while remaining > 0 {
+        check()?;
+        let maximum = remaining.min(buffer.len() as u64) as usize;
+        let count = file.read(&mut buffer[..maximum])?;
+        if count == 0 {
+            return Err("trial export truncated".into());
+        }
+        write_guarded(output, &buffer[..count], check)?;
+        remaining -= count as u64;
+    }
+    check()?;
+    if file.read(&mut buffer[..1])? != 0 {
+        return Err("trial export grew while streaming".into());
+    }
+    Ok(())
+}
+
+fn write_export(
+    output: &mut impl Write,
+    export: Option<&TrialExport>,
+    check: &impl Fn() -> Result<()>,
+) -> Result<()> {
+    match export {
+        Some(TrialExport::CandidateArchive { byte_count, .. }) => {
+            copy_export_file(
+                output,
+                &Path::new(EXPORT).join("candidate.tar"),
+                *byte_count,
+                check,
+            )?;
         }
         Some(TrialExport::Workspace { files, .. }) => {
             for entry in files {
-                let mut file = OpenOptions::new()
-                    .read(true)
-                    .custom_flags(libc::O_NOFOLLOW)
-                    .open(
-                        Path::new(EXPORT)
-                            .join("workspace.next")
-                            .join(&entry.normalized_path),
-                    )?;
-                let copied = std::io::copy(
-                    &mut Read::by_ref(&mut file).take(entry.byte_count),
-                    &mut output,
+                copy_export_file(
+                    output,
+                    &Path::new(EXPORT)
+                        .join("workspace.next")
+                        .join(&entry.normalized_path),
+                    entry.byte_count,
+                    check,
                 )?;
-                if copied != entry.byte_count {
-                    return Err("workspace export changed while streaming".into());
-                }
             }
         }
         None => {}
     }
-    output.flush()?;
     Ok(())
 }
 
-pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Result<()> {
+pub(crate) fn run(job: &GuestJob, staged: &StagedJob, mut envelope: TrialEnvelope) -> Result<()> {
+    envelope.check()?;
     require_static_tool(LAUNCHER)?;
     require_static_tool(MKFS)?;
-    let request: TrialRequest = serde_json::from_value(job.request.clone())?;
-    if !matches!(
-        (&job.purpose, &request),
-        (GuestPurpose::TrialBuild { .. }, TrialRequest::Build { .. })
-            | (GuestPurpose::TrialStep { .. }, TrialRequest::Step { .. })
-    ) || job.uid == 0
-        || job.gid == 0
-    {
-        return Err("trial purpose invalid".into());
-    }
-    validate_material_contract(job, &request)?;
-    validate_request(job, &request)?;
+    let request = envelope.request.clone();
     prepare_bootstrap(staged, &request, job.uid, job.gid)?;
-    configure_cgroup(request_limits(&request))?;
-    let filesystems = create_filesystems(&request)?;
+    envelope.check()?;
+    let filesystems = create_filesystems(&request, &envelope)?;
     if unsafe { libc::unshare(libc::CLONE_NEWPID) } != 0 {
         return Err(std::io::Error::last_os_error().into());
     }
-    let started = Instant::now();
-    let limits = request_limits(&request);
+    envelope.check()?;
+    let limits = envelope.limits;
     let mut command = Command::new(LAUNCHER);
     command
         .args(launcher_arguments(job, &request)?)
@@ -985,7 +1228,7 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
     let mut stderr_capture = OutputCapture::new();
     let mut output_exceeded = false;
     let mut child_status = None;
-    let deadline = started + Duration::from_millis(limits.timeout_ms);
+
     let mut forced = None;
     let mut cpu_time_ms = 0;
     let mut peak_memory_bytes = 0;
@@ -1017,18 +1260,13 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
         }
         cpu_time_ms = cpu_time_ms.max(cgroup_cpu_ms()?);
         peak_memory_bytes = peak_memory_bytes.max(cgroup_value("memory.peak")?);
-        peak_pids = peak_pids.max(cgroup_value("pids.current")?);
-        let usage = filesystem_usage(&filesystems, false)?;
+        peak_pids = peak_pids.max(cgroup_value("pids.peak")?);
+        let usage = filesystem_usage(&filesystems, false, &envelope)?;
         written_bytes = written_bytes.max(usage.0);
         written_entries = written_entries.max(usage.1);
-        let cause = if Instant::now() >= deadline {
-            Some(TrialTermination::DeadlineExceeded)
-        } else if cpu_time_ms >= limits.cpu_time_ms {
-            Some(TrialTermination::CpuExceeded)
-        } else if cgroup_oom_kills()? > 0 {
-            Some(TrialTermination::MemoryExceeded)
-        } else if cgroup_pid_limit_hits()? > 0 {
-            Some(TrialTermination::PidExceeded)
+        envelope.check_finalization()?;
+        let cause = if let Some(cause) = envelope.cause()? {
+            Some(cause)
         } else if usage.2 {
             Some(TrialTermination::DiskExceeded)
         } else if output_exceeded {
@@ -1038,15 +1276,15 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
         };
         if forced.is_none() && cause.is_some() {
             forced = cause;
-            fs::write(Path::new(CGROUP).join("cgroup.kill"), "1")?;
+            fs::write(Path::new(WORKLOAD_CGROUP).join("cgroup.kill"), "1")?;
         }
         std::thread::sleep(Duration::from_millis(5));
     };
-    let elapsed_ms = started.elapsed().as_millis() as u64;
+
     cpu_time_ms = cpu_time_ms.max(cgroup_cpu_ms()?);
     peak_memory_bytes = peak_memory_bytes.max(cgroup_value("memory.peak")?);
-    peak_pids = peak_pids.max(cgroup_value("pids.current")?);
-    let usage = filesystem_usage(&filesystems, true)?;
+    peak_pids = peak_pids.max(cgroup_value("pids.peak")?);
+    let usage = filesystem_usage(&filesystems, true, &envelope)?;
     written_bytes = written_bytes.max(usage.0);
     written_entries = written_entries.max(usage.1);
     output_exceeded |= drain_outputs(
@@ -1057,14 +1295,8 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
         limits.output_bytes,
     )?;
     if forced.is_none() {
-        forced = if Instant::now() >= deadline {
-            Some(TrialTermination::DeadlineExceeded)
-        } else if cpu_time_ms >= limits.cpu_time_ms {
-            Some(TrialTermination::CpuExceeded)
-        } else if cgroup_oom_kills()? > 0 {
-            Some(TrialTermination::MemoryExceeded)
-        } else if cgroup_pid_limit_hits()? > 0 {
-            Some(TrialTermination::PidExceeded)
+        forced = if let Some(cause) = envelope.cause()? {
+            Some(cause)
         } else if usage.2 {
             Some(TrialTermination::DiskExceeded)
         } else if output_exceeded {
@@ -1083,12 +1315,12 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
     } else {
         None
     };
-    let export_usage = tree_usage(Path::new(EXPORT))?;
+    let export_usage = tree_usage(Path::new(EXPORT), &|| envelope.check_finalization())?;
     let (child, export_outcome, export) = if let Some(status) = launcher {
         let (child, outcome) = classify_status(&request, &status)?;
         if status.candidate_exported {
             let path = Path::new(EXPORT).join("candidate.tar");
-            let (byte_count, sha256) = digest_file(&path)?;
+            let (byte_count, sha256) = digest_file(&path, &|| envelope.check())?;
             (
                 child,
                 outcome,
@@ -1096,7 +1328,7 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
             )
         } else if status.workspace_exported {
             let root = Path::new(EXPORT).join("workspace.next");
-            let (directories, files) = inventory(&root)?;
+            let (directories, files) = inventory(&root, &envelope)?;
             (
                 child,
                 outcome,
@@ -1123,10 +1355,36 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
     written_entries = written_entries
         .checked_add(export_usage.1)
         .ok_or("trial written entry count overflow")?;
+    let output_descriptor = unsafe { libc::dup(libc::STDOUT_FILENO) };
+    if output_descriptor < 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    let mut output = unsafe { File::from_raw_fd(output_descriptor) };
+    set_nonblocking(&output)?;
+    let header = TrialExportHeader {
+        schema_version: TRIAL_EXPORT_PROTOCOL.into(),
+        operation_id: request_operation(&request).into(),
+        export: export.clone(),
+    };
+    // An interrupted raw payload has no final receipt and cannot be admitted.
+    let check_stream = || {
+        if forced.is_some() {
+            envelope.check_finalization()
+        } else {
+            envelope.check()
+        }
+    };
+    write_json_frame(&mut output, &header, &check_stream)?;
+    write_export(&mut output, export.as_ref(), &check_stream)?;
+    output.flush()?;
     for filesystem in filesystems.into_iter().rev() {
+        envelope.check_finalization()?;
         filesystem.cleanup()?;
     }
-    cleanup_cgroup()?;
+    let measurements = envelope.finish()?;
+    cpu_time_ms = cpu_time_ms.max(measurements.cpu_time_ms);
+    peak_memory_bytes = peak_memory_bytes.max(measurements.peak_memory_bytes);
+    peak_pids = peak_pids.max(measurements.peak_pids);
     let result = TrialChildResult {
         schema_version: TRIAL_CHILD_PROTOCOL.into(),
         operation_id: request_operation(&request).into(),
@@ -1136,7 +1394,7 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
             TrialTermination::Exited
         }),
         child,
-        elapsed_ms,
+        elapsed_ms: measurements.elapsed_ms,
         cpu_time_ms,
         peak_memory_bytes,
         peak_pids,
@@ -1154,18 +1412,28 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
     if !result.terminal_facts_are_valid() {
         return Err("trial terminal facts invalid".into());
     }
-    write_frame(&result)
+    write_json_frame(&mut output, &result, &|| {
+        if Instant::now() >= envelope.finalization_deadline {
+            Err("trial final receipt deadline reached".into())
+        } else {
+            Ok(())
+        }
+    })?;
+    output.flush()?;
+    Ok(())
 }
 
-fn inventory(root: &Path) -> Result<(Vec<String>, Vec<MaterialFile>)> {
+fn inventory(root: &Path, envelope: &TrialEnvelope) -> Result<(Vec<String>, Vec<MaterialFile>)> {
     let mut directories = Vec::new();
     let mut files = Vec::new();
     let mut pending = vec![PathBuf::new()];
     while let Some(relative) = pending.pop() {
+        envelope.check()?;
         let mut entries =
             fs::read_dir(root.join(&relative))?.collect::<std::io::Result<Vec<_>>>()?;
         entries.sort_by_key(|entry| entry.file_name());
         for entry in entries {
+            envelope.check()?;
             let path = entry.path();
             let child = relative.join(entry.file_name());
             let normalized = child.to_str().ok_or("workspace path invalid")?.to_owned();
@@ -1174,7 +1442,7 @@ fn inventory(root: &Path) -> Result<(Vec<String>, Vec<MaterialFile>)> {
                 directories.push(normalized);
                 pending.push(child);
             } else if metadata.file_type().is_file() {
-                let (byte_count, sha256) = digest_file(&path)?;
+                let (byte_count, sha256) = digest_file(&path, &|| envelope.check())?;
                 files.push(MaterialFile {
                     normalized_path: normalized,
                     byte_count,
@@ -1194,14 +1462,16 @@ fn inventory(root: &Path) -> Result<(Vec<String>, Vec<MaterialFile>)> {
 // Run after the child has stopped. Skip nested mounts: each bounded filesystem
 // is measured independently, and image/input bind mounts retain their own
 // existing custody charge. Sparse file lengths still consume logical allowance.
-fn logical_filesystem_usage(root: &Path) -> Result<(u64, u64)> {
+fn logical_filesystem_usage(root: &Path, check: &impl Fn() -> Result<()>) -> Result<(u64, u64)> {
     let root_metadata = fs::symlink_metadata(root)?;
     let device = root_metadata.dev();
     let mut bytes = 0_u64;
     let mut entries = 1_u64;
     let mut pending = vec![root.to_owned()];
     while let Some(directory) = pending.pop() {
+        check()?;
         for entry in fs::read_dir(directory)? {
+            check()?;
             let entry = entry?;
             let metadata = fs::symlink_metadata(entry.path())?;
             if metadata.dev() != device {
@@ -1222,7 +1492,7 @@ fn logical_filesystem_usage(root: &Path) -> Result<(u64, u64)> {
     Ok((bytes, entries))
 }
 
-fn tree_usage(root: &Path) -> Result<(u64, u64)> {
+fn tree_usage(root: &Path, check: &impl Fn() -> Result<()>) -> Result<(u64, u64)> {
     let metadata = fs::symlink_metadata(root)?;
     if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
         return Err("trial export root invalid".into());
@@ -1234,7 +1504,9 @@ fn tree_usage(root: &Path) -> Result<(u64, u64)> {
     let mut entries = 1_u64;
     let mut pending = vec![root.to_owned()];
     while let Some(directory) = pending.pop() {
+        check()?;
         for entry in fs::read_dir(directory)? {
+            check()?;
             let entry = entry?;
             let metadata = fs::symlink_metadata(entry.path())?;
             let allocated = metadata
@@ -1320,18 +1592,18 @@ mod tests {
     #[test]
     fn export_usage_charges_directory_storage_and_sparse_logical_lengths() {
         let root = fixture("usage");
-        let empty = tree_usage(&root).unwrap();
+        let empty = tree_usage(&root, &|| Ok(())).unwrap();
         let file = File::create(root.join("sparse")).unwrap();
         file.set_len(1024 * 1024).unwrap();
         fs::create_dir(root.join("directory")).unwrap();
         fs::write(root.join("directory/status.json"), "{}").unwrap();
-        let measured = tree_usage(&root).unwrap();
+        let measured = tree_usage(&root, &|| Ok(())).unwrap();
         assert_eq!(empty.1, 1);
         assert!(empty.0 >= fs::metadata(&root).unwrap().blocks() * 512);
         assert_eq!(measured.1, 4);
         assert!(measured.0 >= 1024 * 1024 + empty.0 + 2);
         assert_eq!(
-            logical_filesystem_usage(&root).unwrap(),
+            logical_filesystem_usage(&root, &|| Ok(())).unwrap(),
             (1024 * 1024 + 2, 4)
         );
         fs::remove_dir_all(root).unwrap();
@@ -1346,8 +1618,8 @@ mod tests {
             "dockerfile_relative": "source/Containerfile",
             "platform": "linux/amd64",
             "destination": "workstream-trial:abc",
-            "limits": {"cpu_quota_millis":1000,"cpu_time_ms":1000,"memory_bytes":1048576,
-                       "pids":8,"timeout_ms":1000,"output_bytes":4096},
+            "limits": {"cpu_quota_millis":1000,"cpu_time_ms":1000,"finalization_cpu_time_ms":1100,"memory_bytes":1048576,
+                       "pids":8,"timeout_ms":1000,"finalization_timeout_ms":1100,"output_bytes":4096},
             "root": {"bytes":4194304,"entries":32},
             "tmp": {"bytes":4194304,"entries":32},
             "shm": {"bytes":4194304,"entries":32},
@@ -1355,6 +1627,84 @@ mod tests {
             "output_max_bytes":4096
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn trial_limits_reserve_three_processes_and_bound_finalization() {
+        let limits = request_limits(&build_request());
+        assert!(valid_child_limits(limits));
+        assert!(!valid_child_limits(TrialChildLimits { pids: 2, ..limits }));
+        assert!(valid_child_limits(TrialChildLimits { pids: 3, ..limits }));
+        assert!(!valid_child_limits(TrialChildLimits {
+            finalization_cpu_time_ms: limits.cpu_time_ms - 1,
+            ..limits
+        }));
+        assert!(!valid_child_limits(TrialChildLimits {
+            finalization_timeout_ms: limits.timeout_ms - 1,
+            ..limits
+        }));
+    }
+
+    #[test]
+    fn hashing_and_export_streaming_obey_the_same_cancellation_boundary() {
+        let root = fixture("bounded-stream");
+        let path = root.join("payload");
+        fs::write(&path, vec![7_u8; 4 * 65_536]).unwrap();
+        let checks = std::cell::Cell::new(0);
+        let check = || -> Result<()> {
+            checks.set(checks.get() + 1);
+            if checks.get() >= 4 {
+                Err("cancelled".into())
+            } else {
+                Ok(())
+            }
+        };
+        assert!(digest_file(&path, &check).is_err());
+        checks.set(0);
+        let mut output = Vec::new();
+        assert!(copy_export_file(&mut output, &path, 4 * 65_536, &check).is_err());
+        assert!(output.len() <= 65_536);
+        assert!(output.len() < 4 * 65_536);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn blocked_export_cannot_prevent_deadline_checks() {
+        struct Blocked;
+        impl Write for Blocked {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::ErrorKind::WouldBlock.into())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let checks = std::cell::Cell::new(0);
+        let result = write_guarded(&mut Blocked, b"payload", &|| {
+            checks.set(checks.get() + 1);
+            if checks.get() >= 3 {
+                Err("deadline".into())
+            } else {
+                Ok(())
+            }
+        });
+        assert!(result.is_err());
+        assert_eq!(checks.get(), 3);
+    }
+
+    #[test]
+    fn continuous_output_yields_to_resource_checks_before_capture_is_full() {
+        struct Producer;
+        impl Read for Producer {
+            fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+                bytes.fill(b'x');
+                Ok(bytes.len())
+            }
+        }
+        let mut capture = OutputCapture::new();
+        assert!(!capture.drain(&mut Producer, 1024 * 1024).unwrap());
+        assert!(!capture.eof);
+        assert_eq!(capture.bytes, 65_536);
     }
 
     #[test]

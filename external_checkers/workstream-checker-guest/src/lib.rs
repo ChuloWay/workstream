@@ -10,7 +10,11 @@ pub const EXECUTION_SOCKET: &str = "/work/execution.sock";
 pub const GUEST_IO_PROTOCOL: &str = "workstream.smol_guest_io.v1";
 pub const MODEL_FRAME_MAXIMUM: usize = 1024 * 1024;
 pub const EXECUTION_FRAME_MAXIMUM: usize = 4 * 1024 * 1024;
+pub const TRIAL_REQUEST_PROTOCOL: &str = "workstream.smol_trial_request.v1";
 pub const TRIAL_CHILD_PROTOCOL: &str = "workstream.smol_trial_child.v1";
+pub const TRIAL_EXPORT_PROTOCOL: &str = "workstream.smol_trial_export.v1";
+/// Trusted supervisor, launcher PID 1 and one candidate process share this cap.
+pub const MINIMUM_TRIAL_PIDS: u64 = 3;
 /// Minimum independently bounded ext4 partition accepted by the trusted guest.
 pub const MINIMUM_TRIAL_FILESYSTEM_BYTES: u64 = 4 * 1024 * 1024;
 pub const MINIMUM_TRIAL_FILESYSTEM_ENTRIES: u64 = 32;
@@ -119,9 +123,11 @@ pub struct TrialFilesystemLimit {
 pub struct TrialChildLimits {
     pub cpu_quota_millis: u64,
     pub cpu_time_ms: u64,
+    pub finalization_cpu_time_ms: u64,
     pub memory_bytes: u64,
     pub pids: u64,
     pub timeout_ms: u64,
+    pub finalization_timeout_ms: u64,
     pub output_bytes: u64,
 }
 
@@ -224,6 +230,16 @@ pub enum TrialExport {
         directories: Vec<String>,
         files: Vec<MaterialFile>,
     },
+}
+
+/// A bounded manifest for the raw payload preceding the final measurement.
+/// Only a matching closed terminal result can admit this provisional export.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TrialExportHeader {
+    pub schema_version: String,
+    pub operation_id: String,
+    pub export: Option<TrialExport>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
