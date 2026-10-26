@@ -116,13 +116,34 @@ package-download cache mount exists only on the builder; it is not retained in
 the image. Runtime image inspection uses `uv --no-cache pip check` and bounded
 temporary storage.
 
-The scoped [release-image workflow](../../.github/workflows/release-images.yml)
+For native hosted backend-image proof, use the existing verifier with the
+explicit `native-hosted` scope from a clean checkout of the exact source:
+
+```sh
+python3 scripts/verify_hosted_release_images.py --scope native-hosted \
+  --expected-head <source-commit> --container-owner <numeric-run>-<attempt> \
+  --backend-agents-image <agents-image> \
+  --backend-omnicore-image <omnicore-image> \
+  --evidence /private/backend-image-evidence.json
+```
+
+This scope proves both backend SDK images without requiring a checker controller
+OCI image. It rejects `--checker-image` and records a closed backend-only
+evidence shape. Installed native service, Smol, guest and cache identities remain
+the full preflight's responsibility. Backend-image proof establishes no native
+readiness or hosted journey result.
+
+The [release-image workflow](../../.github/workflows/release-images.yml)
 runs for release definitions and copied backend/checker source changes, building
 the exact PR head without cache, publication or deployment credentials.
 It first requires the canonical AWS Settings owner, then checks the copied
 application/migration files, lockfiles, secret loader, production dependency
 closure and default image commands. Bounded networkless containers verify the
-Docker CLI and the checker's expected missing-configuration failure; they do not
+Docker CLI and the checker's expected missing-configuration failure for the
+separate controller artifact still used by the opt-in
+[local agent-loop overlay](../../docker-compose.agent-loop.yml). The default
+`all-release-images` verifier scope retains that artifact's regression proof;
+it is not a native hosted deployment prerequisite. These checks do not
 start Workstream or run a project checker. Its fixed JSON artifact records source
 identity and local image IDs, not publishable repository digests. Full hosted
 operation remains separate evidence. The proof builds and inspects both SDK
