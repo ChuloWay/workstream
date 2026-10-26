@@ -1,7 +1,7 @@
 # POST model provider selection
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Model-backed POST checks select their supported provider from the locked project profile; OpenRouter-only deployments need no OpenAI credential.
 
 ## Intent
@@ -11,12 +11,12 @@ checks must remain independent of models. For inference, the provider/model is a
 profile choice, not an OpenAI requirement imposed by the proxy. Preserve shared
 project budgets, exact paid-call custody, immutable evidence and no blind retry.
 
-## Current behavior
+## Gap addressed
 
-`configured_model_provider` accepts only `openai_responses/responses.v1` and its
-factory registers only OpenAI. Setup already supports OpenRouter. Hosted proxy
-composition and entrypoint require both provider secrets regardless of selection.
-The optional model execution wrapper already passes ordinary checks through.
+Before this repair, `configured_model_provider` accepted only `openai_responses/responses.v1` and its
+factory registered only OpenAI. Setup already supported OpenRouter. Hosted proxy
+composition and entrypoint required both provider secrets regardless of selection.
+The optional model execution wrapper already passed ordinary checks through.
 
 ## Bounded change
 
@@ -72,13 +72,13 @@ OpenRouter-only, OpenAI-only and dual-provider configurations.
 
 ## Acceptance criteria
 
-- [ ] An OpenRouter POST profile dispatches through the real adapter/HTTP parser with no OpenAI credential; an OpenAI profile still selects its adapter; unsupported profiles deny.
-- [ ] Exact model/usage/output bounds, pricing metadata and no routing fallback or automatic paid retry are enforced; malformed/nonterminal/foreign-model output cannot settle as success.
-- [ ] Persisted success settles/replays once with exact ART evidence; lost/ambiguous output stays held without a second paid invocation; provider recovery never creates.
-- [ ] Ordinary POST checks construct no model provider and spend no model budget.
-- [ ] OpenRouter-only, OpenAI-only and dual-provider hosted composition/entrypoint load only configured secrets; missing selected credentials fail closed; other roles receive none.
-- [ ] Existing OpenAI/setup behavior, current AWS proof policy, authorization and immutable custody remain protected.
-- [ ] Current docs/default examples describe optional model checks and supported profile-based dispatch accurately.
+- [x] An OpenRouter POST profile dispatches through the real adapter/HTTP parser with no OpenAI credential; an OpenAI profile still selects its adapter; unsupported profiles deny.
+- [x] Exact model/usage/output bounds, pricing metadata and no routing fallback or automatic paid retry are enforced; malformed/nonterminal/foreign-model output cannot settle as success.
+- [x] Persisted success settles/replays once with exact ART evidence; lost/ambiguous output stays held without a second paid invocation; provider recovery never creates.
+- [x] Ordinary POST checks construct no model provider and spend no model budget.
+- [x] OpenRouter-only, OpenAI-only and dual-provider hosted composition/entrypoint load only configured secrets; missing selected credentials fail closed; other roles receive none.
+- [x] Existing OpenAI/setup behavior, current AWS proof policy, authorization and immutable custody remain protected.
+- [x] Current docs/default examples describe optional model checks and supported profile-based dispatch accurately.
 
 ## Risk and review routing
 
@@ -88,15 +88,15 @@ OpenRouter-only, OpenAI-only and dual-provider configurations.
 
 ## Evidence
 
-Plan review precedes implementation. Named regressions in `test_openrouter.py`
+Plan review preceded implementation. Named regressions in `test_openrouter.py`
 cover metadata refusal before POST, one bounded nonstreaming dispatch with fixed
 routing/plugins, exact single-choice/status parsing, identity/usage/output
 substitution, uncertain no-second-POST and recovery with zero I/O.
 `test_model_runtime.py` covers both exact profile pairs, selected-key isolation,
 unknown-pair denial, and client close. Extend existing `test_composed_execution.py`
 with a controlled real OpenRouter HTTP adapter to prove PostgreSQL/ART success
-settlement/replay and held ambiguous response with no redispatch. Existing ordinary
-POST no-model tests remain and are exercised. Setup contract tests protect extraction.
+settlement/replay and held ambiguous response with no redispatch. The ordinary
+POST regression rejects any model-budget database access and requires no credentials. Setup contract tests protect extraction.
 Hosted tests cover disabled/single/dual credentials in rendered Compose and the
 real entrypoint, rejection of missing selected credentials and role isolation.
 
