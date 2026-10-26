@@ -209,8 +209,8 @@ project-rule catalogue or alternate checker runtime.
 An approved POST image may use the same Rust service's generic, typed,
 invocation-local isolated-trial tool only under an exact registry/image/
 configuration and administrative-profile binding. ART retains material and
-scratch ownership; the service retains offline builder/cache, Docker/runsc,
-resource, observation and cleanup custody. The image can supply only bounded
+scratch ownership; the service retains offline builder/cache, Smol microVM
+trial execution, resource, observation and cleanup custody. The image can supply only bounded
 relative workload operations through the request-bound socket. It cannot select
 host Docker arguments, paths, mounts, images, runtime, network or credentials,
 and it cannot trigger host work by returning a private continuation as its final

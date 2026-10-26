@@ -348,9 +348,9 @@ ART owns verified read-only inputs and canonical bounded scratch. The service
 projects only profile-authorized build/runtime roles, uses a networkless
 digest-pinned offline builder under the configured sandbox, loads exactly one
 owned candidate image, and runs fresh non-root, capability-free trials with no
-host socket or device. The digest-pinned launcher creates bounded filesystems
-inside the sandbox, then drops mount/chroot authority before running submitted
-commands. Builder code retains only its three required file capabilities;
+host socket or device. The pinned guest supervisor creates bounded ext4 filesystems inside each
+trial VM. The digest-pinned launcher mounts them and drops mount/chroot
+authority before running submitted commands. Builder code retains only its three required file capabilities;
 trial commands run as nonroot with no capabilities. Neither can reach the
 private bootstrap or host export directory. Exports belong to the nonroot
 service so it can read and remove complete and partial output.
@@ -366,9 +366,15 @@ stopping descendants and unmounting the role. No protected content or mount
 placeholder enters retained state. Build-context and state-seed projections
 still support safe nested relative paths.
 
-CPU, memory/swap, PID and wall-time bounds include the whole container,
-including the trusted launcher, build and export work. PID limits below two
-are refused before launch. Projected files, retained images and workspaces,
+Trial execution uses Smol microVMs only. CPU, memory/swap, PID and wall-time
+bounds cover the trusted supervisor, input staging, filesystem preparation,
+launcher, workload and export. PID limits below three are refused before launch
+(supervisor, launcher and candidate). Work thresholds leave only the approved
+finalization overrun for bounded export and cleanup; they add no new allowance.
+The guest streams an export header and bytes before its final measured receipt.
+The host accepts that receipt only after matching identity, verified bytes,
+confirmed guest cleanup, successful process exit and exact EOF. VM cleanup
+must also succeed before observations can be published. Projected files, retained images and workspaces,
 temporary filesystems and export copies share one invocation byte/entry budget.
 Missing prepared material, launch/cache failure, platform capacity exhaustion,
 cancellation and uncertain cleanup are infrastructure outcomes. An observed
@@ -409,7 +415,7 @@ image/profile. An outer `project_private_plan.v1` remains invalid output and
 cannot request host work.
 
 The service holds a nonblocking exclusive lock on the validated private socket
-parent for the listener lifetime. It acquires that custody before Docker
+parent for the listener lifetime. It acquires that custody before engine
 validation or recovery, so a losing concurrent startup cannot inspect or clean
 the live owner's resources. Startup preserves a live listener and every foreign
 or linked path, but may remove a connection-refused socket only after its owned
@@ -423,7 +429,13 @@ orphan reconciliation, never generic adoption. Work commands share the request
 deadline/output meter and poll cancellation. Emergency cleanup has its separate
 bounded budget. Unsettled cleanup suppresses the result and prevents another
 request from being admitted; restart reconciles owned resources while retaining
-socket-parent custody. Project code cannot authorize additional host containers
+socket-parent custody. Smol trial roots carry persistent deployment-owner and
+root-inode markers. Startup preflights all owned roots and VM leases before
+cleanup, then recovers stale private scratch, relay sockets and child homes.
+Unknown, foreign or linked paths refuse readiness and remain untouched.
+Node admission reserves the approved peak child memory, including its existing
+overrun, and quarantines the node when cleanup cannot be confirmed.
+Project code cannot authorize additional host containers
 or access to the host Docker socket by returning a private plan.
 
 The Rust launcher owns sandbox execution; durable CHECKERS owners retain

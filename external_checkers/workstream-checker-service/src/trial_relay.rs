@@ -1016,7 +1016,7 @@ fn validate_plan(plan: &TrialPlan, profile: &TrialProfile) -> Result<(), TrialRe
         || plan.resources.disk_bytes > profile.maximum_disk_bytes
         || plan.resources.maximum_entries == 0
         || plan.resources.maximum_entries > profile.maximum_entries
-        || plan.resources.pids < 2
+        || plan.resources.pids < workstream_checker_guest::MINIMUM_TRIAL_PIDS
         || plan.resources.pids > profile.maximum_pids
     {
         return Err(TrialRelayFailure::InvalidRequest);

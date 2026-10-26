@@ -25,6 +25,20 @@ fn assert_guest_filesystem_supported(bytes: u64, entries: u64) {
     assert!(entries >= workstream_checker_guest::MINIMUM_TRIAL_FILESYSTEM_ENTRIES);
 }
 
+fn allocated_file_lengths(path: &std::path::Path) -> u64 {
+    fs::read_dir(path)
+        .unwrap()
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                allocated_file_lengths(&path)
+            } else {
+                fs::metadata(path).unwrap().len()
+            }
+        })
+        .sum()
+}
+
 static SEQUENCE: AtomicUsize = AtomicUsize::new(0);
 
 struct Root(PathBuf);
@@ -119,6 +133,16 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
         ] {
             assert_guest_filesystem_supported(bytes, entries);
         }
+        let host = allocated_file_lengths(request.context_root.parent().unwrap());
+        let staged = allocated_file_lengths(&request.context_root);
+        let guest = request.launcher_root_bytes
+            + request.launcher_temporary_bytes
+            + request.launcher_shared_memory_bytes
+            + 2 * request.launcher_candidate_bytes;
+        assert!(
+            host + staged + guest <= request.resources.disk_bytes,
+            "host custody, guest staging and both candidate export copies must fit together"
+        );
         self.builds.fetch_add(1, Ordering::Relaxed);
         assert!(request.context_root.join("source/main.txt").is_file());
         assert!(!request.context_root.join("protected/canary.txt").exists());
@@ -162,6 +186,22 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
         ] {
             assert_guest_filesystem_supported(bytes, entries);
         }
+        let host =
+            allocated_file_lengths(request.workspace_root.parent().unwrap().parent().unwrap());
+        let staged = allocated_file_lengths(&request.workspace_root)
+            + request
+                .visible_roles
+                .iter()
+                .map(|role| allocated_file_lengths(&role.path))
+                .sum::<u64>();
+        let guest = request.launcher_root_bytes
+            + request.launcher_temporary_bytes
+            + request.launcher_shared_memory_bytes
+            + 3 * request.launcher_workspace_bytes;
+        assert!(
+            host + staged + guest <= request.resources.disk_bytes,
+            "host custody, guest staging and both workspace export copies must fit together"
+        );
         self.steps.fetch_add(1, Ordering::Relaxed);
         assert_eq!(request.visible_roles.len(), 1);
         assert_eq!(request.visible_roles[0].role, "protected");
@@ -780,4 +820,25 @@ fn sequential_operations_receive_only_the_remaining_cpu_time() {
         execution.steps[2].outcome,
         TrialOperationOutcome::DependencySkipped
     );
+}
+
+#[test]
+fn large_context_guest_copy_is_reserved_before_mutable_filesystems() {
+    let root = Root::new();
+    let context = context(&root);
+    let source = context
+        .verified_material_root
+        .join("submission_archive/source/main.txt");
+    fs::write(source, vec![b'x'; 10 * 1024 * 1024]).unwrap();
+    let backend = Arc::new(FakeBackend::default());
+    let result = GenericTrialEngine::new(backend.clone()).execute(
+        &context,
+        &plan(),
+        Instant::now() + Duration::from_secs(15),
+        &AtomicBool::new(false),
+        &AtomicBool::new(false),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(backend.builds.load(Ordering::Relaxed), 1);
+    assert_eq!(backend.steps.load(Ordering::Relaxed), 1);
 }

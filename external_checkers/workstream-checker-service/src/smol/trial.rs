@@ -357,21 +357,35 @@ fn measure_baseline(
     .map_err(image_archive_failure)?;
     let baseline = SandboxBaselineUsage {
         bytes: [
-            cache_usage.bytes,
+            cache_usage
+                .bytes
+                .checked_mul(2)
+                .ok_or(SmolTrialRuntimeFailure::CapacityExceeded)?,
+            cache_usage
+                .entries
+                .checked_mul(4096)
+                .ok_or(SmolTrialRuntimeFailure::CapacityExceeded)?,
             builder_archive_bytes,
             builder_config_bytes,
             builder_facts.expanded_bytes,
-            launcher_bytes,
-            filesystem_tool_bytes,
-            guest_bytes,
+            launcher_bytes
+                .checked_mul(2)
+                .ok_or(SmolTrialRuntimeFailure::CapacityExceeded)?,
+            filesystem_tool_bytes
+                .checked_mul(2)
+                .ok_or(SmolTrialRuntimeFailure::CapacityExceeded)?,
+            guest_bytes
+                .checked_mul(2)
+                .ok_or(SmolTrialRuntimeFailure::CapacityExceeded)?,
         ]
         .into_iter()
         .try_fold(0_u64, |sum, value| sum.checked_add(value))
         .ok_or(SmolTrialRuntimeFailure::CapacityExceeded)?,
         entries: cache_usage
             .entries
-            .checked_add(builder_facts.expanded_entries)
-            .and_then(|value| value.checked_add(5))
+            .checked_mul(2)
+            .and_then(|value| value.checked_add(builder_facts.expanded_entries))
+            .and_then(|value| value.checked_add(8))
             .ok_or(SmolTrialRuntimeFailure::CapacityExceeded)?,
     };
     if baseline.bytes == 0
@@ -404,13 +418,15 @@ fn limits(
     Ok((
         TrialChildLimits {
             cpu_quota_millis: request.resources.cpu_quota_millis,
-            cpu_time_ms: request
+            cpu_time_ms: request.remaining_cpu_time_ms,
+            finalization_cpu_time_ms: request
                 .remaining_cpu_time_ms
                 .checked_add(request.enforcement_overruns.cpu_time_ms)
                 .ok_or(SmolTrialRuntimeFailure::CapacityExceeded)?,
             memory_bytes: memory,
             pids,
-            timeout_ms: request
+            timeout_ms: request.timeout_ms,
+            finalization_timeout_ms: request
                 .timeout_ms
                 .checked_add(request.enforcement_overruns.wall_time_ms)
                 .ok_or(SmolTrialRuntimeFailure::CapacityExceeded)?,
@@ -445,13 +461,15 @@ fn step_limits(
     Ok((
         TrialChildLimits {
             cpu_quota_millis: request.resources.cpu_quota_millis,
-            cpu_time_ms: request
+            cpu_time_ms: request.remaining_cpu_time_ms,
+            finalization_cpu_time_ms: request
                 .remaining_cpu_time_ms
                 .checked_add(request.enforcement_overruns.cpu_time_ms)
                 .ok_or(SmolTrialRuntimeFailure::CapacityExceeded)?,
             memory_bytes: memory,
             pids,
-            timeout_ms: request
+            timeout_ms: request.timeout_ms,
+            finalization_timeout_ms: request
                 .timeout_ms
                 .checked_add(request.enforcement_overruns.wall_time_ms)
                 .ok_or(SmolTrialRuntimeFailure::CapacityExceeded)?,
@@ -714,7 +732,7 @@ impl SmolTrialRuntime for Runtime {
         let materials = vec![context, cache];
         let operation = trial_io::operation_id(owner, "build");
         let trial_request = TrialRequest::Build {
-            schema_version: workstream_checker_guest::TRIAL_CHILD_PROTOCOL.into(),
+            schema_version: workstream_checker_guest::TRIAL_REQUEST_PROTOCOL.into(),
             operation_id: operation.clone(),
             context_relative: request.context_relative.clone(),
             dockerfile_relative: request.dockerfile_relative.clone(),
@@ -954,7 +972,7 @@ impl SmolTrialRuntime for Runtime {
         }
         let operation = trial_io::operation_id(owner, &request.slot_id);
         let trial_request = TrialRequest::Step {
-            schema_version: workstream_checker_guest::TRIAL_CHILD_PROTOCOL.into(),
+            schema_version: workstream_checker_guest::TRIAL_REQUEST_PROTOCOL.into(),
             operation_id: operation.clone(),
             visible_roles: visible,
             limits: child_limits,

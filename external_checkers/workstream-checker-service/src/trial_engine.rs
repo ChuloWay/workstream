@@ -276,8 +276,9 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
         create_accounted_directory(&owned.root.join("exports"), &mut invocation_budget)?;
         let archive = output.join("candidate.tar");
         let destination = format!("workstream-trial:{}", &owned.owner_id[6..]);
-        let (build_disk_bytes, build_entries) = invocation_budget.mutable_allowance(&output)?;
-        let build_allowances = invocation_budget.build_allowances()?;
+        let build_budget = invocation_budget.with_guest_copies(&[projected.as_path()])?;
+        let (build_disk_bytes, build_entries) = build_budget.mutable_allowance(&output)?;
+        let build_allowances = build_budget.build_allowances()?;
         let mut cpu_time_used = 0_u64;
         let build = self
             .backend
@@ -377,11 +378,7 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                         .ok_or_else(implementation_failure)?;
                     copy_tree(source, &workspace, &mut invocation_budget)?;
                 }
-                let (mutable_disk_bytes, mutable_entries) =
-                    invocation_budget.mutable_allowance(&workspace)?;
                 create_accounted_directory(&export_root, &mut invocation_budget)?;
-                let step_allowances = invocation_budget
-                    .step_allowances(&workspace, step.visible_roles.len() as u64)?;
                 let visible_roles = step
                     .visible_roles
                     .iter()
@@ -395,6 +392,13 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                         })
                     })
                     .collect::<Result<Vec<_>, TrialEngineFailure>>()?;
+                let mut staged_roots = vec![workspace.as_path()];
+                staged_roots.extend(visible_roles.iter().map(|role| role.path.as_path()));
+                let step_budget = invocation_budget.with_guest_copies(&staged_roots)?;
+                let (mutable_disk_bytes, mutable_entries) =
+                    step_budget.mutable_allowance(&workspace)?;
+                let step_allowances =
+                    step_budget.step_allowances(&workspace, step.visible_roles.len() as u64)?;
                 let visible_role_inventory_digests = step
                     .visible_roles
                     .iter()
@@ -768,10 +772,12 @@ struct ProjectionBudget {
     bytes_left: u64,
 }
 
-const LAUNCHER_BOOTSTRAP_BYTES: u64 = 64 * 1024;
+// Closed command/manifest maximum plus bounded status and filesystem control
+// files. This is taken from the existing invocation budget, never added to it.
+const LAUNCHER_BOOTSTRAP_BYTES: u64 = workstream_checker_guest::MAX_JOB_BYTES as u64 + 64 * 1024;
 // The trusted bootstrap has a fixed mount skeleton; submitted code never sees
 // it. Charge every launcher-created top-level entry conservatively.
-const LAUNCHER_BOOTSTRAP_ENTRIES: u64 = 8;
+const LAUNCHER_BOOTSTRAP_ENTRIES: u64 = 64;
 
 struct BuildAllowances {
     root_bytes: u64,
@@ -830,6 +836,24 @@ impl ProjectionBudget {
         ))
     }
 
+    /// Reserve transient guest material copies while host custody is retained.
+    /// One block per entry covers directory/allocation rounding, including roots.
+    /// The returned budget is operation-local and is released only after the
+    /// backend confirms that its VM and exported temporary copies are settled.
+    fn with_guest_copies(&self, roots: &[&Path]) -> Result<Self, TrialEngineFailure> {
+        let mut operation = *self;
+        for root in roots {
+            let (bytes, entries) = owned_tree_usage(root)?;
+            let entries = entries.checked_add(1).ok_or_else(capacity_failure)?;
+            let allocated = entries
+                .checked_mul(4096)
+                .and_then(|overhead| bytes.checked_add(overhead))
+                .ok_or_else(capacity_failure)?;
+            operation.reserve_retained(allocated, entries)?;
+        }
+        Ok(operation)
+    }
+
     fn build_allowances(&self) -> Result<BuildAllowances, TrialEngineFailure> {
         let remaining_bytes = self
             .bytes_left
@@ -846,9 +870,15 @@ impl ProjectionBudget {
             .and_then(|value| value.checked_sub(temporary_bytes))
             .and_then(|value| value.checked_sub(shared_memory_bytes))
             .ok_or_else(capacity_failure)?;
-        let candidate_bytes = root_and_candidate / 3;
+        // Candidate bytes coexist in the bounded build root, guest export and
+        // host export. Reserve both export copies outside the build partition.
+        let candidate_bytes = root_and_candidate / 4;
         let root_bytes = root_and_candidate
-            .checked_sub(candidate_bytes)
+            .checked_sub(
+                candidate_bytes
+                    .checked_mul(2)
+                    .ok_or_else(capacity_failure)?,
+            )
             .ok_or_else(capacity_failure)?;
         if candidate_bytes == 0
             || root_bytes < candidate_bytes
@@ -917,7 +947,7 @@ impl ProjectionBudget {
             .and_then(|value| value.checked_sub(temporary_bytes))
             .and_then(|value| value.checked_sub(shared_memory_bytes))
             .ok_or_else(capacity_failure)?
-            / 2;
+            / 3;
 
         let entries_after_fixed = self
             .entries_left
@@ -932,7 +962,7 @@ impl ProjectionBudget {
             .checked_sub(temporary_entries)
             .and_then(|value| value.checked_sub(shared_memory_entries))
             .ok_or_else(capacity_failure)?
-            / 2;
+            / 3;
         let (existing_bytes, existing_entries) = owned_tree_usage(workspace)?;
         if workspace_bytes < existing_bytes.max(MINIMUM_TRIAL_FILESYSTEM_BYTES)
             || workspace_entries < existing_entries.max(MINIMUM_TRIAL_FILESYSTEM_ENTRIES)

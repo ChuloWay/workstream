@@ -11,8 +11,8 @@ use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::path::{Component, Path, PathBuf};
 use std::process::ChildStdout;
 use workstream_checker_guest::{
-    GuestJob, MaterialRoot, TrialChildResult, TrialExport, TrialExportOutcome, TrialTermination,
-    TRIAL_CHILD_PROTOCOL,
+    GuestJob, MaterialRoot, TrialChildResult, TrialExport, TrialExportHeader, TrialExportOutcome,
+    TrialTermination, TRIAL_CHILD_PROTOCOL, TRIAL_EXPORT_PROTOCOL,
 };
 use workstream_checker_sdk::canonical_hash;
 
@@ -305,24 +305,11 @@ fn prepare_workspace(
 
 fn receive_export(
     output: &mut ChildStdout,
-    result: &TrialChildResult,
+    export: &Option<TrialExport>,
     target: &ExportTarget<'_>,
     guard: &IoGuard<'_>,
 ) -> Result<(), String> {
-    let has_export = result.export.is_some();
-    if (result.export_outcome == TrialExportOutcome::Exported) != has_export
-        || (has_export
-            && matches!(
-                result.export_outcome,
-                TrialExportOutcome::CapacityExceeded
-                    | TrialExportOutcome::Invalid
-                    | TrialExportOutcome::Unavailable
-                    | TrialExportOutcome::NotStarted
-            ))
-    {
-        return Err("trial export outcome differs".into());
-    }
-    match (&result.export, target) {
+    match (export, target) {
         (
             Some(TrialExport::CandidateArchive { byte_count, sha256 }),
             ExportTarget::Candidate {
@@ -381,6 +368,21 @@ fn remove_partial(target: &ExportTarget<'_>) {
     }
 }
 
+fn receive_frame<T: serde::de::DeserializeOwned>(
+    output: &mut ChildStdout,
+    guard: &IoGuard<'_>,
+) -> Result<T, String> {
+    let mut length = [0_u8; 4];
+    io::read_exact(output, &mut length, guard)?;
+    let length = u32::from_be_bytes(length) as usize;
+    if length == 0 || length > RESULT_MAXIMUM {
+        return Err("trial frame is unbounded".into());
+    }
+    let mut bytes = vec![0_u8; length];
+    io::read_exact(output, &mut bytes, guard)?;
+    serde_json::from_slice(&bytes).map_err(|_| "trial frame invalid".into())
+}
+
 pub(super) fn exchange(
     mut child: Child,
     job: &GuestJob,
@@ -399,42 +401,37 @@ pub(super) fn exchange(
     let result = (|| {
         io::write_job(&mut input, job, materials, guard)?;
         drop(input);
-        let mut length = [0_u8; 4];
-        io::read_exact(&mut output, &mut length, guard)?;
-        let length = u32::from_be_bytes(length) as usize;
-        if length == 0 || length > RESULT_MAXIMUM {
-            return Err("trial result frame is unbounded".into());
+        let header: TrialExportHeader = receive_frame(&mut output, guard)?;
+        if header.schema_version != TRIAL_EXPORT_PROTOCOL
+            || header.operation_id != expected_operation
+        {
+            return Err("trial export identity differs".into());
         }
-        let mut bytes = vec![0_u8; length];
-        io::read_exact(&mut output, &mut bytes, guard)?;
-        let result: TrialChildResult =
-            serde_json::from_slice(&bytes).map_err(|_| "trial result invalid")?;
+        receive_export(&mut output, &header.export, &target, guard)?;
+        // Payload remains provisional until the final measurement, cleanup,
+        // successful process exit and exact EOF are all verified.
+        let result: TrialChildResult = receive_frame(&mut output, guard)?;
         if result.schema_version != TRIAL_CHILD_PROTOCOL
             || result.operation_id != expected_operation
+            || result.export != header.export
+            || (result.export_outcome == TrialExportOutcome::Exported) != header.export.is_some()
             || !result.terminal_facts_are_valid()
             || !result.guest_cleanup_confirmed
         {
             return Err("trial result identity differs".into());
         }
-        receive_export(&mut output, &result, &target, guard)?;
+        if !reap_child(&mut child, guard.deadline)?.success() {
+            return Err("trial guest execution failed".into());
+        }
+        let mut extra = [0_u8; 1];
+        if !matches!(output.read(&mut extra), Ok(0)) {
+            return Err("trial guest output contains trailing bytes".into());
+        }
         Ok(result)
     })();
     if result.is_err() {
         remove_partial(&target);
         let _ = stop_command_group(&mut child, Instant::now() + SOCKET_IO_TIMEOUT);
-    }
-    let status = reap_child(&mut child, guard.deadline)?;
-    if !status.success() {
-        remove_partial(&target);
-        return Err("trial guest execution failed".into());
-    }
-    let mut extra = [0_u8; 1];
-    match output.read(&mut extra) {
-        Ok(0) => {}
-        _ => {
-            remove_partial(&target);
-            return Err("trial guest output contains trailing bytes".into());
-        }
     }
     result
 }
@@ -595,5 +592,119 @@ mod tests {
         assert!(!valid_relative("/absolute"));
         assert!(valid_digest(&format!("sha256:{}", "a".repeat(64))));
         assert!(!valid_digest(&format!("sha256:{}", "A".repeat(64))));
+    }
+
+    #[test]
+    fn export_is_admitted_only_after_matching_final_result_and_clean_eof() {
+        use workstream_checker_guest::{GuestPurpose, TrialChildOutcome};
+        for fault in [
+            "none",
+            "missing_final",
+            "wrong_identity",
+            "wrong_export",
+            "unclean",
+            "trailing",
+            "exit",
+        ] {
+            let root = Scratch::new();
+            let payload = b"verified candidate";
+            let export = TrialExport::CandidateArchive {
+                byte_count: payload.len() as u64,
+                sha256: format!("sha256:{:x}", Sha256::digest(payload)),
+            };
+            let header = TrialExportHeader {
+                schema_version: TRIAL_EXPORT_PROTOCOL.into(),
+                operation_id: "operation".into(),
+                export: Some(export.clone()),
+            };
+            let mut terminal = TrialChildResult {
+                schema_version: TRIAL_CHILD_PROTOCOL.into(),
+                operation_id: "operation".into(),
+                child: TrialChildOutcome {
+                    exit_code: Some(0),
+                    signal: None,
+                },
+                termination: TrialTermination::Exited,
+                elapsed_ms: 1,
+                cpu_time_ms: 1,
+                peak_memory_bytes: 1,
+                peak_pids: 1,
+                stdout_sha256: format!("sha256:{:x}", Sha256::digest([])),
+                stdout_bytes: 0,
+                stderr_sha256: format!("sha256:{:x}", Sha256::digest([])),
+                stderr_bytes: 0,
+                written_bytes: payload.len() as u64,
+                written_entries: 1,
+                measurement_method: "test_framing_only".into(),
+                export_outcome: TrialExportOutcome::Exported,
+                export: Some(export),
+                guest_cleanup_confirmed: true,
+            };
+            match fault {
+                "wrong_identity" => terminal.operation_id = "foreign".into(),
+                "wrong_export" => terminal.export = None,
+                "unclean" => terminal.guest_cleanup_confirmed = false,
+                _ => {}
+            }
+            let mut wire = Vec::new();
+            let append = |wire: &mut Vec<u8>, value: Vec<u8>| {
+                wire.extend_from_slice(&(value.len() as u32).to_be_bytes());
+                wire.extend_from_slice(&value);
+            };
+            append(&mut wire, serde_json::to_vec(&header).unwrap());
+            wire.extend_from_slice(payload);
+            if fault != "missing_final" {
+                append(&mut wire, serde_json::to_vec(&terminal).unwrap());
+            }
+            if fault == "trailing" {
+                wire.push(42);
+            }
+            let source = root.0.join("wire");
+            fs::write(&source, wire).unwrap();
+            let child = Command::new("/bin/sh")
+                .args(["-c", "cat >/dev/null; cat \"$1\"; exit \"$2\"", "wire-test"])
+                .arg(&source)
+                .arg(if fault == "exit" { "7" } else { "0" })
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .process_group(0)
+                .spawn()
+                .unwrap();
+            let job = GuestJob {
+                purpose: GuestPurpose::TrialBuild { materials: vec![] },
+                request: serde_json::json!({}),
+                command: vec!["unused".into()],
+                environment: vec![],
+                working_directory: "/".into(),
+                uid: 1000,
+                gid: 1000,
+                directories: vec![],
+                files: vec![],
+            };
+            let target = root.0.join("candidate.tar");
+            let guard = IoGuard {
+                deadline: Instant::now() + Duration::from_secs(5),
+                client: None,
+                cancelled: &[],
+            };
+            let result = exchange(
+                child,
+                &job,
+                &[],
+                "operation",
+                ExportTarget::Candidate {
+                    path: &target,
+                    maximum_bytes: 1024,
+                },
+                &guard,
+            );
+            assert_eq!(result.is_ok(), fault == "none", "{fault}: {result:?}");
+            if fault == "none" {
+                assert_eq!(fs::read(target).unwrap(), payload);
+            } else {
+                assert!(!target.exists(), "partial payload retained after {fault}");
+            }
+        }
     }
 }
