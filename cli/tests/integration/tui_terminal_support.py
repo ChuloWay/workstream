@@ -136,6 +136,10 @@ class Terminal:
                         self.x = max(0, self.x - n)
                     elif command == "G":
                         self.x = min(self.columns - 1, n - 1)
+                    elif command == "P":
+                        deleted = min(n, self.columns - self.x)
+                        row = self.cells[self.y]
+                        row[self.x :] = row[self.x + deleted :] + [" "] * deleted
                     elif command == "J":
                         if values[0] in {2, 3}:
                             self.cells = [
@@ -155,7 +159,8 @@ class Terminal:
                         )
                         self.cells[self.y][start:end] = [" "] * (end - start)
                     elif command == "n" and params == "6":
-                        self._write(b"\x1b[1;1R")
+                        column = min(self.x + 1, self.columns)
+                        self._write(f"\x1b[{self.y + 1};{column}R".encode())
                     continue
                 if self.pending.startswith("\x1b]"):
                     match = re.match(r"\x1b\].*?(?:\x07|\x1b\\)", self.pending, re.S)

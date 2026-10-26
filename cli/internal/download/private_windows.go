@@ -27,33 +27,9 @@ func createPrivateFile(root *os.Root, name string) (*os.File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read token user: %w", err)
 	}
-	var pinner runtime.Pinner
-	pinner.Pin(user.User.Sid)
-	defer pinner.Unpin()
-	access := []windows.EXPLICIT_ACCESS{{
-		AccessPermissions: fileAllAccess,
-		AccessMode:        windows.GRANT_ACCESS,
-		Inheritance:       windows.NO_INHERITANCE,
-		Trustee: windows.TRUSTEE{
-			TrusteeForm:  windows.TRUSTEE_IS_SID,
-			TrusteeType:  windows.TRUSTEE_IS_USER,
-			TrusteeValue: windows.TrusteeValueFromSID(user.User.Sid),
-		},
-	}}
-	descriptor, err := windows.BuildSecurityDescriptor(nil, nil, access, nil, nil)
+	descriptor, acl, err := currentUserDescriptor(user)
 	if err != nil {
-		return nil, fmt.Errorf("build current-user descriptor: %w", err)
-	}
-	absolute, err := descriptor.ToAbsolute()
-	if err != nil {
-		return nil, fmt.Errorf("make descriptor absolute: %w", err)
-	}
-	if err := absolute.SetControl(windows.SE_DACL_PROTECTED, windows.SE_DACL_PROTECTED); err != nil {
-		return nil, fmt.Errorf("protect descriptor DACL: %w", err)
-	}
-	descriptor, err = absolute.ToSelfRelative()
-	if err != nil {
-		return nil, fmt.Errorf("make descriptor self-relative: %w", err)
+		return nil, err
 	}
 	objectName, err := windows.NewNTUnicodeString(name)
 	if err != nil {
@@ -82,6 +58,7 @@ func createPrivateFile(root *os.Root, name string) (*os.File, error) {
 	)
 	runtime.KeepAlive(objectName)
 	runtime.KeepAlive(descriptor)
+	runtime.KeepAlive(acl)
 	runtime.KeepAlive(user)
 	if err != nil {
 		return nil, fmt.Errorf("create protected private file: %w", err)
@@ -93,4 +70,35 @@ func createPrivateFile(root *os.Root, name string) (*os.File, error) {
 		return nil, windows.ERROR_INVALID_HANDLE
 	}
 	return file, nil
+}
+
+func currentUserDescriptor(user *windows.Tokenuser) (*windows.SECURITY_DESCRIPTOR, *windows.ACL, error) {
+	var pinner runtime.Pinner
+	pinner.Pin(user.User.Sid)
+	defer pinner.Unpin()
+	access := []windows.EXPLICIT_ACCESS{{
+		AccessPermissions: fileAllAccess,
+		AccessMode:        windows.GRANT_ACCESS,
+		Inheritance:       windows.NO_INHERITANCE,
+		Trustee: windows.TRUSTEE{
+			TrusteeForm:  windows.TRUSTEE_IS_SID,
+			TrusteeType:  windows.TRUSTEE_IS_USER,
+			TrusteeValue: windows.TrusteeValueFromSID(user.User.Sid),
+		},
+	}}
+	acl, err := windows.ACLFromEntries(access, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build current-user DACL: %w", err)
+	}
+	descriptor, err := windows.NewSecurityDescriptor()
+	if err != nil {
+		return nil, nil, fmt.Errorf("initialize current-user descriptor: %w", err)
+	}
+	if err := descriptor.SetDACL(acl, true, false); err != nil {
+		return nil, nil, fmt.Errorf("attach current-user DACL: %w", err)
+	}
+	if err := descriptor.SetControl(windows.SE_DACL_PROTECTED, windows.SE_DACL_PROTECTED); err != nil {
+		return nil, nil, fmt.Errorf("protect descriptor DACL: %w", err)
+	}
+	return descriptor, acl, nil
 }

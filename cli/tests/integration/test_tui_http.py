@@ -557,6 +557,20 @@ def test_startup_retry_binds_profile_before_any_project_read():
         terminal.quit()
 
 
+def test_terminal_observer_applies_character_deletion_and_reports_actual_cursor():
+    terminal = object.__new__(Terminal)
+    terminal._screen_setup(80, 24)
+    replies = []
+    terminal._write = replies.append
+    terminal._render("Filter fetched page only: nothing-matches\rlocal filter:\x1b[12P")
+    assert terminal.screen.splitlines()[0] == "local filter: nothing-matches"
+    terminal._render("\x1b[7;9H\x1b[6n")
+    assert replies == [b"\x1b[7;9R"]
+    terminal._render("\x1b[1;79Hxy\x1b[6n\r\x1b[79G\x1b[999P")
+    assert replies[-1] == b"\x1b[1;80R"
+    assert terminal.screen.splitlines()[0] == "local filter: nothing-matches"
+
+
 def test_explicit_pagination_refresh_and_local_filter_do_not_walk_pages():
     reads = Reads()
 
@@ -578,7 +592,7 @@ def test_explicit_pagination_refresh_and_local_filter_do_not_walk_pages():
         terminal.pump(0.2)
         assert len(requests) == 3
         terminal.send("/nothing-matches\r")
-        terminal.pump(0.2)
+        terminal.wait("local filter: nothing-matches")
         assert "Ready terminal task" not in terminal.screen
         assert "local" in terminal.screen.lower()
         assert len(requests) == 3
