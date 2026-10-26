@@ -18,7 +18,8 @@ working_directory = "."
 [resources]
 cpu_millis = 1000
 memory_bytes = 1073741824
-disk_bytes = 134217728
+# Includes the pinned builder/cache, staging and export copies in this qualification.
+disk_bytes = 2147483648
 build_timeout_seconds = 30
 reference_timeout_seconds = 10
 verification_timeout_seconds = 10
