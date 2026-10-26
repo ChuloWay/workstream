@@ -166,7 +166,11 @@ qualified under gVisor.
 Smol exposes guest-local model and execution sockets through its trusted guest
 stream. The host forwards only the capabilities granted to that invocation to
 the existing relays. A persistent model connection can remain open while an
-execution request runs; workload stdout never carries control frames. No host
+execution request runs. Each execution session carries one request and response,
+then closes with exact EOF; later sequential sessions open fresh execution-relay
+connections inside the same authorized invocation. The guest reaps each completed
+execution handler before accepting another and retains at most one handler per
+channel. Workload stdout never carries control frames. No host
 socket or provider credential is mounted into the microVM. Trials use fresh
 Smol sibling VMs and have no Docker/runsc fallback. Real KVM composition
 qualification is required before this path is ready for deployment; historical
