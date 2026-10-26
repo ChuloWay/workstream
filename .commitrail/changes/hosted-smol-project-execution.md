@@ -128,6 +128,30 @@ corrected to `scoped_worker_events`. The complete hosted branch, including repor
 assembly, must pass on fresh owned fixtures; neither partial run is a baseline
 PASS and neither made a paid model call. Product services and images are unchanged.
 
+The corrected public hosted baseline passed at `6c483ca61`, including both policy
+branches and exact duplicate refusal. Its model qualification then stopped before
+materialization or any model effect: the planned 600-second checker needs 720
+seconds including the existing ART and cleanup allowances, but the expiry fixture
+configured only 360 seconds. The deadline owner correctly refused execution.
+The bounded proof repair adds a read-only runtime-window check before claiming a
+paid project, compares actual hosted and driver settings, and derives observation
+time from the stored policy and existing owner margins. Allowed files remain the
+two hosted proof modules, their focused tests and this record. No policy, budget,
+claim, Submission or original expiry receipt may be reset or rewritten. Restore
+the normal operational ART window only for future leases and use the existing
+public Operator recovery for the same failed run/project/account. No new product
+retry path or generic resume framework is authorized by this repair.
+
+The repair also shares the existing outcome observer with an explicit recovered
+dispatch, checking its original project, task and Submission before observation.
+The paid-custody, governed-outcome and replay assertions remain unchanged. All 33
+combined attachment/model tests passed; the new pre-claim check fails against
+the previous entrypoint. Root and independent runtime review passed the ordering,
+locked-policy budget, float-settings conversion and preserved validation tail.
+Ruff and diff checks passed. This proof-only repair does not change production
+backend, native binaries or checker images; it does not establish a live provider
+result or the still-pending active nested recovery cases.
+
 Root plan review of `e07f28b4a`: PASS WITH LOW RISKS for implementation only. The review required exact numeric identity, native/Compose path parity in both directions, native health before API/worker release and explicit drain ordering. Runtime signoff remains separate. The root subsequently approved one trusted deployment-root selector and explicit pinned native binary path because fixed production paths prevented an isolated rendered-topology proof without touching shared resources. Exact UID/GID and live health requirements remain unchanged.
 
 Cold-start inspection found a schema/activation/proxy/node cycle: the proxy reads the activated ART namespace, the native node requires its model socket, and API normally applies migrations. The fixed `migrate`, AWS `proof` and exact proxy-only `up -d model-proxy` stages therefore validate static custody while releasing no application producer/worker; full `up` still requires both typed native health checks. AWS proof itself uses DB/AWS directly and retains its exact existing credential-separated observations.

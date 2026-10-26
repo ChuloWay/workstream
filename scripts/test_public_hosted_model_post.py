@@ -12,7 +12,7 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
 from zipfile import ZipFile
 
@@ -23,7 +23,7 @@ from app.modules.model_usage.api import ProjectModelProfile  # noqa: E402
 from experiments.pilot04_external_checker_runtime.public_hosted_model_post import (  # noqa: E402
     CEILING, CHECK, MODEL, ModelPostQualification, canonical, digest, fixture_archive,
     profile_spec, registry_spec, require_completed_effect, specification, POST_IMAGE, POST_CONFIG, POST_ARCHIVE,
-    account_snapshot,
+    account_snapshot, validate_runtime_window, observe_model_post,
 )
 
 
@@ -39,6 +39,92 @@ class HostedModelAuthority(unittest.TestCase):
         value.claim()
         self.addCleanup(value.close)
         return value
+
+    def test_planned_model_window_fits_both_actual_custody_and_socket_limits(self):
+        def check(artifact, socket, *, driver_artifact=None):
+            values = {'WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS': str(artifact),
+                      'WORKSTREAM_EXTERNAL_CHECKER_SERVICE_TIMEOUT_SECONDS': str(socket)}
+            settings = SimpleNamespace(
+                artifact_preparation_total_deadline_seconds=artifact if driver_artifact is None else driver_artifact,
+                external_checker_service_timeout_seconds=socket,
+            )
+            return validate_runtime_window(values, settings)
+
+        self.assertEqual(check(3400, 3660), 720000)
+        self.assertEqual(check(3400.0, 3660.0), 720000)
+        self.assertEqual(check(720, 660), 720000)
+        for artifact in (360, 719):
+            with self.assertRaisesRegex(RuntimeError, 'ART custody window'):
+                check(artifact, 3660)
+        with self.assertRaisesRegex(RuntimeError, 'checker socket window'):
+            check(3400, 659)
+        with self.assertRaisesRegex(RuntimeError, 'differ from inspected hosted roles'):
+            check(3400, 3660, driver_artifact=360)
+
+    def test_short_rehearsal_window_refuses_before_claim_or_public_work(self):
+        from experiments.pilot04_external_checker_runtime import public_hosted_attachment as hosted
+
+        attachment = SimpleNamespace(inspect=Mock(), node_root=self.root, values={
+            'WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS': '360',
+            'WORKSTREAM_EXTERNAL_CHECKER_SERVICE_TIMEOUT_SECONDS': '3660',
+        })
+        settings = SimpleNamespace(artifact_preparation_total_deadline_seconds=360,
+                                   external_checker_service_timeout_seconds=3660)
+        with patch('app.core.config.get_settings', return_value=settings), \
+                patch.object(ModelPostQualification, 'read_and_claim') as claim, \
+                patch.object(hosted, '_run', new_callable=AsyncMock) as public_work:
+            with self.assertRaisesRegex(RuntimeError, 'ART custody window'):
+                asyncio.run(hosted.run(attachment, 'unused', 'unused', self.root / 'input.json'))
+        attachment.inspect.assert_called_once_with()
+        claim.assert_not_called()
+        public_work.assert_not_called()
+        self.assertFalse((self.root / 'model-post-qualification.json').exists())
+
+    def test_observation_refuses_a_run_from_another_project_task_or_submission(self):
+        project, task, submission = (str(new_record_id()) for _ in range(3))
+        for field in ('project_id', 'task_id', 'submission_id'):
+            run = SimpleNamespace(project_id=project, task_id=task, submission_id=submission)
+            setattr(run, field, str(new_record_id()))
+            session = AsyncMock()
+            session.__aenter__.return_value = session
+            session.get.return_value = run
+            with self.subTest(field=field), \
+                    patch('app.modules.checkers.execution_repository.stored_request') as request:
+                with self.assertRaisesRegex(RuntimeError, 'differs from the retained project and Submission'):
+                    asyncio.run(observe_model_post(
+                        None, None, Mock(return_value=session), None,
+                        project=SimpleNamespace(project_id=project), contributor=None,
+                        task=task, assignment=None, archive=b'', summary=None, attestation=None,
+                        saved={'submission_id': submission}, event_id=new_record_id(), run_id=new_record_id(),
+                    ))
+                request.assert_not_called()
+
+    def test_observation_checks_real_policy_budget_with_float_settings(self):
+        from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
+
+        policy = LockedExternalPostSubmitPolicy(entries=(), policy_sha256=digest(canonical({
+            'schema_version': 'external_post_submit_policy.v1', 'entries': [],
+        })))
+        project, task, submission = (str(new_record_id()) for _ in range(3))
+        session = AsyncMock()
+        session.__aenter__.return_value = session
+        session.get.return_value = SimpleNamespace(project_id=project, task_id=task, submission_id=submission)
+        attachment = SimpleNamespace(values={
+            'WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS': '3400.0',
+            'WORKSTREAM_EXTERNAL_CHECKER_SERVICE_TIMEOUT_SECONDS': '3660.0',
+        })
+        settings = SimpleNamespace(artifact_preparation_total_deadline_seconds=3400.0,
+                                   external_checker_service_timeout_seconds=3660.0)
+        with patch('app.core.config.get_settings', return_value=settings), \
+                patch('app.modules.checkers.execution_repository.stored_request',
+                      return_value=SimpleNamespace(policy=policy)):
+            with self.assertRaisesRegex(RuntimeError, 'locked model qualification execution budget differs'):
+                asyncio.run(observe_model_post(
+                    attachment, None, Mock(return_value=session), None,
+                    project=SimpleNamespace(project_id=project), contributor=None,
+                    task=task, assignment=None, archive=b'', summary=None, attestation=None,
+                    saved={'submission_id': submission}, event_id=new_record_id(), run_id=new_record_id(),
+                ))
 
     def test_cache_requires_exact_qualified_production_image_not_a_substitute(self):
         qualification = self.qualification()

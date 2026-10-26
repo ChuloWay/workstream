@@ -142,6 +142,28 @@ def fixture_archive():
     return output.getvalue()
 
 
+def validate_runtime_window(values, settings):
+    """Refuse an unrunnable paid rehearsal before creating its durable claim."""
+    from app.modules.checkers.api.external_policy import (
+        SELECTED_POST_MATERIALIZATION_BUDGET_MS,
+        EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS,
+    )
+
+    member = registry_spec(POST_IMAGE.rsplit('@', 1)[1]).resources.deadline_ms
+    execution = member + EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
+    required = SELECTED_POST_MATERIALIZATION_BUDGET_MS + execution
+    artifact_seconds = float(values['WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS'])
+    socket_seconds = float(values['WORKSTREAM_EXTERNAL_CHECKER_SERVICE_TIMEOUT_SECONDS'])
+    require(settings.artifact_preparation_total_deadline_seconds == artifact_seconds
+            and settings.external_checker_service_timeout_seconds == socket_seconds,
+            'model qualification runtime windows differ from inspected hosted roles')
+    require(artifact_seconds * 1000 >= required,
+            'model qualification exceeds the inspected ART custody window')
+    require(socket_seconds * 1000 >= execution,
+            'model qualification exceeds the inspected checker socket window')
+    return required
+
+
 def require_completed_effect(ledger):
     require(len(ledger['effects']) == 1 and ledger['effects'][0]['state'] == 'completed'
             and ledger['effects'][0]['provider_response_known']
@@ -355,17 +377,11 @@ async def paid_custody(factory, project_id, run_id, submission_id, member, quali
 
 
 async def run_model_post(attachment, client, factory, qualification):
-    import asyncio
-    from app.modules.checkers.execution_repository import stored_result
-    from app.modules.checkers.models import CheckerRun
-    from app.modules.outbox.models import OutboxEvent
     from app.modules.tasks.models import SubmissionDispatch
     from experiments.pilot04_external_checker_runtime.public_probe_support import (
-        _public_project, _started_public_task, _json, _wait_outbox_acknowledged, _fixture_hashes,
+        _public_project, _started_public_task,
     )
-    from experiments.pilot04_external_checker_runtime.run_public_journey_probe import (
-        _submit, _outbox_snapshot, _project_effects_snapshot, _assert_outcome, _assert_revision,
-    )
+    from experiments.pilot04_external_checker_runtime.run_public_journey_probe import _submit
 
     qualification.verify_cache(attachment)
     await attachment.transition('live')
@@ -388,7 +404,50 @@ async def run_model_post(attachment, client, factory, qualification):
         dispatch = await session.get(SubmissionDispatch, saved['submission_id'])
         require(dispatch is not None, 'model POST submission lacks durable dispatch')
         event_id, run_id = dispatch.evaluation_event_id, dispatch.evaluation_attempt_id
-    deadline = time.monotonic() + 660
+    return await observe_model_post(
+        attachment, client, factory, qualification, project=project, contributor=contributor,
+        task=task, assignment=assignment, archive=archive, summary=summary,
+        attestation=attestation, saved=saved, event_id=event_id, run_id=run_id,
+    )
+
+
+async def observe_model_post(attachment, client, factory, qualification, *, project,
+                             contributor, task, assignment, archive, summary, attestation,
+                             saved, event_id, run_id):
+    """Qualify one exact public dispatch; this never creates or retries a run."""
+    import asyncio
+    from app.core.config import get_settings
+    from app.modules.checkers.execution_repository import stored_request, stored_result
+    from app.modules.checkers.api.external_policy import (
+        selected_post_submit_execution_budget_ms,
+        SELECTED_POST_HANDLER_PRELUDE_MARGIN_MS,
+        SELECTED_POST_FINALIZATION_MARGIN_MS,
+    )
+    from app.modules.checkers.models import CheckerRun
+    from app.modules.outbox.models import OutboxEvent
+    from experiments.pilot04_external_checker_runtime.public_probe_support import (
+        _json, _wait_outbox_acknowledged, _fixture_hashes,
+    )
+    from experiments.pilot04_external_checker_runtime.run_public_journey_probe import (
+        _outbox_snapshot, _project_effects_snapshot, _assert_outcome, _assert_revision,
+    )
+
+    project_id = str(project.project_id)
+    async with factory() as session:
+        run = await session.get(CheckerRun, run_id)
+        require(run is not None and str(run.project_id) == project_id
+                and str(run.task_id) == str(task)
+                and str(run.submission_id) == saved['submission_id'],
+                'observed model dispatch differs from the retained project and Submission')
+        budget = selected_post_submit_execution_budget_ms(
+            stored_request(run).policy,
+            artifact_deadline_ms=int(get_settings().artifact_preparation_total_deadline_seconds * 1000),
+        )
+        require(budget == validate_runtime_window(attachment.values, get_settings()),
+                'locked model qualification execution budget differs')
+    deadline = time.monotonic() + (
+        budget + SELECTED_POST_HANDLER_PRELUDE_MARGIN_MS + SELECTED_POST_FINALIZATION_MARGIN_MS
+    ) / 1000
     while time.monotonic() < deadline:
         async with factory() as session:
             run = await session.get(CheckerRun, run_id)

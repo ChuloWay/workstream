@@ -485,8 +485,15 @@ def manager_rules(original, capabilities, count):
 
 
 async def run(attachment, database_url, broker_url, model_post_path=None):
-    from experiments.pilot04_external_checker_runtime.public_hosted_model_post import ModelPostQualification
+    from experiments.pilot04_external_checker_runtime.public_hosted_model_post import (
+        ModelPostQualification, validate_runtime_window,
+    )
 
+    if model_post_path:
+        from app.core.config import get_settings
+
+        attachment.inspect()
+        validate_runtime_window(attachment.values, get_settings())
     qualification = ModelPostQualification.read_and_claim(model_post_path, attachment.node_root) if model_post_path else None
     try:
         return await _run(attachment, database_url, broker_url, qualification)
