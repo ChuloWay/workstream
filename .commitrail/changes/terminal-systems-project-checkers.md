@@ -1022,7 +1022,7 @@ mutation assertion fail (CapacityExceeded instead of InvalidObservation); the
 source was restored and the complete serial native workspace then passed 193
 tests with zero failures or ignored cases. Independent test review found no
 defect; formatting and diff checks passed. This test-only change does not alter
-the static runtime artifacts qualified by direct 35 and composition 009.
+production Rust behavior; rebuilt artifacts remain bound to their actual pins.
 
 The separate active nested recovery test scope is the existing
 `workstream-checker-service/tests/smol_recovery.py` helper,
@@ -1052,3 +1052,26 @@ receipt callbacks, trial ART put attempts and bindings. Two simultaneous real
 trusted-intake preparations must demonstrate full admission capacity reuse and
 then close/drain. Final independent source review passed; all three physical
 recovery cases remain pending the exclusive VM handoff.
+
+The exact b2ce3fa45 static rebuild passed. Its guest and launcher pins reproduced
+the earlier values, while the service pin became
+`sha256:5e5760b898017453feb821a24066dc78201249ce39a1eb2f3eb27fffef100ba0`;
+the pre-VM equality guard caught that difference. The Rust source delta is
+strictly cfg(test). The new service was then qualified again: direct 36 passed
+all ten cases, and composition 013 passed in 123.60 seconds with two verified
+ART receipts of 17 steps, four controlled model effects and no new replay calls.
+Their bounded direct and cleanup receipts are respectively
+`sha256:d70973a9025ebe69046c8fa8f5cee74e75bb506728cff4da2db7c09417183540`
+and `sha256:2b630b2a0b9cadd802debd4e44d9ea05aeebcac523b8f94707e9bc5cab7b4293`.
+
+Recovery 010 stopped before its marker or fault injection: the observer required
+one VM immediately after durable lease publication, which precedes VM creation.
+The failed run and full cleanup are retained; cleanup receipt is
+`sha256:cf32cfbc186f1f41dc45e203c2cfc46f5c58860513d92da1b8852241dcf4bd3d`.
+The bounded observer correction treats only empty inventory as pending and still
+rejects wrong or multiple VMs. It also distinguishes the engine's persistent
+empty cache lock from a VM: nofollow metadata must prove a regular 0600 file,
+exact process UID/GID, one link and zero bytes, preserving its initial device and
+inode. Unknown entries remain unclean. Focused inventory and filesystem controls
+passed, including wrong/multiple inventory and replacement lock refusal. No
+runtime or image change was needed; fresh physical recovery cases remain required.

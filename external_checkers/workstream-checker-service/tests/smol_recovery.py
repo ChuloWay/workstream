@@ -46,6 +46,16 @@ class NestedTrialRecovery:
         self.completed = False
         self.replacement = None
         self.killed_controller = None
+        self.pending_create_observations = 0
+        self.cache_lock_identity = None
+
+    @staticmethod
+    def child_inventory(rows, name):
+        assert isinstance(rows, list)
+        if not rows:
+            return None  # Durable lease publication precedes machine creation.
+        assert len(rows) == 1 and rows[0]["name"] == name, "unexpected child VM inventory"
+        return rows[0]
 
     def archive_factory(self, original):
         def archive(evidence_path, project_id):
@@ -133,8 +143,10 @@ class NestedTrialRecovery:
                 if not path.exists():
                     continue  # Only an already-removed exact lease may disappear.
                 raise
-            assert len(rows) == 1 and rows[0]["name"] == name
-            machine = rows[0]
+            machine = self.child_inventory(rows, name)
+            if machine is None:
+                self.pending_create_observations += 1
+                continue
             assert machine["labels"]["workstream.external-checker-owner"] == owner
             assert machine["network"] is False
             if machine["state"] != "running":
@@ -177,11 +189,23 @@ class NestedTrialRecovery:
         return False
 
     def physical_clean(self):
+        vms = Path(self.config["smol"]["home"]) / ".cache/smolvm/vms"
+        for entry in vms.iterdir() if vms.exists() else ():
+            if entry.name != ".artifact-cache.lock":
+                return False
+            identity = entry.lstat()
+            assert stat.S_ISREG(identity.st_mode) and stat.S_IMODE(identity.st_mode) == 0o600
+            assert (identity.st_uid, identity.st_gid, identity.st_nlink, identity.st_size) == (
+                os.geteuid(), os.getegid(), 1, 0,
+            )
+            observed = (identity.st_dev, identity.st_ino)
+            if self.cache_lock_identity is None:
+                self.cache_lock_identity = observed
+            assert self.cache_lock_identity == observed, "engine cache lock identity changed"
         return (
             not list(self.leases.iterdir())
             and not list(self.groups.glob("ws-*"))
             and not list(self.child_root.glob("ws-*.home"))
-            and not list((Path(self.config["smol"]["home"]) / ".cache/smolvm/vms").glob("*"))
         )
 
     async def exercise(self, *, executor, harness, controller, service_binary,
@@ -202,6 +226,7 @@ class NestedTrialRecovery:
         controller_identity = self.process_identity(controller.pid, service_binary)
         self.controller = controller
         self.controller_identity = controller_identity
+        assert self.physical_clean(), "recovery must start physically drained"
         self.execution = asyncio.create_task(executor.evaluate_post_submission(harness.request))
         result = None
         try:
@@ -287,6 +312,7 @@ class NestedTrialRecovery:
                 "model_effects": effect_summary, "capacity_reuse_simultaneous_intakes": 2,
                 "physical_cleanup_confirmed": True, "child_root_identity_unchanged": True,
                 "controller_restarted": self.replacement is not None,
+                "pending_create_observations": self.pending_create_observations,
             }
             path = Path(os.environ["WORKSTREAM_TS_SMOL_ROOT"]) / "recovery-summary.json"
             path.write_text(json.dumps(summary, sort_keys=True, indent=2) + "\n")
