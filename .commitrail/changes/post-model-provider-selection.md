@@ -29,6 +29,7 @@ The optional model execution wrapper already passed ordinary checks through.
 - `deploy/hosted/{compose.inference.yml,compose.model-openai.yml,compose.model-openrouter.yml,preflight.py,release.env.example,README.md}`, `docker/backend/release-entrypoint.sh`, `scripts/test_hosted_release_config.py`, affected `scripts/test_hosted_release_images.py`: mount/load only configured provider credentials, preserving role separation and cached-image proof.
 - `backend/.env.example`, `README.md`, `docs/operations_checker_models.md`, `docs/roadmap_status.md`: reconcile supported configured providers and actual proof limits.
 - Exact registrations in `.ci/behavior-ownership/partition.v1.json`, `backend/scripts/{behavior_ownership,test_lane_catalogue}.py`, and `backend/tests/{test_behavior_ownership,test_ci_lane_catalogue}.py` where required for changed/new files; regenerate canonical digests without weakening gates.
+- `backend/tests/test_artifact_architecture.py`: reconcile the exact concrete-provider composition inventory and protect both provider constructors against out-of-root construction.
 - This change record.
 
 ### Not allowed
@@ -148,6 +149,13 @@ context together so only the profile ceiling rejects it, with a separate context
 agreement case. Removing the ceiling guard must make the named regression fail.
 Over-context requests may still be sent and enter an uncertain hold; no exact
 local tokenizer or blanket no-charge claim is introduced.
+
+The complete architecture suite exposed a stale expectation that model runtime
+still imports a concrete provider. Both provider constructors now belong only to
+the existing CHECKERS factory. Update the exact import/call inventory, track the
+OpenRouter constructor, and retain all existing negative cases while adding
+aliased and module-qualified construction probes for both providers. No production
+code or CI selection changes are required for this repair.
 
 ## Reconciliation
 
