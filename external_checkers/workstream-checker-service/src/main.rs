@@ -7,6 +7,7 @@ mod trial_engine;
 mod trial_evidence_proxy;
 mod trial_profiles;
 mod trial_relay;
+mod trial_roots;
 mod trial_smol;
 
 use model_relay::{
@@ -803,15 +804,22 @@ fn prepare_listener(config: &mut ServiceConfig) -> Result<OwnedSocketListener, S
     let listener = OwnedSocketListener::bind(&config.socket_path)?;
     config.container_owner = Some(load_container_owner(&listener.parent)?);
     validate_config(config)?;
+    load_trial_runtime(config)?;
+    let trial_roots = trial_roots::claim(config)?;
+    if let Some(roots) = &trial_roots {
+        roots.preflight()?;
+    }
     cleanup_stale_runtime_files(config)?;
     if config.runtime == "smolvm" {
         smol::recover(config)?;
     } else {
         cleanup_stale_checker_containers(config)?;
     }
-    // Trial configuration is admitted only after the same socket-parent custody
-    // has settled ordinary and child Smol lease recovery.
-    load_trial_runtime(config)?;
+    // All VM leases must settle before removing invocation scratch or the
+    // private home left by a crash before its per-VM lease was persisted.
+    if let Some(roots) = trial_roots {
+        roots.recover()?;
+    }
     Ok(listener)
 }
 
@@ -2032,10 +2040,12 @@ fn execute_container(
     };
     let reservation = if config.runtime == "smolvm" {
         let result = match selected_trial {
-            Some(profile) => {
-                smol::trial_capacity(profile.maximum_memory_bytes, profile.maximum_disk_bytes)
-                    .and_then(|child| smol::reserve_invocation(config, request, child))
-            }
+            Some(profile) => smol::trial_peak_capacity(
+                profile.maximum_memory_bytes,
+                profile.maximum_memory_overrun_bytes,
+                profile.maximum_disk_bytes,
+            )
+            .and_then(|child| smol::reserve_invocation(config, request, child)),
             None => smol::reserve(config, request),
         };
         Some(result.map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?)
@@ -2097,6 +2107,7 @@ fn execute_container(
                     )
                     .map_err(|failure| {
                         if failure.cleanup_unsettled {
+                            smol::quarantine(config);
                             ExecutionFailure::unsettled(false)
                         } else {
                             ExecutionFailure::ordinary("implementation_unavailable", false)
@@ -2136,6 +2147,7 @@ fn execute_container(
                         .take()
                         .is_some_and(|relay| relay.finish().cleanup_unsettled);
                     return Err(if failure.cleanup_unsettled || trial_cleanup_unsettled {
+                        smol::quarantine(config);
                         ExecutionFailure::unsettled(false)
                     } else {
                         ExecutionFailure::ordinary("implementation_unavailable", false)
@@ -2190,13 +2202,17 @@ fn execute_container(
     };
     let model_finish = model_relay.map(InvocationRelay::finish);
     let trial_finish = trial_relay.map(TrialRelay::finish);
-    if model_finish
+    if result
         .as_ref()
-        .is_some_and(|finish| finish.cleanup_unsettled)
+        .is_err_and(|failure| failure.cleanup_unsettled)
+        || model_finish
+            .as_ref()
+            .is_some_and(|finish| finish.cleanup_unsettled)
         || trial_finish
             .as_ref()
             .is_some_and(|finish| finish.cleanup_unsettled)
     {
+        smol::quarantine(config);
         return Err(ExecutionFailure::unsettled(launched));
     }
     if model_finish.as_ref().is_some_and(|finish| finish.failed)

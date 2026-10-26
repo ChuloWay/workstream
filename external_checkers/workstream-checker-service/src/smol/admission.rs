@@ -36,6 +36,10 @@ pub(crate) struct Admission {
 }
 
 impl Admission {
+    pub(crate) fn quarantine(&self) {
+        self.poisoned.store(true, Ordering::SeqCst);
+    }
+
     pub(crate) fn reserved_storage_bytes(&self) -> Result<u64, String> {
         let used = self.used.lock().map_err(|_| "node admission unavailable")?;
         if self.poisoned.load(Ordering::SeqCst) {
@@ -144,7 +148,7 @@ pub(crate) struct ChildReservation {
 impl ChildReservation {
     /// Keep the full invocation charge and reject new work after uncertain cleanup.
     pub(crate) fn quarantine(self) {
-        self.parent.admission.poisoned.store(true, Ordering::SeqCst);
+        self.parent.admission.quarantine();
         std::mem::forget(self);
     }
 }
@@ -239,5 +243,18 @@ mod tests {
         assert!(node.reserve(amount(1, 1, 1), None).is_err());
         assert!(node.reserved_storage_bytes().is_err());
         assert_eq!(node.used.lock().unwrap().storage_bytes, 20);
+    }
+
+    #[test]
+    fn uncertain_scratch_cleanup_closes_admission_after_credit_release() {
+        let node = Arc::new(Admission::new(amount(2, 20, 20), "test".into()).unwrap());
+        let held = node
+            .reserve(amount(1, 10, 10), Some(amount(1, 10, 10)))
+            .unwrap();
+        node.quarantine();
+        drop(held);
+        assert_eq!(*node.used.lock().unwrap(), Capacity::default());
+        assert!(node.reserve(amount(1, 1, 1), None).is_err());
+        assert!(node.reserved_storage_bytes().is_err());
     }
 }

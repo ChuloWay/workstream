@@ -1,6 +1,90 @@
 use super::*;
 
 #[test]
+fn trial_peak_reservation_admits_maximum_memory_and_overrun_atomically() {
+    let maximum_memory = 32 * 1024 * 1024;
+    let overrun = 1024 * 1024;
+    let disk = 64 * 1024 * 1024;
+    let outer = resource_capacity(Resources {
+        cpu_millis: 1000,
+        memory_bytes: maximum_memory,
+        storage_gib: 1,
+        pids: 16,
+    })
+    .unwrap();
+    let peak = trial_peak_capacity(maximum_memory, overrun, disk).unwrap();
+    let maximum = Capacity {
+        slots: outer.slots + peak.slots,
+        memory_bytes: outer.memory_bytes + peak.memory_bytes,
+        storage_bytes: outer.storage_bytes + peak.storage_bytes,
+    };
+    let node = Arc::new(Admission::new(maximum, "e".repeat(64)).unwrap());
+    let invocation = node.reserve(outer, Some(peak)).unwrap();
+    let child = invocation
+        .child(trial_capacity(maximum_memory + overrun, disk).unwrap())
+        .unwrap();
+    assert!(node.reserve(outer, None).is_err());
+    drop(child);
+    drop(invocation);
+    let mut insufficient = maximum;
+    insufficient.memory_bytes -= 1;
+    let node = Arc::new(Admission::new(insufficient, "f".repeat(64)).unwrap());
+    assert!(node.reserve(outer, Some(peak)).is_err());
+    assert!(node.reserve(outer, None).is_ok());
+    assert!(trial_peak_capacity(u64::MAX, 1, disk).is_err());
+}
+
+#[test]
+fn foreign_lease_refuses_recovery_before_any_runtime_or_owned_cleanup() {
+    let (root, mut config) = super::super::tests::test_config();
+    let leases = config.socket_path.parent().unwrap().join("smol-leases");
+    fs::create_dir(&leases).unwrap();
+    fs::set_permissions(&leases, fs::Permissions::from_mode(0o700)).unwrap();
+    let called = root.join("runtime-called");
+    let binary = root.join("smol");
+    fs::write(
+        &binary,
+        format!("#!/bin/sh\ntouch '{}'\nexit 1\n", called.display()),
+    )
+    .unwrap();
+    fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).unwrap();
+    let runtime = SmolConfig {
+        binary,
+        binary_sha256: format!("sha256:{}", "a".repeat(64)),
+        home: root.join("home"),
+        guest_binary: root.join("guest"),
+        guest_sha256: format!("sha256:{}", "b".repeat(64)),
+        cgroup_root: root.join("groups"),
+        maximum_parallel: 2,
+        maximum_storage_bytes: 4 * 1024 * 1024 * 1024,
+    };
+    config.smol = Some(runtime.clone());
+    let mut lease = Lease {
+        name: format!("ws-{}", "0".repeat(32)),
+        owner: container_owner(&config).unwrap().to_owned(),
+        epoch: "e".repeat(64),
+        expires_ms: 1,
+        lifetime_ms: 1,
+        root: leases.clone(),
+        runtime,
+        private_home_root: None,
+    };
+    let owned = lease.path();
+    fs::write(&owned, serde_json::to_vec(&lease).unwrap()).unwrap();
+    fs::set_permissions(&owned, fs::Permissions::from_mode(0o600)).unwrap();
+    lease.name = format!("ws-{}", "f".repeat(32));
+    lease.owner = "d".repeat(64);
+    let foreign = lease.path();
+    fs::write(&foreign, serde_json::to_vec(&lease).unwrap()).unwrap();
+    fs::set_permissions(&foreign, fs::Permissions::from_mode(0o600)).unwrap();
+    assert_eq!(recover(&config).unwrap_err(), "lease ownership differs");
+    assert!(owned.exists());
+    assert!(foreign.exists());
+    assert!(!called.exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn missing_lease_directory_does_not_poison_node_admission() {
     let (root, mut config) = super::super::tests::test_config();
     config.smol = Some(SmolConfig {

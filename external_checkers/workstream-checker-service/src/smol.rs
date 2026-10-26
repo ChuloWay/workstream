@@ -129,6 +129,24 @@ pub(crate) fn trial_capacity(memory_bytes: u64, disk_bytes: u64) -> Result<Capac
         .ok_or("capacity overflow")?;
     Ok(capacity)
 }
+pub(crate) fn trial_peak_capacity(
+    memory_bytes: u64,
+    memory_overrun_bytes: u64,
+    disk_bytes: u64,
+) -> Result<Capacity, String> {
+    trial_capacity(
+        memory_bytes
+            .checked_add(memory_overrun_bytes)
+            .ok_or("capacity overflow")?,
+        disk_bytes,
+    )
+}
+
+pub(crate) fn quarantine(config: &ServiceConfig) {
+    if let Some(admission) = &config.smol_admission {
+        admission.quarantine();
+    }
+}
 fn reserve_capacity(
     config: &ServiceConfig,
     outer: Capacity,
@@ -1099,11 +1117,37 @@ pub(super) fn recover(config: &ServiceConfig) -> Result<(), String> {
         Err(_) => return Err("lease directory unavailable".into()),
     }
     private_directory(&root)?;
+    let mut leases = Vec::new();
+    let inspection_deadline = Instant::now() + CLEANUP_TIMEOUT;
     for entry in fs::read_dir(&root).map_err(|_| "lease inventory unavailable")? {
+        if leases.len() >= 1_000_000 || Instant::now() >= inspection_deadline {
+            return Err("lease inventory bound exceeded".into());
+        }
         let entry = entry.map_err(|_| "lease inventory unavailable")?;
-        let lease: Lease =
-            serde_json::from_slice(&read_bounded_file(&entry.path(), MAX_ENVELOPE_BYTES)?)
-                .map_err(|_| "lease inventory invalid")?;
+        let mut file = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
+            .open(entry.path())
+            .map_err(|_| "lease unavailable")?;
+        let metadata = file.metadata().map_err(|_| "lease unavailable")?;
+        if !metadata.is_file()
+            || metadata.nlink() != 1
+            || metadata.uid() != unsafe { libc::geteuid() }
+            || metadata.gid() != unsafe { libc::getegid() }
+            || metadata.mode() & 0o7777 != 0o600
+            || metadata.len() > MAX_ENVELOPE_BYTES as u64
+        {
+            return Err("lease custody differs".into());
+        }
+        let mut bytes = Vec::new();
+        Read::by_ref(&mut file)
+            .take(MAX_ENVELOPE_BYTES as u64 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| "lease unavailable")?;
+        if bytes.len() > MAX_ENVELOPE_BYTES {
+            return Err("lease inventory unbounded".into());
+        }
+        let lease: Lease = serde_json::from_slice(&bytes).map_err(|_| "lease inventory invalid")?;
         let runtime_home_matches = match &lease.private_home_root {
             Some(root) => {
                 config
@@ -1124,11 +1168,11 @@ pub(super) fn recover(config: &ServiceConfig) -> Result<(), String> {
         {
             return Err("lease ownership differs".into());
         }
-        let file = OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NOFOLLOW)
-            .open(entry.path())
-            .map_err(|_| "lease unavailable")?;
+        leases.push((lease, file, metadata));
+    }
+    // A foreign or malformed lease must refuse startup before deleting an
+    // earlier valid lease's VM. Cleanup is restricted to this complete inventory.
+    for (lease, file, metadata) in leases {
         let deadline = Instant::now() + CLEANUP_TIMEOUT + SOCKET_IO_TIMEOUT;
         loop {
             if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
@@ -1140,6 +1184,13 @@ pub(super) fn recover(config: &ServiceConfig) -> Result<(), String> {
             thread::sleep(Duration::from_millis(20));
         }
         if lease.path().exists() {
+            let current =
+                fs::symlink_metadata(lease.path()).map_err(|_| "lease identity unavailable")?;
+            if (current.dev(), current.ino(), current.mode())
+                != (metadata.dev(), metadata.ino(), metadata.mode())
+            {
+                return Err("lease identity changed".into());
+            }
             lease.cleanup()?;
         }
     }
