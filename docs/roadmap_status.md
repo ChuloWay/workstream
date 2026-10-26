@@ -43,10 +43,12 @@ human review remains pending; locked automatic acceptance creates the submitter
 ContributionRecord and applicable award without a fabricated Review. Hosted
 composition selects the existing native Smol node for typed intake and project
 execution through one private endpoint. The owned hosted AWS baseline passed
-with its disclosed fixture identity; approved POST model/trial callbacks require
-their transport and pinned authority configuration. PRE model selectors remain
-unsupported. Production Flow identity, live-model grading and the full project
-journey remain separate. See
+with its disclosed fixture identity. A scoped live OpenRouter POST also passed
+through the native guest, trusted proxy, durable worker and governed acceptance,
+retaining one paid effect and unchanged accounting on replay. Approved callbacks
+require their pinned authority configuration. PRE model selectors remain
+unsupported. Production Flow identity, substantive grading quality and the full
+project journey remain separate. See
 [WS-EXEC-001](../.commitrail/initiatives/WS-EXEC-001/OVERVIEW.md).
 
 The artifact diagnosis API uses exact,
@@ -577,7 +579,7 @@ cannot be reused as post-submission review-gate evidence. See the
 
 | Lifecycle stage | Intended merged status | What is already proven | What remains before v0.1 |
 | --- | --- | --- | --- |
-| Shared setup and project-image model use | **Budgeted runtime and public Operator controls** | One project-lifetime funded account serves exact setup-attempt and approved POST image lineage; immutable bounded profiles; finite multi-call/run envelopes and setup document-tool caps; private ART request/response evidence; stable paid-effect replay/recovery; once-only settlement; exact redacted Operator effect inspection; hosted composition gives only configured provider credentials to the trusted proxy; locked POST profiles select OpenAI Responses or OpenRouter Chat Completions, while ordinary POST needs neither; native KVM composition retains two verified trial receipts, four controlled model effects and no-call replay; active nested cancellation/child-death/controller-restart proofs retain no false completion or trial ART effects and prove full cleanup/capacity reuse; the owned hosted baseline tracked separately in [PR #692](https://github.com/Flow-Research/workstream/pull/692) qualifies its disclosed fixture scope | Complete only the authorized aggregate-capped live-provider proof with the exact account/profile and retain its actual verdict and paid custody. Native composition uses a controlled provider; the initial hosted model attempt stopped before any provider effect. Substantive rubric quality, production Flow identity and the full Terminal Systems journey remain separate |
+| Shared setup and project-image model use | **Budgeted runtime and public Operator controls** | One project-lifetime funded account serves exact setup-attempt and approved POST image lineage; immutable bounded profiles; finite multi-call/run envelopes and setup document-tool caps; private ART request/response evidence; stable paid-effect replay/recovery; once-only settlement; exact redacted Operator effect inspection; hosted composition gives only configured provider credentials to the trusted proxy; locked POST profiles select OpenAI Responses or OpenRouter Chat Completions, while ordinary POST needs neither; native KVM composition retains two verified trial receipts, four controlled model effects and no-call replay; active nested cancellation/child-death/controller-restart proofs retain no false completion or trial ART effects and prove full cleanup/capacity reuse; the owned hosted baseline tracked separately in [PR #692](https://github.com/Flow-Research/workstream/pull/692) qualifies its disclosed fixture scope | One scoped live OpenRouter POST at `5ab96251f` reused the retained prepared effect, reached governed acceptance and settled US$0.016527 in the pinned-rate ledger with no outstanding reservation or duplicate effect. This proves that transport/accounting path; substantive rubric quality, production Flow identity, live setup rehearsal and the full Terminal Systems journey remain separate |
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed; suspension denies both self-read and self-update; CLI privileged exact-actor/profile and identity-link reads and explicit separate profile/link lifecycle writes remain distinct from self-service and backend guards | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; exact-project, privacy-safe candidate read now consumed by the CLI; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence; CLI scope-filtered administrative grant/catalogue reads and explicit keyed grant issue/revoke consume existing public APIs without local authority decisions | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | System project catalogue | **Bounded public API and CLI read** | WS-CLI-001-46 adds `GET /api/v1/projects` and `workstream project list` for current system Project Manager, Operator, Finance or Audit `project.read` grants; each signed page exposes only ID, name and status. `me projects` retains exact-grant membership semantics. | System-catalogue TUI picker integration, deployed CLI and hosted conformance remain separate |
@@ -1526,9 +1528,10 @@ v0.1 is not ready until all of the following are true:
   The provider-free `manager_authored` runtime removes the inference dependency
   from local and hosted setup and selects no provider credential. It proves
   nothing about model quality. Both inference runtimes now pass the bounded
-  original-guide qualification. Exact OpenRouter account/plugin evidence, the
-  selected-image hosted/AWS proof and the broader Flow contribution journey
-  remain.
+  original-guide qualification. The scoped selected-image hosted/AWS baseline
+  and one live OpenRouter POST are now qualified below. Substantive setup/model
+  quality, historical spend reconciliation and the broader production Flow
+  contribution journey remain.
 - Publish the reviewed backend and checker-service source builds, substitute
   their registry digests and the approved exact checker cache into the prepared
   release configuration, and rerun its full host preflight. Then prove actual
@@ -1541,12 +1544,15 @@ v0.1 is not ready until all of the following are true:
   and invocation sockets under the intended isolation, and recover interrupted
   paid effects without another create. The Terminal Systems live rehearsal has
   one US$10 aggregate cap across SDKs, images and retries; offline transport,
-  ART and ledger tests do not establish its full project journey.
-- Provision the pinned Smol intake image/socket in the intended hosted deployment
-  and repeat the public PRE -> immutable Submission -> durable POST journey with
-  actual Flow/AWS identities and its measured resource limits. The isolated
-  self-hosted Smol drill already covers both governed policy outcomes and recovery;
-  its local Flow fixture, recorded guide inference and MinIO are not hosted certification.
+  ART and ledger tests do not establish its full project journey. The separate
+  authorized US$10 model-only qualification passed one live POST with retained
+  paid-effect recovery and replay; it does not reconcile the earlier setup spend.
+- Apply the qualified Smol intake/execution wiring to the intended production
+  deployment and repeat the public PRE -> immutable Submission -> durable POST
+  journey with production Flow identity. The isolated hosted AWS baseline covers
+  both governed policy outcomes, recovery and measured limits, and the scoped
+  live POST proves model transport/accounting. Its fixture identity and synthetic
+  engineering guide remain distinct from production project qualification.
 - Prove artifact diagnosis/retry in the intended hosted S3 environment; local
   public API/CLI proof does not establish hosted provider operation.
 - A task cannot enter `READY` without that complete locked context.
@@ -1724,13 +1730,18 @@ or trial ART effects, full owned VM/relay cleanup and both admission slots reuse
 That source changes test observation only; the native build remains `b2ce3fa45`.
 Hosted Smol composition and its scoped AWS proof are tracked separately in
 [PR #692](https://github.com/Flow-Research/workstream/pull/692). That owned baseline
-passed with fixture identity; its initial model-only attempt stopped before
-provider effects. No live-provider outcome
-or full Terminal Systems guide-to-contribution journey is qualified here.
+passed with fixture identity. The scoped model-only continuation at `5ab96251f`
+then reused its original prepared effect through the public Operator retry,
+received a real OpenRouter passing verdict, and produced one FinalAcceptance and
+one ContributionRecord. The pinned-rate ledger settled US$0.016527 with no
+outstanding reservation; exact Submission replay and duplicate deliveries added
+no effects. The [hosted qualification record](../.commitrail/changes/hosted-smol-project-execution.md#live-hosted-model-continuation)
+distinguishes this synthetic, single-rubric proof from substantive grading quality
+and the full Terminal Systems guide-to-contribution journey.
 Model-enabled checks require exact approved project profiles before binding;
 project publication and complete live-journey qualification remain separate.
 Registration, corrected policy binding and approval must precede activation;
-no approved binding, activated guide or contribution outcome is established.
+the real Terminal Systems project remains unactivated by these engineering proofs.
 
 The [Smol node lifecycle](../.commitrail/initiatives/WS-EXEC-001/WS-EXEC-001-01.md)
 adds production engine support through the existing typed adapter, independently

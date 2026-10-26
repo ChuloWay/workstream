@@ -98,12 +98,17 @@ These parts work in a local test run:
 The local test run used recorded AI model output. It does not prove project
 setup with a live AI model.
 
+An isolated hosted API/worker/Smol/AWS run also passed both review-policy
+branches. A separate live OpenRouter POST reached automatic acceptance with
+recorded model usage and replay protection. These runs used fixture identity
+and engineering submissions; they do not prove the full real-project journey.
+
 These parts are not complete:
 
 - Live human review and revision after a human decision.
 - Reviewer contribution records, because live human review is not complete.
 - Proof of project setup with a live AI model.
-- Operation on a hosted server.
+- The full hosted project journey with production Flow identity.
 - Payment delivery.
 
 The [v0.1 Roadmap And Capability Status](docs/roadmap_status.md) gives the

@@ -28,7 +28,7 @@ PRE model access is unsupported: `configured_model_profile_selector` rejects mod
 - Existing `experiments/pilot04_external_checker_runtime/` public journey helpers and their focused `scripts/` tests: attach to the actual hosted API and durable workers, retain scoped fault injection and verify native acknowledgements without substituting an in-process API or recorded worker.
 - `.github/workflows/release-images.yml`: run the new hosted attachment/model qualification refusal tests in its existing frozen backend environment; include their paths without weakening or replacing existing image/runtime proof.
 - Owned disposable EC2 qualification resources, source-pinned release builds and isolated database/release records and newly owned content-addressed keys within the existing approved AWS namespace: exercise the rendered hosted release without modifying shared services or production state. Reuse the existing simulated RS256 issuer fixture and label its identity proof accurately.
-- `docs/decision_0014_external_service_adapter_convention.md`, `docs/architecture_checker_framework.md` and affected `docs/roadmap_status.md` claims: reconcile the intended hosted boundary and explicit evidence limits.
+- `README.md`, `docs/decision_0014_external_service_adapter_convention.md`, `docs/architecture_checker_framework.md` and affected `docs/roadmap_status.md` claims: reconcile the intended hosted boundary and explicit evidence limits.
 - This combined change record.
 
 ### Not allowed
@@ -60,13 +60,13 @@ only the existing authorized recovery rules may resolve an effect.
 
 ## Acceptance criteria
 
-- [ ] Rendered hosted services contain no checker controller, Docker socket grant or runsc dependency; backend clients use one host Smol socket for the two existing typed capabilities.
-- [ ] Hosted configuration rejects Docker/runsc selection, missing or substituted Smol binaries/cache assets, unsafe identities, unbounded capacity and incorrect native socket/delegation.
-- [ ] Readiness uses registered typed adapters, validates exact runtime/image identities and fails closed before launch when the native node is unavailable.
-- [ ] Provider overlays retain PR #690 credential selection and expose credentials only to the trusted proxy; no provider source behavior changes.
-- [ ] Ordered non-model PRE remains supported; PRE model selectors remain unsupported and documented. Model-enabled POST is explicitly dependent on PR #677 and PR #690.
-- [ ] Focused contract tests cover valid composition and identity/credential/runtime substitutions. Relevant existing deployment and adapter checks continue to pass.
-- [ ] Documentation distinguishes prepared configuration and fixture proof from actual public API/worker, real model, hosted Flow/AWS and interruption qualification. The full public journey remains root-owned evidence.
+- [x] Rendered hosted services contain no checker controller, Docker socket grant or runsc dependency; backend clients use one host Smol socket for the two existing typed capabilities.
+- [x] Hosted configuration rejects Docker/runsc selection, missing or substituted Smol binaries/cache assets, unsafe identities, unbounded capacity and incorrect native socket/delegation.
+- [x] Readiness uses registered typed adapters, validates exact runtime/image identities and fails closed before launch when the native node is unavailable.
+- [x] Provider overlays retain PR #690 credential selection and expose credentials only to the trusted proxy; no provider source behavior changes.
+- [x] Ordered non-model PRE remains supported; PRE model selectors remain unsupported and documented. Model-enabled POST is explicitly dependent on PR #677 and PR #690.
+- [x] Focused contract tests cover valid composition and identity/credential/runtime substitutions. Relevant existing deployment and adapter checks continue to pass.
+- [x] Documentation distinguishes prepared configuration and fixture proof from actual public API/worker, real model, hosted Flow/AWS and interruption qualification. The full public journey remains root-owned evidence.
 
 ## Risk and review routing
 
@@ -78,13 +78,13 @@ only the existing authorized recovery rules may resolve an effect.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Current deployment and typed ownership | Inspect hosted Compose/preflight, existing systemd unit, typed execution/intake adapters and selected PRE/POST owners | Inspected | No hosted operation executed |
-| Provider overlap | Read PR #690 at `f3f818265`; reconcile main `fcd32057b` | Existing provider owner preserved | Live provider behavior remains separately qualified |
-| Smol callback transport | PR #677 implementation and qualification | Required dependency | Pending runtime integration and root-owned qualification |
+| Current deployment and typed ownership | Hosted Compose/preflight, existing systemd unit and actual public API/Celery/AWS proof at `6c483ca61` | Both policy branches passed | Fixture identity, not production Flow |
+| Provider overlap | PR #690 at `f3f818265`; main `fcd32057b`; scoped OpenRouter continuation at `5ab96251f` | Existing provider owner preserved; one real response settled | Pinned-rate ledger, not provider-invoice reconciliation |
+| Smol callback transport | PR #677 controlled composition/direct proofs and three active nested interruption cases; hosted live POST below | Scoped native and hosted proofs passed | No PRE model entitlement or full-project quality claim |
 | Rendered topology and refusal paths | `python3 -m unittest scripts.test_hosted_release_config scripts.test_hosted_release_images` | 70 passed, exit 0 | Contract/image fixtures; no native VM or provider execution |
 | Generated readiness client | Execute the actual generated script using pinned backend Python, real Settings, registered typed factory and a local framed Unix health server | Passed; exact typed health request observed | The responder is a local protocol fixture, not a Smol node |
 | Source hygiene | Ruff, Markdown links, stale wording and `git diff --check` | Passed | Does not replace runtime or independent review |
-| Public lifecycle and real model behavior | Root-owned public API/Celery journey and scoped live proof | Required before support claims | No EC2 or paid model work performed by this change |
+| Public lifecycle and real model behavior | Public baseline at `6c483ca61`; same-effect live continuation at `5ab96251f` | Human/automatic baseline branches and live model acceptance passed | Synthetic engineering guide/submission; production identity, setup rehearsal and full project remain separate |
 
 ## Review findings
 
@@ -216,8 +216,8 @@ Smol HOME limits use filesystem bytes, matching the pinned runtime socket layout
 ## Reconciliation
 
 - Current-source reconciliation: start from main `ae788e6a8`; preserve the pinned PR #690 dependency and reconcile main `fcd32057b`, including its current CLI/roadmap changes; consume PR #677 runtime transport without copying it. The main reconciliation has no source conflicts and changes no hosted executable code.
-- Next usable boundary: tested hosted Smol configuration, then dependency integration and independent hosted/public qualification.
-- Remaining risks: unqualified live model/Flow/AWS behavior and unsupported PRE model custody must remain explicit.
+- Next usable boundary: consume the qualified native/hosted composition in the separately owned real-project approval and contribution journey.
+- Remaining risks: production Flow identity, substantive model-grading quality, the full project journey and unsupported PRE model custody remain explicit.
 
 ### Public hosted attachment custody
 
@@ -331,3 +331,76 @@ worker import and during cleanup; its no-verifier-dispatch assertion is intact.
 The exact combined two-module command with the broker environment unset failed
 one of 26 tests before `f406310f7` and passed all 26 afterward. Root review, Ruff
 and diff checks passed. Product settings and release images are unchanged.
+
+
+### Live hosted model continuation
+
+Exact deployment source `5ab96251fc08e0c8cd3e8128bc9fb4f4fc8ed2bf`
+(tree `3b4f8be16fe3ca7915add5fc24a08f01f1c5dd2c`) rebuilt both backend SDK
+images and their fixture-CA derivatives. The unchanged native-hosted image
+verifier passed (evidence SHA-256
+`05b5dea9a8567f5b0c8331b4fdff4b536ff9574af2bcb9970dd9e314bcae966b`).
+Release `20c965fa8cf3d2a45e30ae9bdc78b105db8d62de6231fd8cf0ec525447f0300f`
+passed canonical AWS and native/attachment readiness checks. Native service,
+guest, launcher and project image pins remained unchanged from the qualified
+runtime. Compared with baseline `6c483ca61`, backend changes are exactly the
+canonical service bootstrap and its real custody regression; application,
+Alembic, dependency and image-recipe trees are identical. Later runtime merges
+change only the recovery observer and its documentation.
+
+The canonical public service bootstrap provisioned the missing existing model
+output writer. It changed neither the original project account nor its prepared
+effect. Read-only inspection passed with receipt SHA-256
+`e9d0a6852eeeae6fe297c0581880b048437dcce9496c3265fc7b62cf49e6b60d`.
+One explicit public Operator retry then advanced generation 2 to generation 3
+on the same immutable Submission. It reused the same paid slot, prepared effect
+and exact request hash; the old grant and complete earlier failure history were
+retained. No new project, budget allocation, Submission or paid-call identity
+was created for the continuation.
+
+The real OpenRouter response graded the disclosed synthetic
+`solver_brief_and_extension_disclosure` fixture as passed. The durable worker
+and completion delivery reached `accepted`, retaining exactly one Submission,
+one FinalAcceptance and one submitter ContributionRecord, with zero Reviews and
+zero awards under the unpaid policy. Private request and response ART bindings
+and public redacted effect inspection were verified. The ledger settled
+16,527,000 nanodollars (US$0.016527), within the authorized US$10 ceiling, and
+released the outstanding reservation to zero. This is the ledger's conservative
+charge at locked rates, not provider-invoice reconciliation. The earlier
+uncertain setup charge remains separately unresolved.
+Independent arithmetic confirmed 2,319 uncached input tokens at 5,000
+nanodollars and 274 output tokens at 18,000 nanodollars equal the recorded
+16,527,000-nanodollar settlement; cached input was zero. The selected provider
+and model were `openrouter` and `openai/gpt-5.6-terra`.
+
+Exact public Submission replay and two real duplicate Celery deliveries retained
+identical account, effect, grant, slot, outbox and governed-outcome facts. The
+native owned-resource inventory was empty and the foreign control remained
+present. Full continuation receipt SHA-256:
+`bd96a3b0b2b8609cc7f0c298aae0d86721ca5ee4346a613b8e030aa963cd1fd1`, retained at
+`/var/tmp/workstream-hosted-smol-20261026/assets/node-control/model-prepared-continuation-receipt.json`.
+The root independently rehashed the 15 preparation artifacts and inspected this
+receipt; a separate read-only PostgreSQL snapshot confirmed the same completed
+effect, current run and zero-reserved account.
+
+The original baseline and failed attempts remain immutable. A private startup
+observer used the wrong parser role name and failed after actual startup;
+separate exact-role inspection confirmed all five healthy roles without
+restarting them or weakening product readiness. The live proof uses simulated
+RS256 identity and one synthetic rubric. It does not establish production Flow
+identity, a live setup-agent rehearsal, full trial execution in that paid call,
+substantive rubric quality, an approved revision journey or the complete Terminal
+Systems project owned by #555. PRE model selectors remain unsupported.
+
+The reviewed success-only cleanup then stopped producers, drained the worker,
+verified native drain, finalized the supervisor while the proxy remained live,
+and stopped the native node and its clients. Cleanup receipt SHA-256
+`a0d171fbeee72c7f81d1adf8fffa90936d43e52641497afc029ff22babc6035c`
+and independent final inventory SHA-256
+`11095053e9b24add353b1cae1aa06fc0e82f94b916fd33eac06b87036ee5f5aa`
+confirm stopped owned services/timer, empty VM/lease/cgroup/relay and ART scratch
+inventories, and no outstanding reservation. The fixed claim retained inode
+4790559 and final SHA-256
+`92ae55c5ec91940b64ff934f2b143c24b95796e48d6b613a966150442761a116`.
+Database, object-store evidence, original failure history and shared services
+were preserved. No global cleanup or additional model call occurred.

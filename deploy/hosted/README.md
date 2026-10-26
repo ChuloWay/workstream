@@ -61,6 +61,13 @@ owners. PRE model selectors remain unsupported: PRE has no supported paid-model
 lineage/grant operation, and policy validation rejects those selectors. This
 configuration does not introduce PRE model authority.
 
+The [hosted qualification record](../../.commitrail/changes/hosted-smol-project-execution.md#live-hosted-model-continuation)
+records the actual API/Celery/AWS baseline and one live OpenRouter POST through
+this wiring. The model continuation preserves its original paid effect, reaches
+governed acceptance and proves replay without another charge. It uses fixture
+identity and a synthetic single-rubric submission; production identity and full
+project grading remain separate qualifications.
+
 Guide parsing uses a separate private Unix socket at
 `/var/lib/workstream/guide-runtime/guide.sock`. The parser uses the immutable
 backend image without network or secrets. Its bootstrap starts as root with only
