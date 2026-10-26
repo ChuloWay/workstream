@@ -569,7 +569,7 @@ cannot be reused as post-submission review-gate evidence. See the
 
 | Lifecycle stage | Intended merged status | What is already proven | What remains before v0.1 |
 | --- | --- | --- | --- |
-| Shared setup and project-image model use | **Budgeted runtime and public Operator controls** | One project-lifetime funded account serves exact setup-attempt and approved POST image lineage; immutable bounded profiles; finite multi-call/run envelopes and setup document-tool caps; private ART request/response evidence; stable paid-effect replay/recovery; once-only settlement; exact redacted Operator effect inspection; hosted composition gives only configured provider credentials to the trusted proxy; locked POST profiles select OpenAI Responses or OpenRouter Chat Completions, while ordinary POST needs neither | Qualify the external account/current pricing and each project's substantive rubric under intended gVisor/AWS isolation; then perform only the approved aggregate-capped live rehearsal. Repository proof is controlled/offline and not deployment or model-quality evidence |
+| Shared setup and project-image model use | **Budgeted runtime and public Operator controls** | One project-lifetime funded account serves exact setup-attempt and approved POST image lineage; immutable bounded profiles; finite multi-call/run envelopes and setup document-tool caps; private ART request/response evidence; stable paid-effect replay/recovery; once-only settlement; exact redacted Operator effect inspection; hosted composition gives only configured provider credentials to the trusted proxy; locked POST profiles select OpenAI Responses or OpenRouter Chat Completions, while ordinary POST needs neither; native KVM composition retains two verified trial receipts, four controlled model effects and no-call replay | Qualify the external account/current pricing and each project's substantive rubric under the intended Smol/AWS deployment; then perform only the approved aggregate-capped live rehearsal. Native composition uses a controlled provider; actual hosted deployment and model-quality evidence remain separate |
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed; suspension denies both self-read and self-update; CLI privileged exact-actor/profile and identity-link reads and explicit separate profile/link lifecycle writes remain distinct from self-service and backend guards | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; exact-project, privacy-safe candidate read now consumed by the CLI; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence; CLI scope-filtered administrative grant/catalogue reads and explicit keyed grant issue/revoke consume existing public APIs without local authority decisions | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | System project catalogue | **Bounded public API and CLI read** | WS-CLI-001-46 adds `GET /api/v1/projects` and `workstream project list` for current system Project Manager, Operator, Finance or Audit `project.read` grants; each signed page exposes only ID, name and status. `me projects` retains exact-grant membership semantics. | System-catalogue TUI picker integration, deployed CLI and hosted conformance remain separate |
@@ -1698,10 +1698,15 @@ provider qualification through real gVisor execution and PostgreSQL/MinIO custod
 two verified trial receipts, four settled model effects and replay without new
 provider calls. Owned resource cleanup passed. This uses a qualification package;
 it does not establish live-model grading or the public contribution journey.
-That qualification used gVisor. The Smol implementation now includes typed
-model/trial callbacks, predecessor material and fresh sibling trials with atomic
-capacity admission. These changes still require real microVM composition and
-resource-boundary qualification before deployment readiness can be claimed.
+Native Smol KVM composition also passed at `ee9436e19`, using the production Rust
+service, current project image and trusted intake on an isolated Linux/amd64
+node. It retained two verified ART trial receipts with 17 steps each, four
+controlled model effects and replay without new model calls; VM, cgroup,
+database and object-store cleanup passed. The whole-invocation disk profile was
+2 GiB. Exact source and artifact hashes are in the [native qualification record](../.commitrail/changes/terminal-systems-project-checkers.md#native-kvm-composition-qualification).
+This initial-submission package does not exercise predecessor material.
+Further resource-boundary qualification, actual hosted/live-provider operation
+and the public guide-to-contribution journey remain separate.
 Model-enabled checks require exact approved project profiles before binding;
 project publication and complete live-journey qualification remain separate.
 Registration, corrected policy binding and approval must precede activation;

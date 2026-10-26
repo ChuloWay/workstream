@@ -831,3 +831,36 @@ Validation: the lifecycle repair passed the full native workspace with 189 tests
 zero failures and zero ignored cases using serial test threads. Focused guest
 and host socket regressions also passed. Root review found no lifecycle custody
 defect; canonical KVM composition remains required before runtime signoff.
+
+
+### Native KVM composition qualification
+
+Controlled composition 008 passed in 120.14 seconds at exact source
+`ee9436e19e53c6584de00c8ac8d0bfcd95def029`, tree
+`5d1208a432a4f8239a371ce1c669b29e6ec10d89`. The offline pinned Rust 1.85.1
+static workspace build passed; the full native suite passed 189 tests with no
+failures or ignored cases. The production Rust service, current project POST
+image and current-source trusted intake ran under real Smol 1.31.4/KVM with
+PostgreSQL/MinIO custody. Both initial-submission requirements passed: two
+verified ART trial receipts, 17 steps each, four completed controlled model
+effects and exact replay with no additional model calls. Steps included failed
+starter/incomplete/missing/fabricated-output verification, reference successes,
+controlled interruption and successful restart verification. No paid provider
+call was made by this qualification.
+
+The qualified profile binds a 2 GiB whole-invocation disk ceiling, 1 GiB memory,
+128 PIDs and 64 KiB retained output, with its declared bounded enforcement
+overruns. Outer/child runtime configuration digest is
+`sha256:689031dcdd6bf9d810fe828698a693b743c4e01f9e657446600a5a1273b56684`.
+The immutable fixture summary is
+`sha256:c6f89e0fbed3dbe5df6dc439bc3b652cda13868425f3ecd0c328ce2e16a44fd1`;
+its bounded cleanup receipt is
+`sha256:12b49c795b39299bbae08e150857f9f80810666a3c3b7ea25e9e80740ecc91bd`.
+No owned VM or lease entries remained; the unit cgroup was removed,
+and relay/scratch/child-home roots retained only their exact owner-bound marker.
+Database and object-store cleanup passed; other owned qualification services,
+foreign roots and prior evidence were preserved. This is a controlled-provider,
+current-only package proof: predecessor/revision material, live-model grading,
+actual hosted deployment and the public guide-to-contribution journey remain
+separate. Further resource-boundary qualification is not inferred from this
+composition result.

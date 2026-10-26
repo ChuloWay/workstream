@@ -172,9 +172,13 @@ connections inside the same authorized invocation. The guest reaps each complete
 execution handler before accepting another and retains at most one handler per
 channel. Workload stdout never carries control frames. No host
 socket or provider credential is mounted into the microVM. Trials use fresh
-Smol sibling VMs and have no Docker/runsc fallback. Real KVM composition
-qualification is required before this path is ready for deployment; historical
-Docker/runsc results do not qualify it.
+Smol sibling VMs and have no Docker/runsc fallback. Controlled KVM composition
+passed at `ee9436e19`: trusted intake, two trials of 17 steps, four controlled
+model effects, verified PostgreSQL/MinIO ART receipts, replay without new model
+calls and confirmed VM/cgroup cleanup. The [qualification record](../.commitrail/changes/terminal-systems-project-checkers.md#native-kvm-composition-qualification)
+binds the exact source, artifacts and 2 GiB aggregate disk profile. This initial
+submission package does not exercise predecessor material. Hosted deployment,
+live-model grading and the public guide-to-contribution journey remain separate.
 
 The opt-in
 [`model_relay_docker.py`](workstream-checker-service/tests/model_relay_docker.py)
