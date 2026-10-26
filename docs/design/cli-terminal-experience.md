@@ -159,7 +159,10 @@ Use a quiet slate canvas, cyan focus and peach deliberate-action accent, with
 readable light-background and ANSI-16 equivalents. Selection, severity and
 action meaning also have words and markers. The terminal's background response
 selects the palette; without that response, keep neutral terminal-default text
-rather than assume a dark background. `NO_COLOR` disables application
+rather than assume a dark background. The bare Windows ConPTY test host exercises
+this neutral fallback; it does not prove colored-host response transport. Native
+POSIX tests exercise detected palettes, and model tests exercise exact palette
+rendering on all supported operating systems. `NO_COLOR` disables application
 color; `--plain` uses ASCII, no application colors or alternate screen, and
 single-column layout. It still needs interactive cursor controls. The TUI
 rejects non-TTY/JSON launch before an API request and points automation to

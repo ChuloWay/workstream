@@ -123,16 +123,22 @@ func TestNoColorAndUnknownBackgroundUsePlainDefaults(t *testing.T) {
 
 func TestDetectedLightBackgroundUsesReadablePaletteWithoutCanvas(t *testing.T) {
 	m := boot(t, &fakeClient{})
+	press(t, m, "enter")
 	m.plain, m.noColor = false, false
 	m.Update(tea.BackgroundColorMsg{Color: color.RGBA{R: 8, G: 14, B: 20, A: 255}})
 	dark := m.styles()
+	darkView := m.View()
+	if !strings.Contains(darkView.Content, "[Ready]") || !strings.Contains(darkView.Content, "38;2;105;215;227") || darkView.BackgroundColor != nil {
+		t.Fatal("dark background did not render exact focus color without a canvas", darkView.Content)
+	}
 	m.Update(tea.BackgroundColorMsg{Color: color.RGBA{R: 250, G: 250, B: 246, A: 255}})
 	light := m.styles()
+	lightView := m.View()
+	if !strings.Contains(lightView.Content, "[Ready]") || !strings.Contains(lightView.Content, "38;2;8;126;140") || lightView.BackgroundColor != nil {
+		t.Fatal("light background did not render exact focus color without a canvas", lightView.Content)
+	}
 	if !m.backgroundKnown || m.darkBackground || reflect.DeepEqual(dark.heading.GetForeground(), light.heading.GetForeground()) || light.selected.GetBackground() == nil {
 		t.Fatal("light terminal did not switch semantic colors and selection surface")
-	}
-	if m.View().BackgroundColor != nil {
-		t.Fatal("presentation forced a canvas over the terminal's own background")
 	}
 }
 

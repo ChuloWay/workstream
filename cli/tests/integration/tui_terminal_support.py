@@ -200,12 +200,13 @@ class Terminal:
                     self.pending = self.pending[match.end() :]
                     if sequence.startswith("\x1b]11;?"):
                         self.background_queries += 1
-                        background = (
-                            "ffff/ffff/ffff"
-                            if self.light_background
-                            else "0000/0000/0000"
-                        )
-                        self._write(f"\x1b]11;rgb:{background}\x1b\\".encode())
+                        if self.light_background is not None:
+                            background = (
+                                "ffff/ffff/ffff"
+                                if self.light_background
+                                else "0000/0000/0000"
+                            )
+                            self._write(f"\x1b]11;rgb:{background}\x1b\\".encode())
                     elif sequence.startswith("\x1b]10;?"):
                         self._write(b"\x1b]10;rgb:ffff/ffff/ffff\x1b\\")
                     continue

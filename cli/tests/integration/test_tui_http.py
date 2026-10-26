@@ -193,7 +193,7 @@ def reveal_detail(terminal, text):
     )
 
 
-@pytest.mark.parametrize("light", [False, True])
+@pytest.mark.parametrize("light", [None, False, True])
 @pytest.mark.parametrize("rows", [10, 24])
 def test_minimum_terminal_navigation_and_light_background(light, rows):
     reads = Reads()
@@ -223,29 +223,32 @@ def test_minimum_terminal_navigation_and_light_background(light, rows):
         terminal.send("\x1b")
         terminal.wait("Ready terminal task")
         if os.name == "nt":
-            # Bare ConPTY does not forward OSC 11 queries to its outer host.
-            # Until a terminal supplies a background report, the workbench
-            # must stay readable without assuming either palette.
+            # This bare ConPTY host did not expose the OSC 11 query or route a
+            # supplied report. It must remain neutral without a known color.
             assert terminal.background_queries == 0
+        else:
+            assert terminal.background_queries > 0, "PTY did not request OSC 11"
+        if os.name == "nt" or light is None:
+            # The None fixture withholds the report even though a PTY query
+            # was observed. Unknown background must never assume a palette.
             assert set(re.findall(rb"\x1b\[[0-9;:]*m", terminal.raw)) <= {
                 b"\x1b[m",
                 b"\x1b[0m",
             }
-            background = "ffff/ffff/ffff" if light else "0000/0000/0000"
-            terminal.send(f"\x1b]11;rgb:{background}\x1b\\")
         else:
-            assert terminal.background_queries > 0, "PTY did not answer OSC 11"
-        expected_focus = b"38;2;8;126;140" if light else b"38;2;105;215;227"
-        deadline = time.monotonic() + 10
-        while expected_focus not in terminal.raw and time.monotonic() < deadline:
-            terminal.pump(0.05)
-        assert expected_focus in terminal.raw, (
-            "terminal background did not select its readable palette",
-            {
-                "background_queries": terminal.background_queries,
-                "sgr": sorted(set(re.findall(rb"\x1b\[[0-9;:]*m", terminal.raw)))[:40],
-            },
-        )
+            expected_focus = b"38;2;8;126;140" if light else b"38;2;105;215;227"
+            deadline = time.monotonic() + 10
+            while expected_focus not in terminal.raw and time.monotonic() < deadline:
+                terminal.pump(0.05)
+            assert expected_focus in terminal.raw, (
+                "PTY background report did not select its readable palette",
+                {
+                    "background_queries": terminal.background_queries,
+                    "sgr": sorted(set(re.findall(rb"\x1b\[[0-9;:]*m", terminal.raw)))[
+                        :40
+                    ],
+                },
+            )
         terminal.quit()
         assert TOKEN.encode() not in terminal.raw
 
