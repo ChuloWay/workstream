@@ -17,6 +17,7 @@ from app.interfaces.trusted_submission_intake import (
     TrustedIntakeSession,
     TrustedSubmissionIntakeAdapter,
 )
+from app.modules.artifacts.preparation import ArtifactPreparationDeadlineError
 from app.modules.artifacts.sources import ArtifactCommitment, PreparedArtifact
 from app.modules.artifacts.api.submission_archive import SubmissionArchiveInspectionResult
 
@@ -64,7 +65,9 @@ async def prepared_trusted_intake(
             try:
                 await await_completion_preserving_cancellation(session.close())
             except ExternalServiceAdapterError:
-                if not cancelled:
+                # Keep the selected-attempt unresolved outcome. Ordinary work
+                # rejection must still yield to unconfirmed runtime cleanup.
+                if not cancelled and not isinstance(failure, ArtifactPreparationDeadlineError):
                     raise
 
 

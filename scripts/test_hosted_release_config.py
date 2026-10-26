@@ -1723,6 +1723,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
         with patch.object(preflight, "_run_json", return_value=health) as run:
             preflight.validate_trusted_intake(self.environment)
         command = run.call_args.args[0]
+        self.assertIn("--pull=never", command)
         self.assertIn("trusted_submission_intake(s).health()", command[-1])
         self.assertEqual(command[command.index("--network") + 1], "none")
         self.assertEqual(command.count("--mount"), 1)

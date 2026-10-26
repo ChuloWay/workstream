@@ -17,10 +17,10 @@ boundary for ZIP handling so submitted bytes never select a host parsing path.
 
 ## Original starting behavior
 
-Boundary 1 supplies real Smol execution and recovery through CHECKERS' existing
-adapter. Public upload still invokes ART's host `SubmissionArchiveInspector`,
-then CHECKERS directly projects the archive and evaluates the default on the
-host. Durable POST also projects on the host. Those call paths miss both the
+Boundary 1 supplied real Smol execution and recovery through CHECKERS' existing
+adapter. Public upload invoked ART's host `SubmissionArchiveInspector`,
+then CHECKERS directly projected the archive and evaluates the default on the
+host. Durable POST also projected on the host. Those call paths missed both the
 requested overlap and the fresh-VM custody for all ZIP processing.
 
 The user authorized continuing through this boundary and the separate full
@@ -173,7 +173,7 @@ request/retry and durable-worker owners decide the next business attempt.
 | Successful default releases intake before ordered project PRE | Same Smol socket with `maximum_parallel=1`, default-only and two ordered bindings: observe intake cleanup confirmed, then capacity released, then first project connection; cancellation/uncertain cleanup never reports release |
 | POST uses the same guest intake | Real immutable input/lease fixture, exact manifest and late revalidation, no host ZIP invocation |
 | Canonical rules have one implementation | Existing corpus remains; source/composition negative checks reject production host inspector/default calls |
-| Existing policy branches remain | Required checks still feed existing true-policy review routing and false-policy shared acceptance; full public durable proof belongs to boundary 3 |
+| Existing policy branches remain | Required checks still feed existing true-policy review routing and false-policy shared acceptance; full public durable proof is recorded in the consolidated deployment/public section below |
 
 ## Live-drill repair: sequential material grants
 
@@ -192,16 +192,17 @@ ART preparation scope; it adds no policy or runtime path.
 
 ## Evidence
 
-Run relevant owner/adapter suites, canonical archive/default corpus, real
-PostgreSQL integration and live KVM intake/cleanup tests. Full suite and public
-Celery journey remain blocking before the overall user goal is complete.
+Owner/adapter suites, the canonical archive/default corpus, real PostgreSQL
+integration and live KVM intake/cleanup tests establish the component boundaries.
+The historical public Celery journey and its custody are recorded below. Fresh
+full-suite and live evidence for a changed candidate belong to the PR.
 
 ## Risk and review routing
 
 - Risk class: L1
 - Required reviewers: architecture/reuse, security, QA/test-delta, product/operations, documentation; CI integrity if workflow changes become necessary.
 - Human review focus: preparation before bytes versus authority, two-phase default ordering, exact material export custody, cancellation/deadline cleanup, and explicit deployment prerequisites.
-- Plan review: required before implementation; no implementation proof claimed here.
+- Plan review: required before implementation; the plan replay and implementation proof are recorded below.
 
 ## Review findings
 
@@ -211,11 +212,12 @@ closed preparation retry policy. Plan replay passed on `4b86aa3054d4fe79e92c7253
 
 ## Reconciliation
 
-After this boundary's verified implementation: deployment composition and the
-public PRE -> immutable Submission -> durable POST -> governed outcome drill,
-including failure/retry, both review-policy branches and exact contribution facts.
+This combined delivery includes deployment composition and the isolated public
+PRE -> immutable Submission -> durable POST -> governed outcome drill, including
+failure/retry, both policy branches and exact contribution facts. The intended
+hosted Flow/AWS deployment remains a separate qualification.
 
-## Implemented boundary and proof limits
+## Intake implementation and historical owner-level proof
 
 The typed adapter, closed guest worker and Rust prepared session connect PRE and
 POST to canonical guest ZIP/default processing. Confirmed intake cleanup precedes
@@ -239,7 +241,8 @@ The combined 140-case EC2 run passes with database and MinIO cleanup confirmed.
 These transaction fixtures explicitly inject an in-process intake fake; the
 separate KVM matrix establishes the real adapter/guest boundary. Neither proof
 is mislabeled as a public API -> Smol -> durable worker -> governed outcome drill.
-That combined proof and deployment composition remain boundary 3.
+The distinct combined public proof and deployment composition are recorded in
+this change's deployment/public section below.
 
 Implementation review findings repaired the exact default-binding assertion,
 combined upload/preparation cancellation, and recoverable deadline finalization.
@@ -248,7 +251,8 @@ module. Deterministic ZIP metadata/stable case IDs and a focused intake lifecycl
 test module repair those defects without loosening the structural guard or test
 selection. Exact architecture and CI inventories retain all prior assignments.
 Required full hosted-suite evidence and reviewer receipts belong to the PR's
-current candidate; no deployment or complete user-journey claim is made here.
+current candidate. The isolated public journey below does not establish the
+intended hosted Flow/AWS deployment.
 
 ## Creation-failure classification
 
@@ -268,9 +272,7 @@ submission and ContributionRecord evidence through durable workers.
 
 ### Original public-proof starting point (historical)
 
-At the original public-proof planning point, merged main was `733c752f7c1ecbb74615d42b747dfbda8ff72df5` (verified remotely).
-The stacked intake candidate was `2c9c6685fd3de12d2976504fe0f9e0b1bc4bf3e5`.
-Its API and POST composition require the new typed intake configuration, while
+At the original public-proof planning point, API and POST composition required the new typed intake configuration, while
 hosted Compose/preflight and the opt-in public journey probe still construct a
 Docker-only node. The existing public probe already exercises public project/guide
 setup, upload feedback, immutable Submission, prefork Celery/Beat, known pre-effect routing
@@ -285,7 +287,7 @@ checks or acceptance. Existing documented infrastructure identity/bootstrap
 fixtures are permitted and must be labeled. No host ZIP/default fallback,
 checker network escape, ad hoc adapter factory, model gateway replacement or
 claims of live external model invocation from recorded guide inference. Defects
-in boundary 2 return to that owner/PR for a focused regression and review.
+in intake return to that ART owner for a focused regression and review.
 
 ### Plan
 
@@ -433,3 +435,11 @@ existing release gates. The drill intentionally uses recorded guide inference an
 a local Flow verifier fixture; MinIO establishes the S3 protocol, not native AWS
 activation. Intended hosted deployment and actual external-model invocation remain
 separate. No shared EC2 service or product business owner was changed.
+
+## Interrupted export and cleanup precedence
+
+An export failure immediately aborts its mixed framed/raw transport; later cleanup
+cannot parse unread file bytes as a response. A selected-attempt deadline keeps
+its unresolved outcome if cleanup also fails. Cleanup failure still supersedes
+ordinary archive rejection, and caller cancellation retains its existing behavior.
+The hosted intake health command uses only its cached pinned backend image.

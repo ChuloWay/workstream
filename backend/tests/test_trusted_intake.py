@@ -371,3 +371,51 @@ def test_intake_factory_is_independent_of_project_engine(tmp_path):
     )
     assert adapter.identity.capability_key == "trusted_submission_intake"
     assert adapter.identity.provider_key == "unix_socket"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["entry", "sink", "digest"])
+async def test_interrupted_export_disconnects_before_cleanup_can_read_raw_bytes(tmp_path, failure):
+    import time
+    from app.adapters.artifacts.trusted_intake import _Session, _CHUNK
+    from app.interfaces.external_services import ExternalServiceUnavailableError
+
+    content = b"x" * (_CHUNK + 64)
+    inspection = SubmissionArchiveInspector(SubmissionArchiveLimits()).inspect(
+        BytesIO(_archive(content=content)))
+    entry = inspection.entries[0]
+    adapter = UnixSocketTrustedIntakeAdapter(
+        socket_path=tmp_path / "unused.sock", image_digest=_IMAGE, config_digest=_CONFIG)
+    session = _Session(adapter, time.monotonic() + 60, _request())
+    session._socket.close()
+    session._socket, peer = socket.socketpair()
+    session._state, session._lease, session._inspection = "inspected", _LEASE, inspection
+    announced = replace(entry, normalized_path="different.txt") if failure == "entry" else entry
+    payload = content[:-1] + b"y" if failure == "digest" else content
+    peer.sendall(_frame({"protocol_version": _PROTOCOL, "operation": "file",
+                        "lease": _LEASE, "status": "ok", "payload": asdict(announced)}) + payload)
+    sink_error = OSError("scratch write unavailable")
+
+    def sink(actual, chunk):
+        assert actual == entry
+        if failure == "sink":
+            raise sink_error
+
+    try:
+        expected = OSError if failure == "sink" else ExternalServiceProtocolError
+        with pytest.raises(expected) as raised:
+            session.export(sink)
+        if failure == "sink":
+            assert raised.value is sink_error
+        peer.settimeout(0.2)
+        with peer.makefile("rb") as reader:
+            assert _read(reader)["operation"] == "export"
+            try:
+                assert reader.read() == b""  # No close command or trailing-frame read.
+            except ConnectionResetError:
+                pass  # Closing with unread input may reset instead of sending EOF.
+        with pytest.raises(ExternalServiceUnavailableError):
+            await asyncio.wait_for(session.close(), 1)
+    finally:
+        session.abort()
+        peer.close()

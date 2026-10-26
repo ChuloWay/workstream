@@ -164,3 +164,43 @@ async def test_preparation_deadline_finalizes_only_after_intake_cleanup(tmp_path
         await request.intake.close()
         await request.prepared_artifact.close()
         manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body_failure", ["deadline", "rejection", "cancellation", None])
+async def test_intake_cleanup_preserves_unresolved_outcome_but_overrides_work_rejection(body_failure):
+    import asyncio
+    from app.interfaces.external_services import ExternalServiceUnavailableError
+    from app.modules.artifacts.api.submission_archive import (
+        SubmissionArchiveFailureCode, SubmissionArchiveRejectedError,
+    )
+    from app.modules.artifacts.preparation import ArtifactPreparationDeadlineError
+    from app.modules.artifacts.trusted_intake import prepared_trusted_intake
+
+    cleanup = ExternalServiceUnavailableError()
+    failures = {"deadline": ArtifactPreparationDeadlineError(),
+                "rejection": SubmissionArchiveRejectedError(SubmissionArchiveFailureCode.MALFORMED),
+                "cancellation": asyncio.CancelledError(), None: None}
+    original = failures[body_failure]
+    events = []
+
+    class Session:
+        def abort(self):
+            events.append("abort")
+
+        async def close(self):
+            events.append("close")
+            raise cleanup
+
+    class Adapter:
+        async def prepare(self, request):
+            return Session()
+
+    expected = original if body_failure in {"deadline", "cancellation"} else cleanup
+    with pytest.raises(type(expected)) as raised:
+        async with prepared_trusted_intake(Adapter(), None) as pending:
+            await pending
+            if original is not None:
+                raise original
+    assert raised.value is expected
+    assert events == (["abort", "close"] if body_failure == "cancellation" else ["close"])
