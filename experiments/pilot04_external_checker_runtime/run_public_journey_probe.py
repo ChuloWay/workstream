@@ -63,7 +63,7 @@ from tests.test_s3_artifact_store import minio_settings
 BACKEND = Path(__file__).resolve().parents[2] / "backend"
 sys.path.insert(0, str(BACKEND / "scripts"))
 from api_contract_e2e import (  # noqa: E402
-    api_environment, find_free_port, flow_settings,
+    api_environment, configure_scripted_model_session_environment, find_free_port, flow_settings,
 )
 
 
@@ -1096,6 +1096,7 @@ async def run(database_url: str, image_reference: str, node_config: Path,
         "WORKSTREAM_ARTIFACT_INTAKE_CONFIG_DIGEST": intake_image["config_image_id"],
         "PYTHONPATH": os.pathsep.join(map(str, (BACKEND, BACKEND / "tests", BACKEND.parent))),
     })
+    configure_scripted_model_session_environment(env)
     env.pop("OPENAI_API_KEY", None)
     # Infrastructure prerequisites and broker publication use the same
     # isolated database and provider settings as the API and worker children.

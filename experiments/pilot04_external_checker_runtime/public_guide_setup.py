@@ -175,6 +175,12 @@ async def public_guide_setup(client, factory, human_review_required, call, token
                          headers={"Idempotency-Key": str(uuid4())},
                          json={"name": "Connected guide journey", "slug": "journey-" + uuid4().hex})
     await seed_review_actor(factory, UUID(project["id"]), actor=manager)
+    from guide_compilation_e2e import publish_scripted_model_profile
+    operator, _ = await seed_review_actor(factory, None, role="operator", scope="system")
+    profile = await publish_scripted_model_profile(client, token_for(operator), project["id"])
+    if (profile["spec"]["project_id"] != project["id"]
+            or profile["spec"]["profile_version"] != 1):
+        raise AssertionError("scripted setup model profile differs from the new project")
     root = f"/api/v1/projects/{project['id']}/guides"
     body = {"version": "initial", "change_summary": "Original sample worker guide",
             "task_examples": TASK_EXAMPLES,

@@ -217,6 +217,19 @@ PRE -> immutable Submission -> durable POST -> governed outcome drill, including
 failure/retry, both policy branches and exact contribution facts. The intended
 hosted Flow/AWS deployment remains a separate qualification.
 
+### Public setup prerequisite reconciliation
+
+The current setup owner requires an operator-published model profile and a
+configured typed model session. The recorded public drill must provision those
+through the existing public profile endpoint and reuse the canonical scripted
+session environment helper before guide upload. This repair is limited to the
+existing public proof helpers and focused tests; it must not stub model-session
+admission or change production model, authorization or setup rules. Profile
+publication failure must stop before guide upload. Verify that boundary with a
+focused regression and repeat the full public journey. Architecture/reuse and
+QA/product reviewers assess the fixture reconciliation. Recorded inference is
+still a fixture and does not qualify live model execution inside Smol.
+
 ## Intake implementation and historical owner-level proof
 
 The typed adapter, closed guest worker and Rust prepared session connect PRE and
