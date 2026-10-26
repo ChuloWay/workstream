@@ -11,6 +11,7 @@ const RESOURCES: Resources = Resources {
     cpu_millis: 1000,
     memory_bytes: 2 * 1024 * 1024 * 1024,
     storage_gib: 3,
+    pids: 128,
 };
 
 #[derive(Clone, Debug, Deserialize)]

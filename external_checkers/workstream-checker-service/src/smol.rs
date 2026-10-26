@@ -6,7 +6,7 @@ use std::sync::{
     Arc,
 };
 use workstream_checker_guest::{
-    GuestJob, GuestPurpose, MaterialFile, CAPACITY_EXIT_CODE, MAX_JOB_BYTES,
+    GuestCapabilities, GuestJob, GuestPurpose, MaterialFile, CAPACITY_EXIT_CODE, MAX_JOB_BYTES,
 };
 
 const CONTROL_OUTPUT: usize = 256 * 1024;
@@ -14,14 +14,21 @@ const HOST_OVERHEAD: u64 = 512 * 1024 * 1024;
 const GUEST_OVERHEAD_MIB: u64 = 128;
 const VERSION: &str = "1.31.4";
 
+mod admission;
+pub(crate) use admission::{Admission, Capacity, Reservation};
 mod intake;
+pub(crate) mod trial;
+mod trial_io;
 pub(super) use intake::{serve as serve_intake, IntakeConfig};
+mod io;
+pub(super) use io::{ProjectCallbacks, ProjectMaterials};
 
 #[derive(Clone, Copy)]
 struct Resources {
     cpu_millis: u64,
     memory_bytes: u64,
     storage_gib: u64,
+    pids: u64,
 }
 impl From<&ValidatedRequest> for Resources {
     fn from(value: &ValidatedRequest) -> Self {
@@ -29,6 +36,7 @@ impl From<&ValidatedRequest> for Resources {
             cpu_millis: value.cpu_millis,
             memory_bytes: value.memory_bytes,
             storage_gib: 1,
+            pids: (value.memory_bytes / (16 * 1024 * 1024)).clamp(16, 256),
         }
     }
 }
@@ -43,6 +51,7 @@ pub(super) struct SmolConfig {
     pub guest_sha256: String,
     pub cgroup_root: PathBuf,
     pub maximum_parallel: usize,
+    pub maximum_storage_bytes: u64,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -61,6 +70,8 @@ struct Lease {
     lifetime_ms: u64,
     root: PathBuf,
     runtime: SmolConfig,
+    #[serde(default)]
+    private_home_root: Option<PathBuf>,
 }
 struct Machine {
     lease: Lease,
@@ -69,59 +80,87 @@ struct Machine {
     consumed: bool,
 }
 
-#[derive(Debug)]
-pub(super) struct Admission {
-    memory: AtomicUsize,
-    slots: AtomicUsize,
-    maximum_slots: usize,
-    epoch: String,
-    limit: usize,
-}
-pub(super) struct Reservation {
-    admission: Arc<Admission>,
-    bytes: usize,
-}
-impl Drop for Reservation {
-    fn drop(&mut self) {
-        self.admission
-            .memory
-            .fetch_sub(self.bytes, Ordering::SeqCst);
-        self.admission.slots.fetch_sub(1, Ordering::SeqCst);
-    }
-}
 pub(super) fn reserve(
     config: &ServiceConfig,
     request: &ValidatedRequest,
-) -> Result<Reservation, String> {
+) -> Result<Arc<Reservation>, String> {
     reserve_resources(config, request.into())
 }
-fn reserve_resources(config: &ServiceConfig, resources: Resources) -> Result<Reservation, String> {
+fn resource_capacity(resources: Resources) -> Result<Capacity, String> {
+    Ok(Capacity {
+        slots: 1,
+        memory_bytes: resources
+            .memory_bytes
+            .checked_add(HOST_OVERHEAD)
+            .ok_or("capacity overflow")?,
+        storage_bytes: resources
+            .storage_gib
+            .checked_mul(1024 * 1024 * 1024)
+            .ok_or("capacity overflow")?,
+    })
+}
+fn reserve_resources(
+    config: &ServiceConfig,
+    resources: Resources,
+) -> Result<Arc<Reservation>, String> {
+    reserve_capacity(config, resource_capacity(resources)?, None)
+}
+pub(super) fn reserve_invocation(
+    config: &ServiceConfig,
+    request: &ValidatedRequest,
+    child: Capacity,
+) -> Result<Arc<Reservation>, String> {
+    reserve_capacity(config, resource_capacity(request.into())?, Some(child))
+}
+pub(crate) fn trial_capacity(memory_bytes: u64, disk_bytes: u64) -> Result<Capacity, String> {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    if memory_bytes == 0 || disk_bytes == 0 {
+        return Err("invalid child capacity".into());
+    }
+    let storage_gib = disk_bytes.checked_add(GIB - 1).ok_or("capacity overflow")? / GIB;
+    let mut capacity = resource_capacity(Resources {
+        cpu_millis: 1,
+        memory_bytes,
+        storage_gib,
+        pids: 2,
+    })?;
+    // The VM disk and retained host candidate/workspace exports coexist. The
+    // generic trial ledger bounds those exports within the invocation disk cap.
+    capacity.storage_bytes = capacity
+        .storage_bytes
+        .checked_add(disk_bytes)
+        .ok_or("capacity overflow")?;
+    Ok(capacity)
+}
+fn reserve_capacity(
+    config: &ServiceConfig,
+    outer: Capacity,
+    child: Option<Capacity>,
+) -> Result<Arc<Reservation>, String> {
     let admission = config
         .smol_admission
         .as_ref()
-        .ok_or("admission unavailable")?
-        .clone();
-    let bytes = usize::try_from(resources.memory_bytes.saturating_add(HOST_OVERHEAD))
-        .map_err(|_| "capacity unavailable")?;
-    admission
-        .slots
-        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |used| {
-            used.checked_add(1)
-                .filter(|next| *next <= admission.maximum_slots)
-        })
-        .map_err(|_| "capacity unavailable")?;
-    if admission
-        .memory
-        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |used| {
-            used.checked_add(bytes)
-                .filter(|next| *next <= admission.limit)
-        })
-        .is_err()
-    {
-        admission.slots.fetch_sub(1, Ordering::SeqCst);
-        return Err("capacity unavailable".into());
+        .ok_or("admission unavailable")?;
+    let reservation = admission.reserve(outer, child)?;
+    // Reserve atomically first, then recheck physical space. A failure drops the
+    // complete reservation; no VM or provider operation has begun.
+    let required = admission.reserved_storage_bytes()?;
+    if available_storage(settings(config)?)? < required {
+        return Err("node storage unavailable".into());
     }
-    Ok(Reservation { admission, bytes })
+    Ok(reservation)
+}
+fn available_storage(s: &SmolConfig) -> Result<u64, String> {
+    let directory = File::open(&s.home).map_err(|_| "Smol storage unavailable")?;
+    let mut values = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+    // The descriptor remains open and statvfs writes the complete structure.
+    if unsafe { libc::fstatvfs(directory.as_raw_fd(), values.as_mut_ptr()) } != 0 {
+        return Err("Smol storage capacity unavailable".into());
+    }
+    let values = unsafe { values.assume_init() };
+    (values.f_bavail as u64)
+        .checked_mul(values.f_frsize as u64)
+        .ok_or("Smol storage capacity overflow".into())
 }
 fn memory_capacity(s: &SmolConfig) -> Result<usize, String> {
     let limit: usize = fs::read_to_string(s.cgroup_root.join("memory.max"))
@@ -199,6 +238,7 @@ pub(super) fn validate(config: &ServiceConfig) -> Result<(), String> {
         || config.architecture != "amd64"
         || s.maximum_parallel == 0
         || s.maximum_parallel > 64
+        || s.maximum_storage_bytes < 1024 * 1024 * 1024
         || !s.cgroup_root.is_absolute()
     {
         return Err("Smol configuration invalid".into());
@@ -266,6 +306,10 @@ fn image_command(value: &Value) -> Result<Vec<String>, String> {
 pub(super) fn ready(config: &ServiceConfig) -> Result<(), String> {
     let s = settings(config)?;
     memory_capacity(s)?;
+    if s.maximum_storage_bytes < 1024 * 1024 * 1024 {
+        return Err("node storage must be bounded".into());
+    }
+    available_storage(s)?;
     let kvm = OpenOptions::new()
         .read(true)
         .write(true)
@@ -390,9 +434,14 @@ impl Lease {
     fn path(&self) -> PathBuf {
         self.root.join(format!("{}.json", self.name))
     }
+    fn private_home_path(&self) -> PathBuf {
+        self.private_home_root
+            .as_ref()
+            .unwrap_or(&self.root)
+            .join(format!("{}.home", self.name))
+    }
     fn disk_path(&self) -> PathBuf {
-        // Smol 1.31.4 agent::vm_data_dir uses the first eight SHA-256 bytes.
-        // Only inspect this exact lease's path; never sweep its cache root.
+        // Inspect only this exact Smol 1.31.4 lease disk; never sweep its cache root.
         let digest = format!("{:x}", Sha256::digest(self.name.as_bytes()));
         self.runtime
             .home
@@ -407,6 +456,11 @@ impl Lease {
             && self.name[3..]
                 .bytes()
                 .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+            && self.private_home_root.as_ref().is_none_or(|root| {
+                root.is_absolute()
+                    && root != &self.root
+                    && self.runtime.home == self.private_home_path()
+            })
     }
     fn inventory(&self, deadline: Instant) -> Result<bool, String> {
         let output = control(
@@ -440,12 +494,59 @@ impl Lease {
         }
         Ok(false)
     }
+    fn verify_network_disabled(&self, deadline: Instant) -> Result<(), String> {
+        let output = control(
+            &self.runtime,
+            &["machine", "ls", "--json"],
+            None,
+            deadline,
+            None,
+        )?;
+        if !output.status.success() {
+            return Err("runtime inventory unavailable".into());
+        }
+        let value: Value =
+            serde_json::from_slice(&output.stdout).map_err(|_| "runtime inventory invalid")?;
+        let rows = value
+            .as_array()
+            .or_else(|| value.get("machines").and_then(Value::as_array))
+            .ok_or("runtime inventory invalid")?;
+        let matches: Vec<_> = rows
+            .iter()
+            .filter(|row| row["name"].as_str() == Some(&self.name))
+            .collect();
+        if matches.len() != 1
+            || matches[0]["labels"]["workstream.external-checker-owner"].as_str()
+                != Some(&self.owner)
+            || matches[0]["network"].as_bool() != Some(false)
+        {
+            return Err("runtime network isolation differs".into());
+        }
+        Ok(())
+    }
     fn cleanup(&self) -> Result<(), String> {
         if !self.valid() {
             return Err("lease ownership invalid".into());
         }
         let deadline = Instant::now() + CLEANUP_TIMEOUT;
         let group = self.cgroup();
+        let private_home_exists = if let Some(home_root) = &self.private_home_root {
+            private_directory(home_root).map_err(|_| "private Smol root custody unsettled")?;
+            let home = self.private_home_path();
+            match fs::symlink_metadata(&home) {
+                Ok(_) => {
+                    private_directory(&home).map_err(|_| "private Smol home custody unsettled")?;
+                    true
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+                Err(_) => return Err("private Smol home custody unsettled".into()),
+            }
+        } else {
+            true
+        };
+        if self.private_home_root.is_some() && !private_home_exists && group.exists() {
+            return Err("private Smol home cleanup order unsettled".into());
+        }
         if group.exists() {
             fs::write(group.join("cgroup.kill"), "1").map_err(|_| "cgroup cleanup unavailable")?;
             loop {
@@ -460,7 +561,7 @@ impl Lease {
                 thread::sleep(Duration::from_millis(5));
             }
         }
-        if self.inventory(deadline)? {
+        if private_home_exists && self.inventory(deadline)? {
             checked(
                 &self.runtime,
                 &["machine", "delete", "--name", &self.name, "--force"],
@@ -469,15 +570,26 @@ impl Lease {
                 None,
             )?;
         }
-        if self.inventory(deadline)? {
+        if private_home_exists && self.inventory(deadline)? {
             return Err("VM cleanup unsettled".into());
         }
-        match fs::symlink_metadata(self.disk_path()) {
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            _ => return Err("VM disk cleanup unsettled".into()),
+        if private_home_exists {
+            match fs::symlink_metadata(self.disk_path()) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                _ => return Err("VM disk cleanup unsettled".into()),
+            }
         }
         if group.exists() {
             fs::remove_dir(&group).map_err(|_| "cgroup removal unsettled")?;
+        }
+        if self.private_home_root.is_some() {
+            let home = self.private_home_path();
+            if private_home_exists {
+                fs::remove_dir_all(&home).map_err(|_| "private Smol home cleanup unsettled")?;
+                if home.exists() {
+                    return Err("private Smol home cleanup unsettled".into());
+                }
+            }
         }
         fs::remove_file(self.path()).map_err(|_| "lease removal failed")?;
         File::open(&self.root)
@@ -492,7 +604,42 @@ impl Machine {
         resources: Resources,
         deadline: Instant,
     ) -> Result<Self, ExecutionFailure> {
-        let s = settings(config)
+        Self::create_inner(config, resources, deadline, None)
+    }
+
+    pub(super) fn create_child(
+        config: &ServiceConfig,
+        resources: Resources,
+        deadline: Instant,
+        child_home_root: &Path,
+    ) -> Result<Self, ExecutionFailure> {
+        if config
+            .trial_runtime
+            .as_ref()
+            .map(|runtime| runtime.child_home_root.as_path())
+            != Some(child_home_root)
+            || private_directory(child_home_root).is_err()
+        {
+            return Err(ExecutionFailure::ordinary(
+                "implementation_unavailable",
+                false,
+            ));
+        }
+        Self::create_inner(
+            config,
+            resources,
+            deadline,
+            Some(child_home_root.to_owned()),
+        )
+    }
+
+    fn create_inner(
+        config: &ServiceConfig,
+        resources: Resources,
+        deadline: Instant,
+        private_home_root: Option<PathBuf>,
+    ) -> Result<Self, ExecutionFailure> {
+        let mut s = settings(config)
             .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?
             .clone();
         let root = config
@@ -509,8 +656,25 @@ impl Machine {
         let owner = container_owner(config)
             .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?
             .to_owned();
+        let name = format!("ws-{nonce}");
+        if let Some(home_root) = &private_home_root {
+            use std::os::unix::fs::DirBuilderExt;
+            let home = home_root.join(format!("{name}.home"));
+            fs::DirBuilder::new()
+                .mode(0o700)
+                .create(&home)
+                .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
+            if private_directory(&home).is_err() {
+                return Err(if fs::remove_dir(&home).is_ok() {
+                    ExecutionFailure::ordinary("implementation_unavailable", false)
+                } else {
+                    ExecutionFailure::unsettled(false)
+                });
+            }
+            s.home = home;
+        }
         let lease = Lease {
-            name: format!("ws-{nonce}"),
+            name,
             owner,
             epoch: config
                 .smol_admission
@@ -530,21 +694,42 @@ impl Machine {
                 .as_millis() as u64,
             root,
             runtime: s,
+            private_home_root,
         };
-        let bytes = serde_json::to_vec(&lease)
-            .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
-        let mut file = OpenOptions::new()
+        let bytes = match serde_json::to_vec(&lease) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                let home_clean = lease.private_home_root.is_none()
+                    || fs::remove_dir(&lease.runtime.home).is_ok();
+                return Err(if home_clean {
+                    ExecutionFailure::ordinary("implementation_unavailable", false)
+                } else {
+                    ExecutionFailure::unsettled(false)
+                });
+            }
+        };
+        let mut file = match OpenOptions::new()
             .create_new(true)
             .write(true)
             .mode(0o600)
             .open(lease.path())
-            .map_err(|error| {
+        {
+            Ok(file) => file,
+            Err(error) => {
+                let home_clean = lease.private_home_root.is_none()
+                    || fs::remove_dir(&lease.runtime.home).is_ok();
                 if error.kind() == std::io::ErrorKind::AlreadyExists {
-                    ExecutionFailure::unsettled(false)
+                    return Err(ExecutionFailure::unsettled(false));
+                } else if home_clean {
+                    return Err(ExecutionFailure::ordinary(
+                        "implementation_unavailable",
+                        false,
+                    ));
                 } else {
-                    ExecutionFailure::ordinary("implementation_unavailable", false)
+                    return Err(ExecutionFailure::unsettled(false));
                 }
-            })?;
+            }
+        };
         file.write_all(&bytes)
             .and_then(|_| file.sync_all())
             .map_err(|_| ExecutionFailure::unsettled(false))?;
@@ -612,7 +797,7 @@ impl Machine {
             ),
             ("memory.swap.max", "0".into()),
             ("memory.oom.group", "1".into()),
-            ("pids.max", "512".into()),
+            ("pids.max", resources.pids.to_string()),
         ] {
             fs::write(group.join(file), value).map_err(|_| "cgroup enforcement failed")?;
         }
@@ -653,6 +838,8 @@ impl Machine {
             deadline,
             Some(client),
         )?;
+        // Closed argv omits network enablers; verify exact-owner state before start.
+        lease.verify_network_disabled(deadline)?;
         checked(
             s,
             &["machine", "start", "--name", &lease.name, "--no-workload"],
@@ -680,15 +867,27 @@ impl Machine {
         cache: &CacheEntry,
         config: &ServiceConfig,
         request: &ValidatedRequest,
-        workspace: &Path,
+        materials: ProjectMaterials<'_>,
+        callbacks: &ProjectCallbacks,
         client: &UnixStream,
         deadline: Instant,
+        cancelled: &AtomicBool,
     ) -> Result<ExecutedChecker, String> {
         if self.consumed {
             return Err("execution already consumed".into());
         }
         self.consumed = true;
-        let inventory = inspect_workspace(workspace, config.sandbox_uid, config.sandbox_gid)?;
+        let mut sources =
+            vec![
+                io::material_source("current", materials.current.0, materials.current.1, config)
+                    .map_err(|_| "material_unavailable")?,
+            ];
+        if let Some((root, inventory)) = materials.predecessor {
+            sources.push(
+                io::material_source("predecessor", root, inventory, config)
+                    .map_err(|_| "material_unavailable")?,
+            );
+        }
         let source = cache.smol.as_ref().ok_or("Smol image missing")?;
         let value: Value =
             serde_json::from_slice(&read_bounded_file(&source.image_config, MAX_REQUEST_BYTES)?)
@@ -706,7 +905,16 @@ impl Machine {
             _ => return Err("image environment invalid".into()),
         };
         let job = GuestJob {
-            purpose: GuestPurpose::Project,
+            purpose: GuestPurpose::Project {
+                capabilities: GuestCapabilities {
+                    model: callbacks.model.is_some(),
+                    execution: callbacks.execution.is_some(),
+                },
+                materials: sources
+                    .iter()
+                    .map(|source| source.manifest.clone())
+                    .collect(),
+            },
             request: request.value.clone(),
             command: image_command(&value)?,
             environment,
@@ -716,17 +924,8 @@ impl Machine {
                 .to_owned(),
             uid: config.sandbox_uid,
             gid: config.sandbox_gid,
-            directories: inventory.directories,
-            files: inventory
-                .files
-                .into_iter()
-                .map(|f| MaterialFile {
-                    normalized_path: f.normalized_path,
-                    byte_count: f.byte_count,
-                    sha256: f.sha256,
-                    executable: f.executable,
-                })
-                .collect(),
+            directories: Vec::new(),
+            files: Vec::new(),
         };
         let bytes = serde_json::to_vec(&job).map_err(|_| "guest job invalid")?;
         if bytes.len() > MAX_JOB_BYTES {
@@ -749,35 +948,17 @@ impl Machine {
             Some(&self.lease.cgroup()),
         )?;
         cmd.stdin(Stdio::piped());
-        let mut child = cmd.spawn().map_err(|_| "guest launch failed")?;
-        let mut stdin = child.stdin.take().ok_or("guest input unavailable")?;
-        let workspace = workspace.to_owned();
-        let writer = thread::spawn(move || -> Result<(), String> {
-            stdin
-                .write_all(&(bytes.len() as u32).to_be_bytes())
-                .and_then(|_| stdin.write_all(&bytes))
-                .map_err(|_| "guest input failed")?;
-            for file in &job.files {
-                let mut input = OpenOptions::new()
-                    .read(true)
-                    .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-                    .open(workspace.join(&file.normalized_path))
-                    .map_err(|_| "material unavailable")?;
-                let n = std::io::copy(
-                    &mut Read::by_ref(&mut input).take(file.byte_count),
-                    &mut stdin,
-                )
-                .map_err(|_| "material transfer failed")?;
-                if n != file.byte_count {
-                    return Err("material transfer truncated".into());
-                }
-            }
-            Ok(())
-        });
-        let result = collect(child, deadline, request.maximum_output_bytes, Some(client));
-        let written = writer.join().map_err(|_| "material transfer failed")?;
-        let output = result?;
-        written?;
+        let child = cmd.spawn().map_err(|_| "guest launch failed")?;
+        let output = io::run_project(
+            child,
+            &job,
+            &sources,
+            callbacks,
+            deadline,
+            request.maximum_output_bytes,
+            client,
+            cancelled,
+        )?;
         if output.status.code() == Some(CAPACITY_EXIT_CODE) {
             return Err("capacity_exceeded".into());
         }
@@ -788,8 +969,7 @@ impl Machine {
         Ok(ExecutedChecker { value })
     }
     fn close(&mut self) -> Result<(), String> {
-        // EOF transfers cleanup exclusively to the guardian. Wait for its durable
-        // absence confirmation before returning capacity or a result.
+        // EOF transfers cleanup to the guardian; wait for durable absence.
         drop(self.keeper.take());
         let status = reap_child(
             &mut self.guardian,
@@ -811,16 +991,33 @@ pub(super) fn execute(
     config: &ServiceConfig,
     cache: &CacheEntry,
     request: &ValidatedRequest,
-    workspace: &Path,
+    materials: ProjectMaterials<'_>,
+    callbacks: &ProjectCallbacks,
     client: &UnixStream,
     budget: &mut RequestExecutionBudget,
+    cancelled: &AtomicBool,
 ) -> Result<ExecutedChecker, ExecutionFailure> {
+    io::validate_endpoints(callbacks)
+        .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
     for attempt in 0..3 {
         let mut machine = Machine::create(config, request.into(), budget.deadline)?;
         let prepared = machine.prepare(cache, request.into(), client, budget.deadline);
         let launched = prepared.is_ok();
-        let result = prepared
-            .and_then(|_| machine.run(cache, config, request, workspace, client, budget.deadline));
+        let result = prepared.and_then(|_| {
+            machine.run(
+                cache,
+                config,
+                request,
+                ProjectMaterials {
+                    current: materials.current,
+                    predecessor: materials.predecessor,
+                },
+                callbacks,
+                client,
+                budget.deadline,
+                cancelled,
+            )
+        });
         if machine.close().is_err() {
             return Err(ExecutionFailure::unsettled(launched));
         }
@@ -837,6 +1034,7 @@ pub(super) fn execute(
                     "deadline_exceeded" => "deadline_exceeded",
                     "invalid_output" => "invalid_output",
                     "capacity_exceeded" => "capacity_exceeded",
+                    "material_unavailable" => "material_unavailable",
                     _ => "implementation_unavailable",
                 },
                 launched,
@@ -906,9 +1104,20 @@ pub(super) fn recover(config: &ServiceConfig) -> Result<(), String> {
         let lease: Lease =
             serde_json::from_slice(&read_bounded_file(&entry.path(), MAX_ENVELOPE_BYTES)?)
                 .map_err(|_| "lease inventory invalid")?;
+        let runtime_home_matches = match &lease.private_home_root {
+            Some(root) => {
+                config
+                    .trial_runtime
+                    .as_ref()
+                    .map(|runtime| runtime.child_home_root.as_path())
+                    == Some(root.as_path())
+                    && lease.runtime.home == lease.private_home_path()
+            }
+            None => lease.runtime.home == settings(config)?.home,
+        };
         if lease.owner != container_owner(config)?
             || lease.root != root
-            || lease.runtime.home != settings(config)?.home
+            || !runtime_home_matches
             || lease.runtime.cgroup_root != settings(config)?.cgroup_root
             || !lease.valid()
             || entry.path() != lease.path()
@@ -942,13 +1151,14 @@ where
 {
     let maximum = settings(config)?.maximum_parallel;
     let mut config = config.clone();
-    config.smol_admission = Some(Arc::new(Admission {
-        memory: AtomicUsize::new(0),
-        slots: AtomicUsize::new(0),
-        maximum_slots: maximum,
-        epoch: random_token()?,
-        limit: memory_capacity(settings(&config)?)?,
-    }));
+    config.smol_admission = Some(Arc::new(Admission::new(
+        Capacity {
+            slots: maximum,
+            memory_bytes: memory_capacity(settings(&config)?)? as u64,
+            storage_bytes: settings(&config)?.maximum_storage_bytes,
+        },
+        random_token()?,
+    )?));
     let config = Arc::new(config);
     let active = Arc::new(AtomicUsize::new(0));
     let failed = Arc::new(AtomicBool::new(false));
@@ -970,8 +1180,6 @@ where
         workers.push(thread::spawn(move || {
             if serve_connection(&config, stream, SOCKET_IO_TIMEOUT).is_err() {
                 failed.store(true, Ordering::SeqCst);
-                // Terminate the controller so every independent guardian sees EOF.
-                // systemd restarts only through exact-owner startup reconciliation.
                 std::process::exit(1);
             }
             active.fetch_sub(1, Ordering::SeqCst);
@@ -988,99 +1196,4 @@ where
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn missing_lease_directory_does_not_poison_node_admission() {
-        let (root, mut config) = super::super::tests::test_config();
-        config.smol = Some(SmolConfig {
-            binary: root.join("unused-runtime"),
-            binary_sha256: format!("sha256:{}", "a".repeat(64)),
-            home: root.join("home"),
-            guest_binary: root.join("guest"),
-            guest_sha256: format!("sha256:{}", "b".repeat(64)),
-            cgroup_root: root.join("groups"),
-            maximum_parallel: 2,
-        });
-        config.smol_admission = Some(Arc::new(Admission {
-            memory: AtomicUsize::new(0),
-            slots: AtomicUsize::new(0),
-            maximum_slots: 2,
-            epoch: "e".repeat(64),
-            limit: 1024 * 1024 * 1024,
-        }));
-        let request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
-        let (client, _peer) = UnixStream::pair().unwrap();
-        let mut budget =
-            RequestExecutionBudget::new(Instant::now() + Duration::from_secs(1), 32768);
-        let result = execute(
-            &config,
-            &config.cache[0],
-            &request,
-            &root,
-            &client,
-            &mut budget,
-        );
-        assert_eq!(
-            result.unwrap_err(),
-            ExecutionFailure::ordinary("implementation_unavailable", false)
-        );
-        assert!(!config
-            .socket_path
-            .parent()
-            .unwrap()
-            .join("smol-leases")
-            .exists());
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn concurrent_capacity_is_reserved_until_its_owner_releases_it() {
-        let (_, mut config) = super::super::tests::test_config();
-        let request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
-        let capacity = request.memory_bytes as usize + HOST_OVERHEAD as usize;
-        config.smol_admission = Some(Arc::new(Admission {
-            memory: AtomicUsize::new(0),
-            slots: AtomicUsize::new(0),
-            maximum_slots: 1,
-            epoch: "e".repeat(64),
-            limit: capacity,
-        }));
-        let held = reserve(&config, &request).unwrap();
-        let concurrent = config.clone();
-        let next = request.clone();
-        assert!(thread::spawn(move || reserve(&concurrent, &next).is_err())
-            .join()
-            .unwrap());
-        drop(held);
-        assert!(reserve(&config, &request).is_ok());
-        fs::remove_dir_all(config.socket_path.parent().unwrap().parent().unwrap()).unwrap();
-    }
-
-    #[test]
-    fn cached_image_config_must_match_its_pinned_digest_and_platform() {
-        let (root, mut config) = super::super::tests::test_config();
-        let path = root.join("image.json");
-        let raw=br#"{"os":"linux","architecture":"amd64","config":{"Entrypoint":["/checker"],"Cmd":["--json"]}}"#;
-        fs::write(&path, raw).unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o400)).unwrap();
-        let cache = &mut config.cache[0];
-        cache.config_image_id = format!("sha256:{:x}", Sha256::digest(raw));
-        cache.smol = Some(SmolImage {
-            archive: root.join("unused.tar"),
-            archive_sha256: format!("sha256:{}", "a".repeat(64)),
-            image_config: path.clone(),
-        });
-        inspect_image(cache).unwrap();
-        fs::hard_link(&path, root.join("runtime-cache-alias")).unwrap();
-        inspect_image(cache).unwrap();
-        cache.architecture = "arm64".into();
-        assert!(inspect_image(cache).is_err());
-        cache.architecture = "amd64".into();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
-        fs::write(&path, b"{}").unwrap();
-        assert!(inspect_image(cache).is_err());
-        fs::remove_dir_all(root).unwrap();
-    }
-}
+mod tests;
