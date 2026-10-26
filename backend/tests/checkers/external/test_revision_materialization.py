@@ -223,64 +223,163 @@ async def test_revision_reads_exact_previous_material_with_per_binding_visibilit
         assert (len(adapter.requests), len(h.store.opens)) == (prior_calls, prior_opens)
 
 
-async def test_cancellation_during_second_projection_drains_and_closes_every_role(tmp_path):
-    """A projecting thread cannot outlive its callback and race scratch cleanup."""
+async def test_cancellation_during_second_projection_drains_and_closes_every_role(
+    tmp_path, monkeypatch
+):
+    """Cancellation aborts intake I/O and drains every entered trusted export."""
     import asyncio
-    from contextlib import contextmanager
+    from contextlib import AsyncExitStack, contextmanager
     from io import BytesIO
     from threading import Event
     from zipfile import ZipFile
 
+    from app.interfaces.trusted_submission_intake import TrustedIntakePreparation
+    from app.modules.artifacts import post_submit_materialization
     from app.modules.artifacts.post_submit_materialization import _MaterialProcessor
-    from app.modules.artifacts.submission_archive import SubmissionArchiveInspector, SubmissionArchiveLimits
+    from app.modules.artifacts.preparation import (
+        ArtifactPreparationLimits,
+        ArtifactPreparationService,
+        ArtifactScratchManager,
+    )
+    from app.modules.artifacts.submission_archive import (
+        SubmissionArchiveInspector,
+        SubmissionArchiveLimits,
+    )
+    from app.modules.artifacts.trusted_intake import prepared_trusted_intake
 
     archive = BytesIO()
     with ZipFile(archive, "w") as zipped:
         zipped.writestr("work.txt", b"original input")
     data = archive.getvalue()
     entered, release = Event(), Event()
-    exits, trees = [], []
+    aborted = asyncio.Event()
+    exits, trees, aborts, closes = [], [], [], []
+    limits = SubmissionArchiveLimits()
+    inspection = SubmissionArchiveInspector(limits).inspect(BytesIO(data))
+    roles = ("submission_archive", "predecessor_submission_archive")
 
-    class BlockingInspector(SubmissionArchiveInspector):
-        @contextmanager
-        def _projected_tree(self, reader, workspace, *, expected):
-            with super()._projected_tree(reader, workspace, expected=expected) as tree:
-                trees.append(tree)
-                if workspace.name == "predecessor_submission_archive":
-                    entered.set()
-                    assert release.wait(10), "test failed to release the projecting thread"
-                try:
-                    yield tree
-                finally:
-                    exits.append(workspace.name)
+    original_export = post_submit_materialization.exported_submission_tree
+
+    @contextmanager
+    def observed_export(*args, **kwargs):
+        workspace = args[1]
+        with original_export(*args, **kwargs) as tree:
+            trees.append(tree)
+            try:
+                yield tree
+            finally:
+                exits.append(workspace.name)
+
+    monkeypatch.setattr(post_submit_materialization, "exported_submission_tree", observed_export)
+
+    class Intake:
+        def __init__(self, role):
+            self.role = role
+
+        def export(self, sink):
+            for entry in inspection.entries:
+                if entry.sha256 is not None:
+                    sink(entry, b"original input")
+            if self.role == "predecessor_submission_archive":
+                entered.set()
+                assert release.wait(10), "test failed to release trusted intake export"
+
+        def abort(self):
+            aborts.append(self.role)
+            if set(aborts) == set(roles):
+                aborted.set()
+
+        async def close(self):
+            closes.append(self.role)
+
+    class Adapter:
+        def __init__(self, session):
+            self.session = session
+
+        async def prepare(self, request):
+            return self.session
 
     class NeverCalled:
         async def evaluate(self, request, view):
             pytest.fail("cancelled projection reached an evaluator")
 
-    inspector = BlockingInspector(SubmissionArchiveLimits())
-    inspection = inspector.inspect(BytesIO(data))
-    roles = ("submission_archive", "predecessor_submission_archive")
-    workspace = tmp_path / "workspace"
-    workspace.mkdir(mode=0o700)
-    processor = _MaterialProcessor(
-        inspector, dict.fromkeys(roles, inspection), None, NeverCalled(),
-        preparation=None, sources=(), execution=None, materialization=None, media_types={},
+    manager = ArtifactScratchManager(
+        root=tmp_path / "scratch",
+        limits=ArtifactPreparationLimits(
+            aggregate_reserved_bytes=4 * HARD_MAXIMUM_ARTIFACT_BYTES,
+            maximum_files=2,
+            maximum_concurrency=2,
+            minimum_free_bytes=0,
+            stream_buffer_bytes=1024,
+            maximum_source_bytes=1024,
+            maximum_workspace_entries=16,
+        ),
     )
-    operation = asyncio.create_task(processor.process({role: BytesIO(data) for role in roles}, workspace))
+    preparation = ArtifactPreparationService(manager)
+
+    async def stream():
+        yield data
+
+    current = await preparation.prepare(stream(), media_type="application/zip")
+    predecessor = await preparation.prepare(stream(), media_type="application/zip")
+    sources = tuple(zip(roles, (current, predecessor), strict=True))
+    sessions = {role: Intake(role) for role in roles}
+    request = TrustedIntakePreparation(
+        phase="post_submit",
+        policy_sha256="sha256:" + "1" * 64,
+        limits=limits,
+        deadline_ms=10_000,
+    )
+
     try:
-        assert await asyncio.to_thread(entered.wait, 10)
-        operation.cancel()
-        await asyncio.sleep(0)
-        operation.cancel()
-        await asyncio.sleep(0)
-        assert not operation.done()
-        assert exits == []
+        async with AsyncExitStack() as intake_cleanup:
+            intakes = {}
+            for role in roles:
+                pending = await intake_cleanup.enter_async_context(
+                    prepared_trusted_intake(Adapter(sessions[role]), request)
+                )
+                intakes[role] = await pending
+            processor = _MaterialProcessor(
+                intakes,
+                dict.fromkeys(roles, inspection),
+                None,
+                NeverCalled(),
+                limits=limits,
+                preparation=preparation,
+                sources=sources,
+                execution=None,
+                materialization=None,
+                media_types={},
+            )
+            operation = asyncio.create_task(
+                preparation._process_prepared_post_submission(
+                    sources,
+                    processor,
+                    reserved_bytes=inspection.total_expanded_bytes * len(roles),
+                    maximum_entries=inspection.entry_count * len(roles) + len(roles) + 2,
+                )
+            )
+            try:
+                assert await asyncio.to_thread(entered.wait, 10)
+                operation.cancel()
+                await asyncio.wait_for(aborted.wait(), 1)
+                operation.cancel()
+                await asyncio.sleep(0)
+                assert not operation.done()
+                assert exits == []
+                assert closes == []
+            finally:
+                release.set()
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(operation, 10)
+            assert exits == list(reversed(roles))
+            assert aborts == list(roles)
+        assert closes == list(reversed(roles))
+        for tree in trees:
+            with pytest.raises(RuntimeError):
+                tree.read_file("work.txt", maximum_bytes=100)
+        assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
     finally:
-        release.set()
-        with pytest.raises(asyncio.CancelledError):
-            await asyncio.wait_for(operation, 10)
-    assert exits == list(reversed(roles))
-    for tree in trees:
-        with pytest.raises(RuntimeError):
-            tree.read_file("work.txt", maximum_bytes=100)
+        await current.close()
+        await predecessor.close()
+        manager.close()
