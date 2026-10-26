@@ -38,7 +38,10 @@ def main() -> int:
         values = parse_environment(args.env_file)
         validate_environment(values)
         validate_compose(render_compose(args.env_file, values), values)
-        launch = args.compose_arguments and args.compose_arguments[0] in {"up", "proof"}
+        worker_start = args.compose_arguments == ["start", "worker"]
+        launch = worker_start or (
+            args.compose_arguments and args.compose_arguments[0] in {"up", "proof"}
+        )
         proxy_bootstrap = args.compose_arguments in (
             ["up", "-d", "model-proxy"],
             ["up", "--detach", "model-proxy"],
@@ -73,9 +76,11 @@ def main() -> int:
                 raise PreflightError("proof group nonce is invalid") from exc
             return run_proof_group(args.env_file, values, group_nonce)
         if args.compose_arguments and args.compose_arguments[0] == "stop":
+            if args.compose_arguments == ["stop", "worker"]:
+                return run_compose(args.env_file, values, args.compose_arguments)
             if args.compose_arguments != ["stop"]:
                 raise PreflightError(
-                    "stop uses the fixed producer, worker, parser/checker sequence"
+                    "stop requires the fixed shutdown sequence or exactly one worker"
                 )
             return run_shutdown(args.env_file, values)
         return run_compose(args.env_file, values, args.compose_arguments)

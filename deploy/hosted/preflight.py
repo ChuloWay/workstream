@@ -574,6 +574,8 @@ def validate_checker_config(config: dict[str, Any], values: dict[str, str]) -> N
     for key in ("binary", "guest_binary", "home", "cgroup_root"):
         if not isinstance(smol[key], str) or not Path(smol[key]).is_absolute():
             raise PreflightError("native Smol path is invalid")
+    if len(os.fsencode(smol["home"])) > 59:
+        raise PreflightError("native Smol home exceeds the 59-byte socket path budget")
     for key in ("binary_sha256", "guest_sha256"):
         if not isinstance(smol[key], str) or not DIGEST.fullmatch(smol[key]):
             raise PreflightError("native Smol binary digest is invalid")
@@ -739,6 +741,10 @@ def validate_checker_config(config: dict[str, Any], values: dict[str, str]) -> N
             not in {entry["config_image_id"] for entry in cache}
         ):
             raise PreflightError("native trial runtime configuration is incomplete")
+        if len(os.fsencode(trial["child_home_root"])) > 18:
+            raise PreflightError(
+                "native trial child home root exceeds the 18-byte socket path budget"
+            )
     elif trial is not None:
         raise PreflightError("native trial runtime lacks a pinned authority manifest")
 
@@ -963,6 +969,7 @@ def run_compose(
     environment_path: Path, values: dict[str, str], compose_arguments: list[str]
 ) -> int:
     """Run one documented Compose operation with no ambient interpolation."""
+    command_timeout = None
     if compose_arguments == ["migrate"]:
         compose_arguments = [
             "run",
@@ -975,6 +982,21 @@ def run_compose(
             "upgrade",
             "head",
         ]
+    elif compose_arguments == ["stop", "worker"]:
+        # The fixed grace period matches validate_compose's worker contract.
+        compose_arguments = ["stop", "--timeout", "7320", "worker"]
+        command_timeout = 7380
+    elif compose_arguments == ["start", "worker"]:
+        compose_arguments = [
+            "up",
+            "--detach",
+            "--no-deps",
+            "--wait",
+            "--wait-timeout",
+            "60",
+            "worker",
+        ]
+        command_timeout = 120
     elif not compose_arguments or compose_arguments[0] not in {
         "pull",
         "up",
@@ -993,7 +1015,12 @@ def run_compose(
             ],
             check=False,
             env=compose_environment(values),
+            timeout=command_timeout,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise PreflightError(
+            "hosted worker operation exceeded its management deadline"
+        ) from exc
     except OSError as exc:
         raise PreflightError("hosted Compose operation could not start") from exc
     return completed.returncode

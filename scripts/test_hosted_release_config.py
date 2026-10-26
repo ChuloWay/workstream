@@ -703,6 +703,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                     str(self.environment_path),
                     "stop",
                     "worker",
+                    "api",
                 ],
             ),
             patch.object(compose, "run_shutdown") as shutdown,
@@ -711,8 +712,123 @@ class HostedReleaseConfigTests(unittest.TestCase):
             self.assertEqual(compose.main(), 1)
         shutdown.assert_not_called()
         self.assertIn(
-            "fixed producer, worker, parser/checker sequence", errors.getvalue()
+            "fixed shutdown sequence or exactly one worker", errors.getvalue()
         )
+
+    def test_exact_worker_stop_preserves_dependencies_and_start_rechecks_native(self):
+        self.checker_path.write_text("invalid json", encoding="utf-8")
+        with (
+            patch.object(compose, "load_checker_config") as load,
+            patch.object(compose, "run_compose", return_value=0) as run,
+        ):
+            self.assertEqual(self._compose_main("stop", "worker"), (0, ""))
+        load.assert_not_called()
+        run.assert_called_once_with(
+            self.environment_path, self.environment, ["stop", "worker"]
+        )
+        self.checker_path.write_text(json.dumps(self.checker), encoding="utf-8")
+        for failure in (None, "private", "native", "intake"):
+            with (
+                self.subTest(failure=failure),
+                patch.object(
+                    compose,
+                    "validate_private_host_inputs",
+                    side_effect=preflight.PreflightError("private")
+                    if failure == "private"
+                    else None,
+                ) as private,
+                patch.object(
+                    compose,
+                    "validate_smol_runtime",
+                    side_effect=preflight.PreflightError("native")
+                    if failure == "native"
+                    else None,
+                ) as native,
+                patch.object(
+                    compose,
+                    "validate_trusted_intake",
+                    side_effect=preflight.PreflightError("intake")
+                    if failure == "intake"
+                    else None,
+                ) as intake,
+                patch.object(compose, "run_compose", return_value=0) as run,
+            ):
+                result, _ = self._compose_main("start", "worker")
+                self.assertEqual(result, 0 if failure is None else 1)
+                if failure is None:
+                    private.assert_called_once_with(self.environment)
+                    native.assert_called_once_with(self.checker, self.environment)
+                    intake.assert_called_once_with(self.environment)
+                    run.assert_called_once_with(
+                        self.environment_path, self.environment, ["start", "worker"]
+                    )
+                else:
+                    run.assert_not_called()
+
+    def test_worker_operations_have_fixed_grace_readiness_and_management_bounds(self):
+        cases = (
+            (["stop", "worker"], ["stop", "--timeout", "7320", "worker"], 7380),
+            (
+                ["start", "worker"],
+                [
+                    "up",
+                    "--detach",
+                    "--no-deps",
+                    "--wait",
+                    "--wait-timeout",
+                    "60",
+                    "worker",
+                ],
+                120,
+            ),
+        )
+        for arguments, expected, timeout in cases:
+            with (
+                self.subTest(arguments=arguments),
+                patch.object(
+                    preflight.subprocess,
+                    "run",
+                    return_value=subprocess.CompletedProcess([], 0),
+                ) as run,
+            ):
+                self.assertEqual(
+                    preflight.run_compose(
+                        self.environment_path, self.environment, arguments
+                    ),
+                    0,
+                )
+                self.assertEqual(run.call_args.args[0][-len(expected) :], expected)
+                self.assertEqual(run.call_args.kwargs["timeout"], timeout)
+                self.assertEqual(
+                    run.call_args.kwargs["env"]["DOCKER_HOST"],
+                    "unix:///var/run/docker.sock",
+                )
+            with patch.object(
+                preflight.subprocess,
+                "run",
+                side_effect=subprocess.TimeoutExpired("docker", timeout),
+            ):
+                with self.assertRaisesRegex(
+                    preflight.PreflightError, "management deadline"
+                ):
+                    preflight.run_compose(
+                        self.environment_path, self.environment, arguments
+                    )
+        for arguments in (
+            ["start", "api"],
+            ["restart", "worker"],
+            ["stop", "--timeout", "0", "worker"],
+            ["start", "worker", "api"],
+        ):
+            with (
+                self.subTest(arguments=arguments),
+                patch.object(preflight.subprocess, "run") as run,
+            ):
+                with self.assertRaises(preflight.PreflightError):
+                    preflight.run_compose(
+                        self.environment_path, self.environment, arguments
+                    )
+                run.assert_not_called()
 
     def test_proof_wrapper_runs_only_the_fixed_identity_sequence(self) -> None:
         nonce = "0199f68b-5dc2-7000-8000-000000000001"
@@ -1355,7 +1471,24 @@ class HostedReleaseConfigTests(unittest.TestCase):
             "deployment_owner": "hosted-native",
             "maximum_candidate_archive_bytes": 1024,
         }
+        native["trial_runtime"]["child_home_root"] = self.enterContext(
+            tempfile.TemporaryDirectory(prefix="ws", dir="/tmp")
+        )
         preflight.validate_checker_config(native, self.environment)
+        for root, valid in (
+            ("/" + "a" * 17, True),
+            ("/" + "é" * 8 + "a", True),
+            ("/" + "a" * 18, False),
+            ("/" + "é" * 9, False),
+        ):
+            changed = copy.deepcopy(native)
+            changed["trial_runtime"]["child_home_root"] = root
+            with self.subTest(child_home_root=root):
+                if valid:
+                    preflight.validate_checker_config(changed, self.environment)
+                else:
+                    with self.assertRaisesRegex(preflight.PreflightError, "18-byte"):
+                        preflight.validate_checker_config(changed, self.environment)
         substituted = native | {"trial_authority_manifest_digest": "sha256:" + "0" * 64}
         with self.assertRaisesRegex(preflight.PreflightError, "trial authority"):
             preflight.validate_checker_config(substituted, self.environment)
@@ -1366,6 +1499,22 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 preflight.validate_environment(changed)
         with self.assertRaisesRegex(preflight.PreflightError, "trial authority"):
             preflight.validate_checker_config(self.checker, self.environment)
+
+    def test_smol_home_socket_budget_counts_filesystem_bytes(self):
+        for root, valid in (
+            ("/" + "a" * 58, True),
+            ("/" + "é" * 29, True),
+            ("/" + "a" * 59, False),
+            ("/" + "é" * 30, False),
+        ):
+            changed = copy.deepcopy(self.checker)
+            changed["smol"]["home"] = root
+            with self.subTest(home=root):
+                if valid:
+                    preflight.validate_checker_config(changed, self.environment)
+                else:
+                    with self.assertRaisesRegex(preflight.PreflightError, "59-byte"):
+                        preflight.validate_checker_config(changed, self.environment)
 
     def _native_inputs(self):
         config = copy.deepcopy(self.checker)

@@ -334,6 +334,16 @@ this deployment layer. The native runtime and backend typed manifest loader
 validate the authority catalogue; preflight checks their shared byte identity
 and custody. API, worker and Beat do not read this catalogue or receive its mount.
 
+Smol 1.31.4's longest Unix socket adds 48 filesystem bytes below its HOME. The
+107-byte socket limit therefore permits a global `smol.home` of at most 59
+bytes. A trial child adds `/ws-<32 hex digits>.home` first, so
+`trial_runtime.child_home_root` must be at most 18 bytes. These are filesystem
+byte limits, including multibyte characters. Use a separately owned short
+private directory such as `/var/tmp/t-<6 hex>` for the trial child root; retain
+its runtime owner marker and exact custody. Do not shorten invocation identities
+or derive this root from a long deployment prefix. Preflight rejects excess
+length before a VM is created.
+
 ## Validate without disclosure
 
 The directory commands above describe the default production root. For another
@@ -466,6 +476,21 @@ remain owned by the application.
 
 ```sh
 sudo python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env stop
+```
+
+For an intentional worker-only interruption, the existing wrapper also accepts
+exactly `stop worker` followed by `start worker`. Stop preserves API, Beat, proxy,
+parser and native node while allowing the configured 7,320-second worker drain;
+its CLI deadline adds 60 seconds for management. This is not a full deployment
+drain: producers can continue creating durable work. Start repeats the full
+private-input and typed native readiness checks, then reconciles only the worker
+with a 60-second health wait and a 120-second CLI deadline. It does not start
+dependencies. A failed or timed-out command requires state inspection; it never
+automatically force-kills, retries or stops another service.
+
+```sh
+sudo python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env stop worker
+sudo python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env start worker
 ```
 
 For a restart or upgrade, preserve scratch until cleanup/recovery has classified
