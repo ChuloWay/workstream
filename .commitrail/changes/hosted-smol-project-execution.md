@@ -80,7 +80,7 @@ only the existing authorized recovery rules may resolve an effect.
 | Current deployment and typed ownership | Inspect hosted Compose/preflight, existing systemd unit, typed execution/intake adapters and selected PRE/POST owners | Inspected | No hosted operation executed |
 | Provider overlap | Read PR #690 at `f3f818265`; reconcile main `fcd32057b` | Existing provider owner preserved | Live provider behavior remains separately qualified |
 | Smol callback transport | PR #677 implementation and qualification | Required dependency | Pending runtime integration and root-owned qualification |
-| Rendered topology and refusal paths | `python3 -m unittest scripts.test_hosted_release_config scripts.test_hosted_release_images` | 69 passed, exit 0 | Contract/image fixtures; no native VM or provider execution |
+| Rendered topology and refusal paths | `python3 -m unittest scripts.test_hosted_release_config scripts.test_hosted_release_images` | 70 passed, exit 0 | Contract/image fixtures; no native VM or provider execution |
 | Generated readiness client | Execute the actual generated script using pinned backend Python, real Settings, registered typed factory and a local framed Unix health server | Passed; exact typed health request observed | The responder is a local protocol fixture, not a Smol node |
 | Source hygiene | Ruff, Markdown links, stale wording and `git diff --check` | Passed | Does not replace runtime or independent review |
 | Public lifecycle and real model behavior | Root-owned public API/Celery journey and scoped live proof | Required before support claims | No EC2 or paid model work performed by this change |
@@ -111,3 +111,23 @@ Smol HOME limits use filesystem bytes, matching the pinned runtime socket layout
 - Current-source reconciliation: start from main `ae788e6a8`; preserve the pinned PR #690 dependency and reconcile main `fcd32057b`, including its current CLI/roadmap changes; consume PR #677 runtime transport without copying it. The main reconciliation has no source conflicts and changes no hosted executable code.
 - Next usable boundary: tested hosted Smol configuration, then dependency integration and independent hosted/public qualification.
 - Remaining risks: unqualified live model/Flow/AWS behavior and unsupported PRE model custody must remain explicit.
+
+### Public hosted attachment custody
+
+The public journey driver now attaches to the rendered API, Celery worker, Beat,
+parser and optional proxy and verifies their exact image, command, environment,
+mounts, ports and isolation. It uses a labelled simulated RS256 issuer and
+manager-authored fixture policies; it does not qualify setup-agent behavior or
+live model-enabled POST. Duplicate delivery is observed through the production
+worker's exact task UUID and immutable database/outbox facts. Original intake
+expiry is measured against PostgreSQL time without rewriting its deadline.
+The existing preparation deadline is exposed consistently to all hosted roles;
+its default remains 3400 seconds and the existing Settings constraints remain.
+
+Independent review reproduced an undeclared writable `/app` tmpfs passing the
+initial container validator. The corrected validator matches rendered tmpfs
+targets and options, rejects that substitution, and also inspects the actual
+parser with its declared capabilities and resource limits. The regression fails
+against the earlier validator. Nineteen focused attachment/Smol-proof tests pass;
+the root independently inspected the repair and reran its five custody cases.
+These are fixture and source checks, not a completed hosted journey.
