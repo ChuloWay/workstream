@@ -496,6 +496,62 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_keys_and_oversized_headers_are_rejected_before_producer_eof() {
+        let valid = br#"{"kind":"request","protocol_version":"workstream.smol_guest_io.v1","sequence":1,"channel":"execution","byte_count":1}"#;
+        let duplicate = br#"{"kind":"request","protocol_version":"workstream.smol_guest_io.v1","sequence":1,"sequence":2,"channel":"execution","byte_count":1}"#;
+        for (length, body, expected) in [
+            (valid.len() as u32, valid.as_slice(), None),
+            (
+                duplicate.len() as u32,
+                duplicate.as_slice(),
+                Some("guest header invalid"),
+            ),
+            (
+                (HEADER_MAXIMUM + 1) as u32,
+                &[][..],
+                Some("guest header unbounded"),
+            ),
+        ] {
+            let mut producer = Command::new("/bin/cat")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            let mut input = producer.stdin.take().unwrap();
+            let mut output = producer.stdout.take().unwrap();
+            set_nonblocking(&output).unwrap();
+            input.write_all(&length.to_be_bytes()).unwrap();
+            input.write_all(body).unwrap();
+            input.flush().unwrap();
+            // Keep input open: neither invalid frame may wait for its producer
+            // to close or consume an oversized body before rejecting it.
+            let guard = IoGuard {
+                deadline: Instant::now() + Duration::from_secs(2),
+                client: None,
+                cancelled: &[],
+            };
+            let result = read_header(&mut output, &guard);
+            let producer_still_open = producer.try_wait().unwrap().is_none();
+            producer.kill().unwrap();
+            producer.wait().unwrap();
+            assert!(producer_still_open);
+            match expected {
+                Some(error) => assert_eq!(result.unwrap_err(), error),
+                None => assert!(matches!(
+                    result.unwrap(),
+                    GuestIoHeader::Request {
+                        sequence: 1,
+                        channel: GuestIoChannel::Execution,
+                        byte_count: 1,
+                        ..
+                    }
+                )),
+            }
+        }
+    }
+
+    #[test]
     fn trusted_completion_codes_distinguish_capacity_and_output_bounds() {
         assert_eq!(expected_guest_status(0, false, Some(0)), 0);
         assert_eq!(expected_guest_status(0, true, Some(0)), 125);

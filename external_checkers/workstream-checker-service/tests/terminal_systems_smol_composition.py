@@ -742,7 +742,7 @@ def _wait_for_socket(
 
 
 async def test_production_service_executes_project_trial_under_smol_with_real_custody(
-    tmp_path, isolated_database_env, admin_access, monkeypatch
+    tmp_path, isolated_database_env, admin_access, monkeypatch, *, recovery=None
 ):
     """Prove the exact qualification boundary; no live model provider is used."""
     env = _required_environment()
@@ -766,7 +766,10 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
     # the invocation before its first model call if the complete baseline does
     # not fit. This direct measurement prevents an unexplained fixture increase.
     assert _direct_baseline_bytes(node, builder_image) < TRIAL_DISK_CEILING_BYTES
-    monkeypatch.setattr(material_helpers, "archive_with_modes", _qualification_archive)
+    archive_factory = _qualification_archive
+    if recovery is not None:
+        archive_factory = recovery.archive_factory(_qualification_archive)
+    monkeypatch.setattr(material_helpers, "archive_with_modes", archive_factory)
     await admin_access.signed.grant(
         admin_access.admin, admin_access.target, role="operator"
     )
@@ -852,6 +855,7 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
                     "Evaluate runtime and verification behavior in isolated trials.",
                 ),
             )
+            if recovery is None or requirement_id == REQUIREMENT
         )
 
     post_scratch = root / "post-scratch"
@@ -890,11 +894,14 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
         await provision_post_submit_service(
             h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT
         )
-        assert len(h.request.policy.entries) == 2
+        expected_requirements = (
+            {AUTHOR_REQUIREMENT, REQUIREMENT} if recovery is None else {REQUIREMENT}
+        )
+        assert len(h.request.policy.entries) == len(expected_requirements)
         assert {
             entry.requirement_id: entry.configuration["check"]
             for entry in h.request.policy.entries
-        } == {AUTHOR_REQUIREMENT: AUTHOR_REQUIREMENT, REQUIREMENT: REQUIREMENT}
+        } == {requirement: requirement for requirement in expected_requirements}
         assert (
             len(
                 {
@@ -908,7 +915,8 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
             == 1
         )
         assert (
-            len({entry.configuration_sha256 for entry in h.request.policy.entries}) == 2
+            len({entry.configuration_sha256 for entry in h.request.policy.entries})
+            == len(expected_requirements)
         )
         manifest = _manifest(h.request.policy.entries, profile, projection)
         manifest_bytes = json.dumps(
@@ -1115,6 +1123,24 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
                         execution=adapter, sessions=h.factory
                     ),
                 )
+                if recovery is not None:
+                    await recovery.exercise(
+                        executor=executor,
+                        harness=h,
+                        controller=service,
+                        service_binary=service_binary,
+                        config_path=config_path,
+                        config=service_config,
+                        service_log=service_log,
+                        intake=intake,
+                        observations=observations,
+                        creates=creates,
+                    )
+                    _assert_idle_trial_roots(root, service_root, child_home_root)
+                    assert _directory_children(service_root / "smol-leases") == set()
+                    assert _directory_children(vms_root) == before_vms
+                    assert _directory_children(cgroup_root) == before_cgroups
+                    return
                 result = await executor.evaluate_post_submission(h.request)
             assert result.outcome == "completed", (
                 result,
@@ -1220,6 +1246,8 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
             assert _directory_children(vms_root) == before_vms
             assert _directory_children(cgroup_root) == before_cgroups
         finally:
+            if recovery is not None:
+                recovery.close()
             if service is not None and service.poll() is None:
                 service.terminate()
                 try:
@@ -1231,7 +1259,11 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
             diagnostic = (root / "service.stderr").read_text(encoding="utf-8")
             if diagnostic:
                 print("Rust service diagnostic:", diagnostic[-16_384:])
-            if service is not None and service.returncode not in {0, -15, 143}:
+            if (
+                service is not None
+                and service.returncode not in {0, -15, 143}
+                and not (recovery is not None and recovery.expected_controller_exit(service))
+            ):
                 raise AssertionError(
                     (root / "service.stderr").read_text(encoding="utf-8")
                 )

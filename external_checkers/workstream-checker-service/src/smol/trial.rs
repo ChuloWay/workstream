@@ -1115,3 +1115,259 @@ impl SmolTrialRuntime for Runtime {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::smol::{Admission, Capacity};
+    use crate::trial_engine::{image_archive::ValidatedImageArchive, SandboxEnforcementOverruns};
+    use crate::trial_relay::TrialResources;
+    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::net::UnixStream;
+    use std::time::Duration;
+
+    #[test]
+    fn same_size_candidate_mutation_is_rejected_before_child_admission() {
+        let (root, config) = crate::tests::test_config();
+        struct RemoveRoot(PathBuf);
+        impl Drop for RemoveRoot {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let _cleanup = RemoveRoot(root.clone());
+        let digest = format!("sha256:{}", "a".repeat(64));
+        let profile = TrialProfile {
+            profile_id: "profile".into(),
+            profile_version: 1,
+            profile_digest: digest.clone(),
+            projection_id: "projection".into(),
+            projection_version: 1,
+            projection_digest: digest.clone(),
+            trial_kind: "generic_build_run".into(),
+            registry_entry_id: "registry".into(),
+            registry_entry_digest: digest.clone(),
+            checker_image_digest: digest.clone(),
+            configuration_sha256: digest.clone(),
+            engine_identity_digest: digest.clone(),
+            guest_binary_digest: digest.clone(),
+            filesystem_tool_digest: digest.clone(),
+            outer_runtime_config_digest: digest.clone(),
+            child_runtime: "smolvm".into(),
+            child_runtime_config_digest: digest.clone(),
+            child_transport: "workstream.smol_guest_io.v1".into(),
+            platform: "linux/amd64".into(),
+            platform_identity_digest: digest.clone(),
+            builder_image_digest: digest.clone(),
+            trusted_launcher_digest: digest.clone(),
+            offline_cache_digest: digest.clone(),
+            approved_base_digests: vec![digest.clone()],
+            source_material_roles: vec![],
+            material_projections: vec![],
+            build_context_roles: vec![],
+            allowed_material_roles: vec![],
+            slot_templates: vec![],
+            maximum_frame_bytes: 4096,
+            maximum_response_bytes: 4096,
+            maximum_steps: 1,
+            maximum_total_timeout_ms: 1000,
+            maximum_build_timeout_ms: 1000,
+            maximum_step_timeout_ms: 1000,
+            maximum_step_output_bytes: 1024,
+            maximum_observation_bytes: 4096,
+            maximum_receipt_bytes: 4096,
+            maximum_cpu_quota_millis: 1000,
+            maximum_cpu_time_ms: 1000,
+            maximum_wall_time_overrun_ms: 0,
+            maximum_cpu_time_overrun_ms: 0,
+            maximum_memory_bytes: 32 * 1024 * 1024,
+            maximum_memory_overrun_bytes: 0,
+            maximum_disk_bytes: 64 * 1024 * 1024,
+            maximum_disk_overrun_bytes: 0,
+            maximum_entries: 256,
+            maximum_entries_overrun: 0,
+            maximum_pids: 16,
+            maximum_pids_overrun: 0,
+        };
+        // The positive control must stop at child admission, never a real VM.
+        // Archive graph validation belongs to image_archive; this fixture starts
+        // with that owner's typed facts at the adapter's preparation boundary.
+        let credit = Capacity {
+            slots: 1,
+            memory_bytes: 1,
+            storage_bytes: 1,
+        };
+        let admission = Arc::new(
+            Admission::new(
+                Capacity {
+                    slots: 2,
+                    memory_bytes: 2,
+                    storage_bytes: 2,
+                },
+                "test".into(),
+            )
+            .unwrap(),
+        );
+        let reservation = admission.reserve(credit, Some(credit)).unwrap();
+        let invocation_cancelled = Arc::new(AtomicBool::new(false));
+        let (client, _connected_peer) = UnixStream::pair().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let runtime = Runtime {
+            builder: config.cache[0].clone(),
+            runtime: TrialRuntimeConfiguration {
+                relay_root: root.join("relay"),
+                scratch_root: root.join("scratch"),
+                child_home_root: root.join("children"),
+                outer_runtime_config_digest: digest.clone(),
+                offline_cache_root: root.join("cache"),
+                deployment_owner: "deployment".into(),
+                builder_image_id: digest.clone(),
+                trusted_launcher_path: root.join("launcher"),
+                trusted_launcher_digest: digest.clone(),
+                filesystem_tool_path: root.join("mkfs"),
+                filesystem_tool_digest: digest.clone(),
+                maximum_candidate_archive_bytes: 1024,
+            },
+            config,
+            profile,
+            client,
+            builder_environment: vec![],
+            baseline: SandboxBaselineUsage {
+                bytes: 1,
+                entries: 1,
+            },
+            reservation: reservation.clone(),
+            invocation_cancelled: invocation_cancelled.clone(),
+            deadline,
+            state: Mutex::new(State::default()),
+            active: AtomicBool::new(false),
+        };
+        let configuration = SmolTrialConfiguration {
+            identity: runtime.identity(),
+            deployment_owner: "deployment".into(),
+            request_digest: digest.clone(),
+            attempt_id: "attempt".into(),
+            maximum_candidate_archive_bytes: 1024,
+            candidate_uid: runtime.config.sandbox_uid,
+            candidate_gid: runtime.config.sandbox_gid,
+            reservation: reservation.clone(),
+        };
+        let owner = SmolTrialOwner {
+            deployment_owner: "deployment".into(),
+            request_digest: digest.clone(),
+            attempt_id: "attempt".into(),
+            trial_owner_id: "trial".into(),
+        };
+        let archive = root.join("candidate.tar");
+        let original = b"candidate layer A";
+        let substituted = b"candidate layer B";
+        assert_eq!(original.len(), substituted.len());
+        fs::write(&archive, original).unwrap();
+        fs::set_permissions(&archive, fs::Permissions::from_mode(0o600)).unwrap();
+        let identity = fs::metadata(&archive).unwrap();
+        let archive_sha256 = format!("sha256:{:x}", Sha256::digest(original));
+        let validated = ValidatedImageArchive {
+            archive_sha256: archive_sha256.clone(),
+            archive_byte_count: original.len() as u64,
+            expanded_bytes: 1,
+            expanded_entries: 1,
+            config_image_id: digest.clone(),
+            platform: "linux/amd64".into(),
+            environment: vec![],
+        };
+        runtime
+            .prepare_candidate(
+                &configuration,
+                &owner,
+                &archive,
+                &validated,
+                &archive_sha256,
+                original.len() as u64,
+                deadline,
+            )
+            .unwrap();
+        let request = SandboxStepRequest {
+            owner_id: "trial".into(),
+            slot_id: "slot".into(),
+            candidate_image_digest: digest,
+            workspace_root: root.join("workspace"),
+            export_root: root.join("export"),
+            visible_roles: vec![],
+            visible_role_inventory_digests: vec![],
+            command: vec!["/bin/true".into()],
+            working_directory: ".".into(),
+            resources: TrialResources {
+                cpu_quota_millis: 1000,
+                cpu_time_ms: 1000,
+                memory_bytes: 32 * 1024 * 1024,
+                disk_bytes: 64 * 1024 * 1024,
+                maximum_entries: 256,
+                pids: 16,
+            },
+            remaining_cpu_time_ms: 1000,
+            mutable_disk_bytes: 64 * 1024 * 1024,
+            mutable_entries: 256,
+            launcher_root_bytes: 4 * 1024 * 1024,
+            launcher_root_entries: 32,
+            launcher_workspace_bytes: 4 * 1024 * 1024,
+            launcher_workspace_entries: 32,
+            launcher_temporary_bytes: 4 * 1024 * 1024,
+            launcher_temporary_entries: 32,
+            launcher_shared_memory_bytes: 4 * 1024 * 1024,
+            launcher_shared_memory_entries: 32,
+            timeout_ms: 1000,
+            maximum_output_bytes: 1024,
+            enforcement_overruns: SandboxEnforcementOverruns {
+                wall_time_ms: 0,
+                cpu_time_ms: 0,
+                memory_bytes: 0,
+                pids: 0,
+                disk_bytes: 0,
+                entries: 0,
+            },
+        };
+        let relay_cancelled = AtomicBool::new(false);
+        for (bytes, expected) in [
+            (original, SmolTrialRuntimeFailure::CapacityExceeded),
+            (substituted, SmolTrialRuntimeFailure::InvalidObservation),
+            (original, SmolTrialRuntimeFailure::CapacityExceeded),
+        ] {
+            fs::write(&archive, bytes).unwrap();
+            let observed = fs::metadata(&archive).unwrap();
+            assert_eq!(
+                (
+                    observed.dev(),
+                    observed.ino(),
+                    observed.len(),
+                    observed.mode()
+                ),
+                (
+                    identity.dev(),
+                    identity.ino(),
+                    identity.len(),
+                    identity.mode()
+                )
+            );
+            assert_eq!(
+                runtime
+                    .run_step(
+                        &configuration,
+                        &owner,
+                        &request,
+                        deadline,
+                        &invocation_cancelled,
+                        &relay_cancelled,
+                    )
+                    .unwrap_err(),
+                expected
+            );
+            // Neither rejection consumes the invocation's sequential child credit.
+            drop(reservation.child(credit).unwrap());
+            assert!(!request.export_root.exists());
+            assert!(!runtime.runtime.child_home_root.exists());
+        }
+        runtime
+            .cleanup_owner(&configuration, &owner, deadline)
+            .unwrap();
+    }
+}

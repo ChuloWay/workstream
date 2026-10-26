@@ -80,7 +80,7 @@ The local rehearsal registry entry is `01a1665b-892e-7a56-a511-6fd9be45a60a`,
 created through the Operator CLI. These are image publication and registry facts,
 not deployment or activation. Runner cache provisioning, corrected proposal
 approval and activation remain separate operations. Local `docker-dev` samples
-do not establish hosted gVisor isolation.
+do not establish the intended hosted Smol isolation.
 
 ## POST prerequisites
 

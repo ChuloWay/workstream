@@ -937,3 +937,118 @@ construction is byte-identical to the previous ordinary guest implementation
 (`2971eec728a590bd4e165d493906e7ed5f6cd8c64a4c2a583978d1efb98f96fe`).
 New static artifact, direct confinement/resource and composed KVM results remain
 required; the shared-function unit alone does not prove launcher wiring.
+
+### Repaired confinement and resource qualification on real KVM
+
+The exact clean source `74bc123fe30b1f0a6a0dd58d39cb91ac5d7b9e88`, tree
+`f8520cc6f5ea4bb4a4f731d18f87c949d480aafa`, passed the offline pinned static
+workspace build. The resulting service, guest and launcher digests are
+`sha256:2199f3555136a626e4db1f52741cb57777311934106d96ed85241d1a50c29bb9`,
+`sha256:80c096454b681b03eb199cef6056ce0f1333e201a1f65e6d7dd079c90afbfcbd`
+and `sha256:e3469cf1f73c61f58d6fe9b025d975d2b97a407baf6959fff6222d04638554e1`.
+The retained build manifest is
+`sha256:cab321c1e9b217a911d26148f8057a808008c0ad034b22d220b5635a528ee2e0`.
+The existing current-source intake and POST image contexts have identical Git
+objects at this source; their approved images were reused without rebuilding.
+
+Direct KVM probe 35 passed all ten bounded cases: distinct current/predecessor
+read-only materials; altered predecessor rejection before command execution;
+trial-step confinement; CPU quota/time; memory; PIDs; workspace bytes; workspace
+entries; retained output; and wall deadline. The repaired step reported Seccomp=2,
+NoNewPrivs=1, zero capabilities and AF_VSOCK creation errno 97 (EAFNOSUPPORT).
+Only loopback and the inert unaddressed, down dummy interface were present, with
+no external route; no packet or management message was sent. The read-only root
+and absent model/execution sockets were checked from the untrusted step.
+CPU exhaustion measured 2,004 ms CPU in 8,033 ms wall under a 250 ms/s quota;
+memory peaked at its 536,870,912-byte limit; PID peak was exactly 16; retained
+output stopped at 1,024 bytes; the 3,000 ms deadline stopped at 3,032 ms.
+Each resource case reached its workload marker and reported its exact expected
+terminal cause, verified output hashes, final receipt/EOF and guest cleanup.
+Each private VM/HOME/cgroup was removed and pinned input identities matched
+before and after. The bounded receipt is
+`sha256:6a15a9afca02cbeb53a394b641df9da2c2773182d2a477483958d0e7b99b836e`
+under the owned evidence root as `direct-boundaries35-bounded-summary.json`.
+
+Composed qualification 009 then passed in 125.14 seconds on those same pins.
+Both checked-in execution guards succeeded: the real builder RUN and candidate
+qualification-status step required Seccomp=2. Both current-submission
+requirements passed with two verified ART receipts of 17 steps each, four
+controlled model effects and zero additional calls on replay. The exact
+outer/child configuration digest is
+`sha256:2981e5585c68f255f59cd75d19e778ed26e464d8a9fdde548ab82b152613abff`.
+The fixture summary is
+`sha256:84abb8b2611e75c837126770ab59e4776a371bd69ef25038b856894c05df9355`;
+the independently checked cleanup receipt is
+`sha256:53a7eb22b049f0d072465d14e2cf741b45516fcb55c194e16574c45a30cdf40e`.
+The retained log includes the configured 120-second faulthandler diagnostic;
+the test and isolated wrapper both completed with exit zero. Database and
+object-store cleanup passed, no owned VM or service lease remained, the unit
+cgroup was absent, and relay/scratch/child-home roots contained only their
+verified owner-bound marker. The exclusive VM window was released to the
+separate hosted baseline after these checks. No paid provider call was made.
+
+These direct limits establish guest enforcement, not every host/ART forced-stop
+classification. The predecessor cases establish material transport/custody,
+not an approved revision or public contribution journey. Unknown/duplicate/
+oversized adversarial control frames, active-trial cancellation in both
+directions, controller/guest death and candidate substitution still have
+focused or historical evidence rather than a new-pin adversarial KVM result;
+the earlier evidence audit retains those distinctions. Hosted and live-provider
+qualification remain separate from this controlled native proof.
+
+### Remaining parser, candidate and recovery verification
+
+The next bounded test-only scope is
+`workstream-checker-service/src/smol/io.rs` (duplicate JSON key and oversized
+declared header rejection through the actual pipe parser),
+`workstream-checker-service/src/smol/trial.rs` (same-size candidate archive
+mutation after preparation rejected by the production step path before VM
+launch), and this record. Runtime behavior is unchanged unless a reproduced
+defect requires a separately reviewed repair. Active nested-trial cancellation
+and controller/guest death probes will reuse the existing owned recovery
+conventions after the hosted baseline releases the VM lane; no concurrent VM or
+new generic proof framework is authorized by this test scope.
+
+Both focused regressions passed. The actual header pipe reader accepts the
+matching unique-key control and rejects duplicate sequence keys and a declared
+4,097-byte header while the producer remains open; producers are killed and
+reaped before assertions. The candidate test invokes production preparation and
+step admission using typed archive-validation facts: original bytes reach an
+intentionally insufficient child reservation, same-size changed bytes return
+InvalidObservation before that boundary, and restored bytes reach capacity
+again. File device/inode/length/mode stay fixed, child credit remains reusable,
+and no VM is invoked. Removing only the production step rehash makes that exact
+mutation assertion fail (CapacityExceeded instead of InvalidObservation); the
+source was restored and the complete serial native workspace then passed 193
+tests with zero failures or ignored cases. Independent test review found no
+defect; formatting and diff checks passed. This test-only change does not alter
+the static runtime artifacts qualified by direct 35 and composition 009.
+
+The separate active nested recovery test scope is the existing
+`workstream-checker-service/tests/smol_recovery.py` helper,
+`tests/terminal_systems_smol_composition.py` optional observer hooks, the opt-in
+`tests/terminal_systems_smol_recovery.py` wrapper, and this record. Exactly three
+physical cases cover caller disconnect, exact owned child VMM death (including
+reverse cancellation), and exact controller death followed by guardian cleanup
+and restart. Only the recovery submission replaces qualification-status with a
+fixed workspace marker and bounded wait; the ordinary package and production
+images remain unchanged. Faults require observed untrusted workload reach and
+typed owner/lease/process custody. No-receipt/no-false-completion, controlled
+effect counts, owned cleanup and post-recovery capacity reuse are required.
+The hosted baseline retains priority over the VM window while these hooks are
+prepared and independently reviewed.
+
+Preparation validation: the opt-in recovery wrapper collects exactly one case
+with the native qualification's Python path and plugins; Python compilation,
+fixture shell syntax and diff checks passed. The recovery archive audit changes
+only tools/qualification-status; its bounded marker/wait script digest is
+`sha256:fe2440b914312fede5f51ff64c1c272e5a8cf1b49d4894e7de10d8a429e306e2`.
+Independent review corrected one-versus-two policy assertions and made marker
+observation select the filtered untrusted PID rather than the intentionally
+unfiltered trusted launcher. Explicit task observation/drain deadlines precede
+exact-controller teardown on timeout. The negative custody assertion preserves
+the authorized reserved trial address with NULL content, while requiring zero
+receipt callbacks, trial ART put attempts and bindings. Two simultaneous real
+trusted-intake preparations must demonstrate full admission capacity reuse and
+then close/drain. Final independent source review passed; all three physical
+recovery cases remain pending the exclusive VM handoff.
