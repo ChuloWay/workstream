@@ -96,6 +96,12 @@ PILOT_08_REVISION_TARGETS = frozenset({
     "backend/app/modules/tasks/revision/service.py",
     "backend/app/workers/revision_recovery.py",
 })
+TRUSTED_INTAKE_TARGETS = frozenset({
+    "backend/app/adapters/artifacts/trusted_intake.py",
+    "backend/app/interfaces/trusted_submission_intake.py",
+    "backend/app/modules/artifacts/api/submission_archive.py",
+    "backend/app/modules/artifacts/trusted_intake.py",
+})
 CHECKER_IMAGE_PUBLISH_TARGETS = frozenset({
     "backend/scripts/checker_image.py",
     "backend/scripts/checker_image_process.py",
@@ -922,6 +928,10 @@ PROJECT_CATALOGUE_TARGETS = frozenset({
     "backend/app/modules/authorization/domain/project_catalogue.py",
     "backend/app/modules/authorization/project_catalogue.py",
 })
+GITHUB_PROOF_FACTS_TARGETS = frozenset({
+    "backend/app/adapters/github/app_facts.py",
+    "backend/app/interfaces/github_facts.py",
+})
 
 
 class BehaviorOwnershipError(RuntimeError):
@@ -1102,6 +1112,7 @@ def _validate_additive_partition_transition(
         | CHECKER_MODEL_RUNTIME_TARGETS
         | CHECKER_TRIAL_RUNTIME_TARGETS
         | CHECKER_IMAGE_PUBLISH_TARGETS
+        | TRUSTED_INTAKE_TARGETS
         | PILOT_READ_2_TARGETS
         | PILOT_READ_3_TARGETS
         | CON_02B_DELIVERY_TARGETS
@@ -1194,6 +1205,7 @@ def _validate_additive_partition_transition(
         | PILOT_02B_ATOMIC_IMPORT_TARGETS
         | PILOT_02C_BULK_TRANSITION_TARGETS
         | PROJECT_CATALOGUE_TARGETS
+        | GITHUB_PROOF_FACTS_TARGETS
     )
     expected_additions = (approved_additions & additions) - set(trusted_targets)
     if POL_03A_DECLARATIVE_MODEL_TARGET in additions:

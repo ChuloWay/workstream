@@ -25,6 +25,10 @@
       "target": "backend/app/adapters/artifacts/s3_compatible.py"
     },
     {
+      "group": "artifacts",
+      "target": "backend/app/adapters/artifacts/trusted_intake.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/adapters/auth/adapter_bindings.py"
     },
@@ -75,6 +79,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/adapters/checkers/trial_proxy.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/adapters/github/app_facts.py"
     },
     {
       "group": "shared",
@@ -434,6 +442,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/interfaces/github_facts.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/interfaces/guide_document_tools.py"
     },
     {
@@ -451,6 +463,10 @@
     {
       "group": "shared",
       "target": "backend/app/interfaces/setup_model_proxy.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/interfaces/trusted_submission_intake.py"
     },
     {
       "group": "shared",
@@ -527,6 +543,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/artifacts/api/submission_admission.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/api/submission_archive.py"
     },
     {
       "group": "artifacts",
@@ -663,6 +683,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/artifacts/task_import_sources.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/trusted_intake.py"
     },
     {
       "group": "shared",
@@ -2553,7 +2577,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "9247248690e0aa98cbda06b2b3f3d794c5b7021a266d2b8316c92ad09e73633a",
+  "authority_digest": "8d0ef1c834976b4ae04421058520786e897112ff40b10324735751c273d88b48",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

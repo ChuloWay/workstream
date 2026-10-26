@@ -43,13 +43,17 @@ from app.interfaces.artifacts import (
     ArtifactStoreBootstrap,
     ArtifactStoreNamespaceClaim,
 )
-from app.interfaces.external_services import ExternalServiceAdapterFactory
+from app.interfaces.external_services import ExternalServiceAdapterFactory, ExternalServiceConfigurationError
+from app.interfaces.trusted_submission_intake import TrustedSubmissionIntakeAdapter
+from app.adapters.artifacts.trusted_intake import CAPABILITY, PROVIDER, UnixSocketTrustedIntakeAdapter
 from app.modules.artifacts.preparation import (
     ArtifactPreparationLimits,
     ArtifactPreparationService,
     ArtifactScratchManager,
 )
-from app.modules.artifacts.submission_archive import SubmissionArchiveLimits
+from app.modules.artifacts.api.submission_archive import (
+    SubmissionArchiveLimits,
+)
 from app.modules.artifacts.submission_authorization import (
     SubmissionBundlePreparationAuthorization,
 )
@@ -66,6 +70,21 @@ from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.api import ActorIdentityFacts
 from app.modules.tasks.api.guide_documents import TaskGuideDocumentsPort
 from app.modules.projects.api.guide_reads import ProjectGuideDocumentContentPort
+
+
+def trusted_submission_intake(settings: Settings) -> TrustedSubmissionIntakeAdapter:
+    """Register the sole ART capability provider with explicit pinned identity."""
+    if any(value is None for value in (settings.artifact_intake_service_socket,
+                                       settings.artifact_intake_image_digest,
+                                       settings.artifact_intake_config_digest)):
+        raise ExternalServiceConfigurationError()
+    factory = ExternalServiceAdapterFactory[TrustedSubmissionIntakeAdapter](CAPABILITY)
+    factory.register(PROVIDER, lambda: UnixSocketTrustedIntakeAdapter(
+        socket_path=settings.artifact_intake_service_socket,
+        image_digest=settings.artifact_intake_image_digest,
+        config_digest=settings.artifact_intake_config_digest,
+    ))
+    return factory.create(PROVIDER)
 
 
 async def get_submission_bundle_preparation_actor(
@@ -422,7 +441,6 @@ def get_submission_bundle_preparation_command(
         artifact_storage_namespace_spec,
     )
     from app.modules.artifacts.submission_admission import SubmissionBundleDurablePutService
-    from app.modules.artifacts.submission_archive import SubmissionArchiveInspector
     from app.modules.artifacts.submission_materialization import (
         PreparedBundleMaterializationService,
     )
@@ -467,7 +485,8 @@ def get_submission_bundle_preparation_command(
                 )
             )
             preparation = ArtifactPreparationService(manager)
-            inspector = SubmissionArchiveInspector(submission_archive_limits(settings))
+            intake = trusted_submission_intake(settings)
+            archive_limits = submission_archive_limits(settings)
             from app.adapters.auth import selected_pre_submit_authority
             from app.adapters.checkers import selected_pre_submit_checker_execution
             from app.modules.artifacts.selected_pre_submit_execution import (
@@ -477,7 +496,6 @@ def get_submission_bundle_preparation_command(
 
             checker_execution = selected_pre_submit_checker_execution(
                 settings=settings,
-                archive_inspector=inspector,
             )
             storage_schemes = {"local": "local", "s3_compatible": "s3"}
             try:
@@ -490,6 +508,7 @@ def get_submission_bundle_preparation_command(
                 preparation=preparation,
                 checker_execution=checker_execution,
                 storage_scheme=storage_scheme,
+                archive_limits=archive_limits,
             )
             admission = ArtifactAdmissionService(session, settings, namespace)
             storage = ArtifactStorageOrchestrator(
@@ -503,7 +522,8 @@ def get_submission_bundle_preparation_command(
 
             yield SubmissionBundlePreparationRuntime(
                 preparation=preparation,
-                inspector=inspector,
+                intake=intake,
+                archive_limits=archive_limits,
                 materialization=materialization,
                 selected_coordinator=selected_coordinator,
                 selected_execution=SelectedPreSubmitExecutionService(
@@ -605,9 +625,7 @@ async def guide_document_access_runtime(session_factory, attempt_id, manifest, c
             manager.close()
 
 
-def post_submission_materialization(
-    *, sessions, store, namespace, preparation, inspector
-) -> PostSubmissionMaterializationPort:
+def post_submission_materialization(*, sessions, store, namespace, preparation, intake, archive_limits, artifact_deadline_ms) -> PostSubmissionMaterializationPort:
     """Compose exact input with fresh materializer authority and CHECKERS lease custody."""
     from app.adapters.tasks import submitted_bundle_port, task_evaluation_revision_port
     from app.modules.artifacts.post_submit_materialization import PostSubmissionMaterializer
@@ -615,12 +633,8 @@ def post_submission_materialization(
     from app.adapters.checkers import current_post_submit_execution, revision_feedback_port
 
     return PostSubmissionMaterializer(
-        sessions=sessions,
-        tasks=submitted_bundle_port,
-        store=store,
-        namespace=namespace,
-        preparation=preparation,
-        inspector=inspector,
+        sessions=sessions, tasks=submitted_bundle_port, store=store, namespace=namespace,
+        preparation=preparation, intake=intake, archive_limits=archive_limits, artifact_deadline_ms=artifact_deadline_ms,
         authority=post_submit_materialization_authority,
         current_execution=current_post_submit_execution,
         revision_tasks=task_evaluation_revision_port,
@@ -645,7 +659,6 @@ class _WorkerPostSubmissionMaterialization:
             _artifact_worker_database,
             initialize_artifact_internal_runtime,
         )
-        from app.modules.artifacts.submission_archive import SubmissionArchiveInspector
         from app.modules.checkers.api.external_policy import (
             ExternalCheckerPolicyError,
             selected_post_submit_execution_budget_ms,
@@ -676,7 +689,9 @@ class _WorkerPostSubmissionMaterialization:
                         store=store,
                         namespace=namespace,
                         preparation=ArtifactPreparationService(manager),
-                        inspector=SubmissionArchiveInspector(submission_archive_limits(settings)),
+                        intake=trusted_submission_intake(settings),
+                        archive_limits=submission_archive_limits(settings),
+                        artifact_deadline_ms=int(settings.artifact_preparation_total_deadline_seconds * 1000),
                     ).materialize(facts, consumer)
                 finally:
                     manager.close()

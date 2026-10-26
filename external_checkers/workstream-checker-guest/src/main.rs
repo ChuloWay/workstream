@@ -3,11 +3,14 @@ use sha2::{Digest, Sha256};
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
+use std::os::fd::FromRawFd;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::os::unix::process::CommandExt;
 use std::path::{Component, Path};
 use std::process::Command;
-use workstream_checker_guest::{GuestJob, CAPACITY_EXIT_CODE, INPUT_ROOT, MAX_JOB_BYTES};
+use workstream_checker_guest::{
+    GuestJob, GuestPurpose, CAPACITY_EXIT_CODE, INPUT_ROOT, MAX_JOB_BYTES,
+};
 use workstream_checker_sdk::parse_request;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -75,11 +78,22 @@ fn material_path_is_relative(value: &str) -> bool {
             .all(|part| matches!(part, Component::Normal(_)))
 }
 
+fn mount_directory(path: &Path) -> Result<()> {
+    // No image code or other threads run before confinement. Refuse image-owned
+    // symlinks (including dangling ones) instead of mounting through them.
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_dir() => Ok(()),
+        Ok(_) => Err("mount target is not a directory".into()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(fs::create_dir(path)?),
+        Err(error) => Err(error.into()),
+    }
+}
+
 fn stage(job: &GuestJob, input: &mut impl Read) -> Result<File> {
     // Mask any image-owned /work before handling untrusted paths. Only this
     // trusted process runs in the image until staging and confinement complete.
-    fs::create_dir_all("/work")?;
-    fs::create_dir_all("/tmp")?;
+    mount_directory(Path::new("/work"))?;
+    mount_directory(Path::new("/tmp"))?;
     // Stage on the VM's bounded ephemeral disk, so immutable input pages can
     // be reclaimed independently of the checker heap. Never put the submitted
     // tree in tmpfs or silently add its expanded size to the workload limit.
@@ -354,6 +368,24 @@ fn supervised_exit(status: i32, oom_kills: u64) -> i32 {
 mod tests {
     use super::*;
     #[test]
+    fn mount_targets_reject_image_symlinks_and_non_directories() {
+        let root = std::env::temp_dir().join(format!("ws-guest-mounts-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let target = root.join("directory");
+        mount_directory(&target).unwrap();
+        mount_directory(&target).unwrap();
+        let link = root.join("link");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        assert!(mount_directory(&link).is_err());
+        fs::remove_dir(&target).unwrap();
+        assert!(mount_directory(&link).is_err());
+        fs::write(&target, b"image file").unwrap();
+        assert!(mount_directory(&target).is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"image file");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn material_containment_does_not_apply_finding_presentation_limits() {
         assert!(material_path_is_relative(&format!(
             "folder/{}",
@@ -387,7 +419,13 @@ fn main() {
     }
 }
 fn run() -> Result<()> {
-    let mut input = std::io::stdin().lock();
+    // Read exactly the bootstrap bytes without userspace read-ahead: trusted
+    // intake keeps the remaining command stream as its stdin after exec.
+    let descriptor = unsafe { libc::dup(0) };
+    if descriptor < 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    let mut input = unsafe { File::from_raw_fd(descriptor) };
     let mut length = [0u8; 4];
     input.read_exact(&mut length)?;
     let length = u32::from_be_bytes(length) as usize;
@@ -397,7 +435,27 @@ fn run() -> Result<()> {
     let mut bytes = vec![0; length];
     input.read_exact(&mut bytes)?;
     let job: GuestJob = serde_json::from_slice(&bytes)?;
-    let request = parse_request(&serde_json::to_vec(&job.request)?)?;
+    let (cpu, memory, intake) = match job.purpose {
+        GuestPurpose::Project => {
+            let request = parse_request(&serde_json::to_vec(&job.request)?)?;
+            (request.cpu_millis, request.memory_bytes, false)
+        }
+        GuestPurpose::TrustedIntake {
+            cpu_millis,
+            memory_bytes,
+        } => {
+            if cpu_millis != 1000
+                || memory_bytes != 2 * 1024 * 1024 * 1024
+                || job.files.len() != 1
+                || job.files[0].normalized_path != "archive.zip"
+                || job.files[0].byte_count > 512 * 1024 * 1024
+                || !job.directories.is_empty()
+            {
+                return Err("trusted intake bootstrap invalid".into());
+            }
+            (cpu_millis, memory_bytes, true)
+        }
+    };
     if job.command.is_empty() || job.command.len() > 256 || job.environment.len() > 1024 {
         return Err("image configuration invalid".into());
     }
@@ -406,7 +464,13 @@ fn run() -> Result<()> {
     // not checker heap. The enclosing VMM and disk bounds cover staging custody.
     let request_file = stage(&job, &mut input).map_err(|e| format!("staging: {e}"))?;
     drop(input);
-    cgroups(request.cpu_millis, request.memory_bytes).map_err(|e| format!("cgroup: {e}"))?;
+    if intake {
+        fs::create_dir("/work/scratch")?;
+        mount("/work/scratch", "/work/scratch", "", libc::MS_BIND, "")?;
+        syscall_ok(unsafe { libc::chown(c("/work/scratch")?.as_ptr(), job.uid, job.gid) })?;
+        fs::set_permissions("/work/scratch", fs::Permissions::from_mode(0o700))?;
+    }
+    cgroups(cpu, memory).map_err(|e| format!("cgroup: {e}"))?;
     // The trusted, single-threaded supervisor stays outside the workload cgroup
     // so an OOM cannot destroy the kernel evidence before it is classified.
     // stdin's lock has been dropped and no other threads exist at this fork.
@@ -442,13 +506,24 @@ fn run() -> Result<()> {
     )?;
     confined_devices().map_err(|e| format!("devices: {e}"))?;
     readonly_filesystem().map_err(|e| format!("filesystem: {e}"))?;
+    if intake {
+        // Only the trusted worker receives private VM-disk scratch. Project
+        // workloads retain their existing bounded tmpfs-only writable surface.
+        mount(
+            "",
+            "/work/scratch",
+            "",
+            libc::MS_BIND | libc::MS_REMOUNT | libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC,
+            "",
+        )?;
+    }
     drop_privileges(job.uid, job.gid).map_err(|e| format!("privileges: {e}"))?;
     syscall_filter().map_err(|e| format!("syscall policy: {e}"))?;
     let mut command = Command::new(&job.command[0]);
-    command
-        .args(&job.command[1..])
-        .env_clear()
-        .stdin(request_file);
+    command.args(&job.command[1..]).env_clear();
+    if !intake {
+        command.stdin(request_file);
+    }
     for entry in &job.environment {
         let (key, value) = entry.split_once('=').ok_or("invalid image environment")?;
         command.env(key, value);

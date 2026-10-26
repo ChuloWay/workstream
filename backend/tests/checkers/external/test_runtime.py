@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import hashlib
 import io
 import json
@@ -13,6 +14,8 @@ from uuid import uuid4
 import zipfile
 
 import pytest
+
+from tests.trusted_intake_fixtures import assert_sealed_export
 from pydantic import ValidationError
 
 from app.adapters.checkers import (
@@ -46,10 +49,12 @@ from app.modules.artifacts.preparation import (
     PostExternalMaterialGrantItem,
     PostExternalMaterialGrantRequest,
 )
-from app.modules.artifacts.submission_archive import (
-    SubmissionArchiveInspector,
+from app.modules.artifacts.api.submission_archive import (
     SubmissionArchiveLimits,
     SubmissionArchiveEntryType,
+)
+from app.modules.artifacts.submission_archive import (
+    SubmissionArchiveInspector,
 )
 from app.modules.artifacts.submission_manifest import build_submission_manifest
 from app.modules.artifacts.submission_manifest import SUBMISSION_MANIFEST_SCHEMA_VERSION
@@ -207,16 +212,23 @@ def test_service_runtime_files_stay_outside_art_scratch_custody(tmp_path: Path):
 )
 def test_receipts_cannot_misrepresent_an_engine_as_another_isolation(runtime, isolation_mode):
     shared = dict(
-        operating_system="linux", architecture="amd64", runtime=runtime,
-        isolation_mode=isolation_mode, sandbox_uid=1000, sandbox_gid=1000,
+        operating_system="linux",
+        architecture="amd64",
+        runtime=runtime,
+        isolation_mode=isolation_mode,
+        sandbox_uid=1000,
+        sandbox_gid=1000,
     )
     with pytest.raises(ValueError):
         ExternalCheckerServiceHealth(cached_platform_manifests=1, **shared)
     with pytest.raises(ValueError):
         ExternalCheckerIsolationReceipt(
-            repository="registry.example/checker", platform_manifest_digest=SHA,
+            repository="registry.example/checker",
+            platform_manifest_digest=SHA,
             platform_manifest_media_type="application/vnd.oci.image.manifest.v1+json",
-            platform_manifest_byte_count=128, config_image_id=SHA, **shared,
+            platform_manifest_byte_count=128,
+            config_image_id=SHA,
+            **shared,
         )
 
 
@@ -226,7 +238,9 @@ def test_receipts_cannot_misrepresent_an_engine_as_another_isolation(runtime, is
 )
 @pytest.mark.asyncio
 async def test_unix_adapter_revalidates_exact_result_and_factory_is_closed(
-    tmp_path: Path, runtime: str, isolation_mode: str,
+    tmp_path: Path,
+    runtime: str,
+    isolation_mode: str,
 ):
     request = _request()
     result = make_external_checker_execution_result(
@@ -713,7 +727,6 @@ async def test_post_aggregate_reuses_materials_for_context_and_current_only_gran
                 len(b"current archive bytes") + len(b"predecessor archive bytes")
             )
             assert workspace_reservation["maximum_entries"] == 6
-
             for request in (context_request, current_only_request):
                 with service.post_external_material_grant(sources, workspace, request) as grant:
                     grant_root = tmp_path / "scratch" / "workspaces" / grant.grant_id
@@ -760,6 +773,213 @@ async def test_post_aggregate_reuses_materials_for_context_and_current_only_gran
     await current.close()
     await prior.close()
     assert (await manager.usage()).reservation_count == 0
+    manager.close()
+
+
+def _empty_post_grant_request() -> PostExternalMaterialGrantRequest:
+    identity = execution_identity("post_submit")
+    semantic_manifest_sha256 = canonical_json_hash(
+        {"schema_version": SUBMISSION_MANIFEST_SCHEMA_VERSION, "entries": []}
+    )
+    item = PostExternalMaterialGrantItem(
+        material=PostSubmitExternalCheckerMaterial(
+            role="submission_archive",
+            submission_id=identity.submission_id,
+            submission_version=identity.submission_version,
+            binding_id=uuid4(),
+            content_id=uuid4(),
+            replica_id=uuid4(),
+            content_sha256=SHA,
+            byte_count=0,
+            media_type="application/zip",
+            evidence_id=uuid4(),
+            verification_receipt_id=uuid4(),
+            verification_job_id=uuid4(),
+            verification_generation=1,
+            namespace_fingerprint=SHA,
+            semantic_manifest_sha256=semantic_manifest_sha256,
+        ),
+        directories=(),
+        files=(),
+    )
+    return PostExternalMaterialGrantRequest(
+        request_digest=SHA,
+        identity=identity,
+        evaluation_context_sha256=None,
+        materials=(item,),
+        visible_roles=("submission_archive",),
+    )
+
+
+def test_post_grants_keep_small_concurrent_reservations(
+    tmp_path: Path,
+) -> None:
+    """Preserve simultaneous POST grants without expanding their reserved capacity."""
+    manager = ArtifactScratchManager(
+        root=tmp_path / "scratch",
+        limits=ArtifactPreparationLimits(
+            aggregate_reserved_bytes=HARD_MAXIMUM_ARTIFACT_BYTES,
+            minimum_free_bytes=0,
+            maximum_workspace_entries=6,
+        ),
+    )
+    request = _empty_post_grant_request()
+
+    with manager.extraction_workspace(reserved_bytes=1, maximum_entries=4) as first:
+        with manager.extraction_workspace(reserved_bytes=1, maximum_entries=4) as second:
+            for workspace in (first, second):
+                materials = workspace / "materials"
+                materials.mkdir()
+                (materials / "submission_archive").mkdir()
+            with manager._external_material_grant(first, request) as first_grant:
+                with manager._external_material_grant(second, request) as second_grant:
+                    roots = [
+                        tmp_path / "scratch" / "workspaces" / item.grant_id
+                        for item in (first_grant, second_grant)
+                    ]
+                    assert all(not (root / "runtime").exists() for root in roots)
+                    ledger = json.loads((tmp_path / "scratch" / ".ledger.json").read_text())
+                    assert [item["reserved_bytes"] for item in ledger["workspaces"]] == [
+                        1,
+                        1,
+                    ]
+                    assert [item["maximum_entries"] for item in ledger["workspaces"]] == [
+                        4,
+                        4,
+                    ]
+    assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
+    manager.close()
+
+
+def test_post_external_grant_preserves_submitted_reserved_names(
+    tmp_path: Path,
+) -> None:
+    """Move submitted reserved names below ART's distinct grant control paths."""
+    manager = ArtifactScratchManager(
+        root=tmp_path / "scratch",
+        limits=ArtifactPreparationLimits(
+            aggregate_reserved_bytes=HARD_MAXIMUM_ARTIFACT_BYTES,
+            minimum_free_bytes=0,
+            maximum_workspace_entries=16,
+        ),
+    )
+    payload = b"print('starter')\n"
+    submitted_manifest = b"submitted project file\n"
+    files = tuple(
+        sorted(
+            (
+                ExternalMaterialFile(
+                    normalized_path=".external-checker-grant.json",
+                    byte_count=len(submitted_manifest),
+                    sha256=f"sha256:{hashlib.sha256(submitted_manifest).hexdigest()}",
+                    executable=False,
+                ),
+                ExternalMaterialFile(
+                    normalized_path="workspace/program.py",
+                    byte_count=len(payload),
+                    sha256=f"sha256:{hashlib.sha256(payload).hexdigest()}",
+                    executable=False,
+                ),
+            ),
+            key=lambda item: item.normalized_path,
+        )
+    )
+    manifest_entries = sorted(
+        [
+            {"normalized_path": "runtime", "entry_type": "directory"},
+            {"normalized_path": "workspace", "entry_type": "directory"},
+            *(
+                {
+                    "normalized_path": file.normalized_path,
+                    "entry_type": "file",
+                    "byte_count": file.byte_count,
+                    "sha256": file.sha256,
+                    "executable": file.executable,
+                }
+                for file in files
+            ),
+        ],
+        key=lambda item: item["normalized_path"],
+    )
+    semantic_manifest_sha256 = canonical_json_hash(
+        {
+            "schema_version": SUBMISSION_MANIFEST_SCHEMA_VERSION,
+            "entries": manifest_entries,
+        }
+    )
+    identity = execution_identity("post_submit")
+    material = PostSubmitExternalCheckerMaterial(
+        role="submission_archive",
+        submission_id=identity.submission_id,
+        submission_version=identity.submission_version,
+        binding_id=uuid4(),
+        content_id=uuid4(),
+        replica_id=uuid4(),
+        content_sha256=SHA,
+        byte_count=len(payload) + len(submitted_manifest),
+        media_type="application/zip",
+        evidence_id=uuid4(),
+        verification_receipt_id=uuid4(),
+        verification_job_id=uuid4(),
+        verification_generation=1,
+        namespace_fingerprint=SHA,
+        semantic_manifest_sha256=semantic_manifest_sha256,
+    )
+    request = PostExternalMaterialGrantRequest(
+        request_digest=SHA,
+        identity=identity,
+        evaluation_context_sha256=None,
+        materials=(
+            PostExternalMaterialGrantItem(
+                material=material,
+                directories=("runtime", "workspace"),
+                files=files,
+            ),
+        ),
+        visible_roles=("submission_archive",),
+    )
+
+    with manager.extraction_workspace(
+        reserved_bytes=len(payload) + len(submitted_manifest), maximum_entries=6
+    ) as extraction:
+        materials = extraction / "materials"
+        materials.mkdir()
+        submitted = materials / "submission_archive"
+        submitted.mkdir()
+        (submitted / ".external-checker-grant.json").write_bytes(submitted_manifest)
+        (submitted / "runtime").mkdir()
+        submitted_workspace = submitted / "workspace"
+        submitted_workspace.mkdir()
+        (submitted_workspace / "program.py").write_bytes(payload)
+        for digest in (SHA, "sha256:" + "9" * 64):
+            with manager._external_material_grant(
+                extraction, replace(request, request_digest=digest)
+            ) as grant:
+                grant_root = tmp_path / "scratch" / "workspaces" / grant.grant_id
+                assert (
+                    grant_root / "materials/submission_archive/workspace/program.py"
+                ).read_bytes() == payload
+                assert (grant_root / "materials/submission_archive/runtime").is_dir()
+                assert (
+                    grant_root / "materials/submission_archive/.external-checker-grant.json"
+                ).read_bytes() == submitted_manifest
+                manifest = json.loads((grant_root / ".external-checker-grant.json").read_text())
+                assert (
+                    manifest["grant_id"] == grant.grant_id and manifest["request_digest"] == digest
+                )
+                assert "runtime_scratch" not in manifest
+                assert not (grant_root / "runtime").exists()
+                [reservation] = json.loads((tmp_path / "scratch" / ".ledger.json").read_text())[
+                    "workspaces"
+                ]
+                assert reservation["reserved_bytes"] == len(payload) + len(submitted_manifest)
+                assert reservation["maximum_entries"] == 6
+                assert not any(
+                    item.name.startswith(".external-material-") for item in grant_root.iterdir()
+                )
+            assert_sealed_export(materials)
+
+    assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
     manager.close()
 
 
