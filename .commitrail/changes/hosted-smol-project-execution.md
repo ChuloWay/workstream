@@ -12,9 +12,9 @@ Give the hosted release one explicit Smol execution boundary without a fallback 
 
 `deploy/hosted/compose.yml` starts a networkless controller container with the host Docker socket. `preflight.py` requires runsc and Docker image-cache inspection. Trusted intake already uses a native Smol service through a separate typed capability. API and worker mount absolute scratch/socket paths; project execution uses the existing typed `ExternalCheckerExecutionAdapter` and factory.
 
-Merged main `ae788e6a8` rejects Smol model grants. The pending runtime change in PR #677 owns guest-native model/trial transport, predecessor material, child VM custody and resource enforcement. This hosted change consumes that implementation and cannot establish its qualification independently.
+Current main `fcd32057b` rejects Smol model grants. The pending runtime change in PR #677 owns guest-native model/trial transport, predecessor material, child VM custody and resource enforcement. This hosted change consumes that implementation and cannot establish its qualification independently.
 
-PR #690 at `f3f818265` owns provider selection and replacement credential overlays. Its pinned branch is an explicit integration dependency so this change can preserve those overlays rather than create another provider-selection path. It must land before this change is ready. Provider source behavior remains outside this change.
+PR #690 at `f3f818265`, incorporated in main `fcd32057b`, owns provider selection and replacement credential overlays. This change preserves that existing dependency rather than creating another provider-selection path. Provider source behavior remains outside this change.
 
 PRE model access is unsupported: `configured_model_profile_selector` rejects model selectors outside `post_submit`; `ModelAwareExternalExecution` and `model_execution_facts` require durable POST lineage. Selected PRE currently invokes the ordinary execution adapter without a model grant. This change preserves that rejection and does not claim PRE model support.
 
@@ -65,7 +65,7 @@ PRE model access is unsupported: `configured_model_profile_selector` rejects mod
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Current deployment and typed ownership | Inspect hosted Compose/preflight, existing systemd unit, typed execution/intake adapters and selected PRE/POST owners | Inspected | No hosted operation executed |
-| Provider overlap | Read PR #690 and its exact head `f3f818265` | Inspected | Dependency is not merged |
+| Provider overlap | Read PR #690 at `f3f818265`; reconcile main `fcd32057b` | Existing provider owner preserved | Live provider behavior remains separately qualified |
 | Smol callback transport | PR #677 implementation and qualification | Required dependency | Pending runtime integration and root-owned qualification |
 | Rendered topology and refusal paths | `python3 -m unittest scripts.test_hosted_release_config scripts.test_hosted_release_images` | 64 passed, exit 0 | Contract/image fixtures; no native VM or provider execution |
 | Generated readiness client | Execute the actual generated script using pinned backend Python, real Settings, registered typed factory and a local framed Unix health server | Passed; exact typed health request observed | The responder is a local protocol fixture, not a Smol node |
@@ -86,6 +86,6 @@ Exact-head implementation review follows this clean tested checkpoint; no passin
 
 ## Reconciliation
 
-- Current-source reconciliation: start from main `ae788e6a8`; integrate the pinned PR #690 dependency before changing its hosted overlays; consume PR #677 runtime transport without copying it.
+- Current-source reconciliation: start from main `ae788e6a8`; preserve the pinned PR #690 dependency and reconcile main `fcd32057b`, including its current CLI/roadmap changes; consume PR #677 runtime transport without copying it. The main reconciliation has no source conflicts and changes no hosted executable code.
 - Next usable boundary: tested hosted Smol configuration, then dependency integration and independent hosted/public qualification.
 - Remaining risks: unqualified live model/Flow/AWS behavior and unsupported PRE model custody must remain explicit.
