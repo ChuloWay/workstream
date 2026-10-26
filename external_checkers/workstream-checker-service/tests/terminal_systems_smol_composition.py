@@ -1,6 +1,6 @@
-"""Explicit production Rust/runsc/trial/ART composition qualification.
+"""Explicit production Rust/Smol/trial/ART composition qualification.
 
-This test is invoked only by ``qualify_terminal_systems_runsc.sh``. It uses the
+This test is invoked only by the native Smol qualification wrapper. It uses the
 small qualification-only package, not a real Terminal Systems contribution or
 the setup/activation journey owned by issue 555.
 """
@@ -24,6 +24,8 @@ import zipfile
 from sqlalchemy import select
 
 from app.adapters.artifacts import checker_output_binding, checker_output_storage
+from app.adapters.artifacts import post_submission_materialization
+from app.adapters.artifacts.trusted_intake import UnixSocketTrustedIntakeAdapter
 from app.adapters.auth import checker_model_service_authorization
 from app.adapters.checkers import (
     checker_output_reservations,
@@ -46,6 +48,7 @@ from app.interfaces.checker_model_provider import (
 )
 from app.interfaces.project_agents import CapabilityParameter, CheckSpecification
 from app.modules.actors.api import ServiceIdentity
+from app.modules.artifacts.api.submission_archive import SubmissionArchiveLimits
 from app.modules.artifacts.preparation import HARD_MAXIMUM_ARTIFACT_BYTES
 from app.modules.artifacts.models import (
     ArtifactBinding,
@@ -151,31 +154,117 @@ PROFILE_ID = UUID("018f6f49-66b8-7d2a-bf4d-0e2eeaa00493")
 ALPINE_DIGEST = (
     "sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e"
 )
+TRIAL_DISK_CEILING_BYTES = 2 * 1024 * 1024 * 1024
 
 
 def _required_environment() -> dict[str, str]:
     names = (
-        "WORKSTREAM_TS_RUNSC_COMPOSITION_ROOT",
-        "WORKSTREAM_TS_RUNSC_INNER_COMPOSITION_ROOT",
-        "WORKSTREAM_TS_RUNSC_SOCKET_ROOT",
-        "WORKSTREAM_TS_RUNSC_INNER_SOCKET_ROOT",
-        "WORKSTREAM_TS_RUNSC_CONTAINER",
-        "WORKSTREAM_TS_RUNSC_DAEMON_DIGEST",
-        "WORKSTREAM_TS_RUNSC_PLATFORM_IDENTITY",
-        "WORKSTREAM_TS_RUNSC_CHECKER_REPOSITORY",
-        "WORKSTREAM_TS_RUNSC_CHECKER_DIGEST",
-        "WORKSTREAM_TS_RUNSC_CHECKER_ID",
-        "WORKSTREAM_TS_RUNSC_BUILDER_ID",
-        "WORKSTREAM_TS_RUNSC_BUILDER_MANIFEST",
-        "WORKSTREAM_TS_RUNSC_CACHE_DIGEST",
-        "WORKSTREAM_TS_RUNSC_ENGINE_DIGEST",
-        "WORKSTREAM_TS_RUNSC_LAUNCHER_PATH",
-        "WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST",
-        "WORKSTREAM_TS_RUNSC_SUMMARY_PATH",
+        "WORKSTREAM_TS_SMOL_NODE_CONFIG",
+        "WORKSTREAM_TS_SMOL_SERVICE",
+        "WORKSTREAM_TS_SMOL_ROOT",
+        "WORKSTREAM_TS_SMOL_SUMMARY_PATH",
+        "WORKSTREAM_TS_SMOL_PLATFORM_IDENTITY",
+        "WORKSTREAM_TS_SMOL_CACHE_DIGEST",
+        "WORKSTREAM_TS_SMOL_CHECKER_DIGEST",
     )
     values = {name: os.environ.get(name, "") for name in names}
     assert all(values.values()), f"qualification environment incomplete: {values}"
     return values
+
+
+def _node_configuration(env: dict[str, str]) -> tuple[dict, dict, dict, dict]:
+    """Load one wrapper-provisioned native node and resolve its pinned images."""
+    path = Path(env["WORKSTREAM_TS_SMOL_NODE_CONFIG"])
+    assert path.is_absolute() and path.is_file() and not path.is_symlink()
+    node = json.loads(path.read_text(encoding="utf-8"))
+    assert type(node) is dict
+    assert node["runtime"] == "smolvm"
+    assert node["isolation_mode"] == "smol-microvm"
+    assert node.get("docker_binary", "") == ""
+    assert node["operating_system"] == "linux" and node["architecture"] == "amd64"
+    assert node["sandbox_uid"] == os.geteuid() and node["sandbox_gid"] == os.getegid()
+    cache = node["cache"]
+    assert type(cache) is list and cache
+
+    def exact(field: str, value: str) -> dict:
+        selected = [entry for entry in cache if entry[field] == value]
+        assert len(selected) == 1, (field, value, len(selected))
+        return selected[0]
+
+    checker = exact(
+        "platform_manifest_digest", env["WORKSTREAM_TS_SMOL_CHECKER_DIGEST"]
+    )
+    builder = exact("config_image_id", node["trial_runtime"]["builder_image_id"])
+    intake = exact(
+        "platform_manifest_digest", node["trusted_intake"]["platform_manifest_digest"]
+    )
+    for entry in (checker, builder, intake):
+        assert entry["operating_system"] == "linux"
+        assert entry["architecture"] == "amd64"
+        assert type(entry.get("smol")) is dict
+    assert node["trial_runtime"]["outer_runtime_config_digest"] == (
+        _runtime_configuration_digest(node)
+    )
+    return node, checker, builder, intake
+
+
+def _runtime_configuration_digest(node: dict) -> str:
+    """Mirror the closed Rust identity hash without including mutable paths."""
+    return external_checker_json_hash(
+        {
+            "schema_version": "workstream.smol_runtime_configuration.v1",
+            "runtime": node["runtime"],
+            "isolation_mode": node["isolation_mode"],
+            "engine_identity_digest": node["smol"]["binary_sha256"],
+            "guest_binary_digest": node["smol"]["guest_sha256"],
+            "outer_transport": "workstream.smol_guest_io.v1",
+            "child_transport": "workstream.smol_guest_io.v1",
+            "network": "none",
+            "swap": "none",
+            "sandbox_uid": node["sandbox_uid"],
+            "sandbox_gid": node["sandbox_gid"],
+            "trusted_launcher_digest": node["trial_runtime"][
+                "trusted_launcher_digest"
+            ],
+            "filesystem_tool_digest": node["trial_runtime"][
+                "filesystem_tool_digest"
+            ],
+            "maximum_candidate_archive_bytes": node["trial_runtime"][
+                "maximum_candidate_archive_bytes"
+            ],
+        }
+    )
+
+
+def _direct_baseline_bytes(node: dict, builder: dict) -> int:
+    """Measure the directly stored inputs; Rust also charges expanded image facts."""
+    paths = (
+        node["trial_runtime"]["offline_cache_root"],
+        node["trial_runtime"]["trusted_launcher_path"],
+        node["trial_runtime"]["filesystem_tool_path"],
+        node["smol"]["guest_binary"],
+        builder["smol"]["archive"],
+        builder["smol"]["image_config"],
+    )
+    total = 0
+    for raw in paths:
+        path = Path(raw)
+        assert path.is_absolute() and path.exists() and not path.is_symlink()
+        if path.is_file():
+            total += path.stat().st_size
+        else:
+            for item in path.rglob("*"):
+                assert not item.is_symlink()
+                if item.is_file():
+                    total += item.stat().st_size
+    return total
+
+
+def _directory_children(path: Path) -> set[str]:
+    """Snapshot owned runtime child names without interpreting runtime internals."""
+    if not path.exists():
+        return set()
+    return {item.name for item in path.iterdir()}
 
 
 async def _retained_trial_summary(session, retained, receipts):
@@ -284,7 +373,9 @@ def _qualification_archive(evidence_path: str, _project_id) -> bytes:
     return stream.getvalue()
 
 
-def _trial_authority(env: dict[str, str], *, revision: bool = False):
+def _trial_authority(
+    env: dict[str, str], node: dict, builder: dict, *, revision: bool = False
+):
     projected = (
         project_revision_trial_execution_projection()
         if revision
@@ -300,11 +391,15 @@ def _trial_authority(env: dict[str, str], *, revision: bool = False):
         maximum_wall_time_overrun_ms=1_000,
         maximum_cpu_time_overrun_ms=1_000,
         maximum_memory_bytes=1024 * 1024 * 1024,
-        maximum_swap_bytes=1024 * 1024 * 1024,
         maximum_memory_overrun_bytes=4 * 1024 * 1024,
         maximum_pids=128,
         maximum_pids_overrun=4,
-        maximum_disk_bytes=128 * 1024 * 1024,
+        # This whole-invocation ceiling includes the offline cache, expanded
+        # pinned builder, three trusted tools, retained candidate and mutable
+        # trial state. The old 128 MiB Docker-only fixture did not include that
+        # immutable baseline. Two GiB is finite and is checked against the
+        # provisioned inputs below; Rust independently charges expanded facts.
+        maximum_disk_bytes=TRIAL_DISK_CEILING_BYTES,
         maximum_disk_overrun_bytes=4 * 1024 * 1024,
         maximum_entries=20_000,
         maximum_entries_overrun=32,
@@ -317,18 +412,24 @@ def _trial_authority(env: dict[str, str], *, revision: bool = False):
     profile = make_trial_execution_profile(
         schema_version="workstream.trial_execution_profile.v1",
         selector=TrialProfileSelector(PROFILE_ID, 1, "sha256:" + "0" * 64),
-        runtime="runsc",
-        isolation_mode="gvisor",
-        outer_host_uds="open",
-        child_host_uds="none",
-        outer_runtime_config_digest=env["WORKSTREAM_TS_RUNSC_DAEMON_DIGEST"],
-        child_runtime_config_digest=env["WORKSTREAM_TS_RUNSC_DAEMON_DIGEST"],
-        engine_identity_digest=env["WORKSTREAM_TS_RUNSC_ENGINE_DIGEST"],
+        runtime="smolvm",
+        isolation_mode="smol-microvm",
+        outer_transport="workstream.smol_guest_io.v1",
+        child_transport="workstream.smol_guest_io.v1",
+        outer_runtime_config_digest=node["trial_runtime"][
+            "outer_runtime_config_digest"
+        ],
+        child_runtime_config_digest=node["trial_runtime"][
+            "outer_runtime_config_digest"
+        ],
+        engine_identity_digest=node["smol"]["binary_sha256"],
+        guest_binary_digest=node["smol"]["guest_sha256"],
+        filesystem_tool_digest=node["trial_runtime"]["filesystem_tool_digest"],
         platform="linux/amd64",
-        platform_identity_digest=env["WORKSTREAM_TS_RUNSC_PLATFORM_IDENTITY"],
-        builder_image_digest=env["WORKSTREAM_TS_RUNSC_BUILDER_ID"],
-        trusted_launcher_digest=env["WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST"],
-        offline_cache_digest=env["WORKSTREAM_TS_RUNSC_CACHE_DIGEST"],
+        platform_identity_digest=env["WORKSTREAM_TS_SMOL_PLATFORM_IDENTITY"],
+        builder_image_digest=builder["platform_manifest_digest"],
+        trusted_launcher_digest=node["trial_runtime"]["trusted_launcher_digest"],
+        offline_cache_digest=env["WORKSTREAM_TS_SMOL_CACHE_DIGEST"],
         approved_base_digests=(ALPINE_DIGEST,),
         permitted_source_roles=("submission_archive",),
         permitted_material_roles=(
@@ -604,38 +705,29 @@ def _wait_for_socket(
     raise AssertionError("Rust service socket did not become ready")
 
 
-async def test_production_service_executes_project_trial_under_runsc_with_real_custody(
+async def test_production_service_executes_project_trial_under_smol_with_real_custody(
     tmp_path, isolated_database_env, admin_access, monkeypatch
 ):
     """Prove the exact qualification boundary; no live model provider is used."""
     env = _required_environment()
-    root = Path(env["WORKSTREAM_TS_RUNSC_COMPOSITION_ROOT"]).resolve(strict=True)
-    inner = env["WORKSTREAM_TS_RUNSC_INNER_COMPOSITION_ROOT"]
-    assert root.name == "terminal-systems-runsc-composition"
-    builder_image_id = subprocess.check_output(
-        [
-            "docker",
-            "exec",
-            env["WORKSTREAM_TS_RUNSC_CONTAINER"],
-            "docker",
-            "image",
-            "inspect",
-            "--format",
-            "{{.Id}}",
-            env["WORKSTREAM_TS_RUNSC_BUILDER_ID"],
-        ],
-        text=True,
-        timeout=15,
-    ).strip()
-    assert builder_image_id == env["WORKSTREAM_TS_RUNSC_BUILDER_ID"]
+    root = Path(env["WORKSTREAM_TS_SMOL_ROOT"]).resolve(strict=True)
+    assert root.name == "terminal-systems-smol-composition"
+    node, checker_image, builder_image, intake_image = _node_configuration(env)
+    service_binary = Path(env["WORKSTREAM_TS_SMOL_SERVICE"])
+    assert service_binary.is_absolute() and service_binary.is_file()
+    assert not service_binary.is_symlink() and os.access(service_binary, os.X_OK)
+    # The Rust runtime additionally scans expanded builder contents and rejects
+    # the invocation before its first model call if the complete baseline does
+    # not fit. This direct measurement prevents an unexplained fixture increase.
+    assert _direct_baseline_bytes(node, builder_image) < TRIAL_DISK_CEILING_BYTES
     monkeypatch.setattr(material_helpers, "archive_with_modes", _qualification_archive)
     await admin_access.signed.grant(
         admin_access.admin, admin_access.target, role="operator"
     )
-    profile, projection = _trial_authority(env)
-    _trial_authority(env, revision=True)
+    profile, projection = _trial_authority(env, node, builder_image)
+    _trial_authority(env, node, builder_image, revision=True)
     registry_spec, trial_values = _registry_spec(
-        env["WORKSTREAM_TS_RUNSC_CHECKER_DIGEST"], profile, projection
+        env["WORKSTREAM_TS_SMOL_CHECKER_DIGEST"], profile, projection
     )
     model_profiles = []
 
@@ -722,7 +814,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
         tmp_path,
         isolated_database_env,
         provider="minio",
-        storage_settings=minio_settings(private_prefix=f"runsc/{uuid4()}").model_copy(
+        storage_settings=minio_settings(private_prefix=f"smol/{uuid4()}").model_copy(
             update={
                 **artifact_admission_limit_settings(1024 * 1024),
                 "artifact_scratch_root": tmp_path / "intake-scratch",
@@ -742,7 +834,10 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
             reservation_ttl_seconds=750.0,
         ),
     ) as h:
-        h.service = DiagnosticMaterialization(h.service)
+        # Fixture creation deliberately uses its in-process intake to seed the
+        # already-verified submission admission. The public post-submit journey
+        # below is recomposed with the native trusted-intake socket only after
+        # the authority manifest and Rust service exist.
         await provision_post_submit_service(
             h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT
         )
@@ -784,7 +879,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 index = len(creates)
                 creates.append(model_request)
                 output = _provider_output(model_request.prompt, index, observations)
-                reference = CheckerModelResponseReference(f"resp_ts_runsc_{index}")
+                reference = CheckerModelResponseReference(f"resp_ts_smol_{index}")
                 return CheckerModelCreateResult(
                     CheckerModelCreateOutcome.ACCEPTED,
                     known_response=reference,
@@ -851,63 +946,51 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
             ),
         )
 
-        socket_root = Path(env["WORKSTREAM_TS_RUNSC_SOCKET_ROOT"]).resolve(strict=True)
-        inner_socket_root = env["WORKSTREAM_TS_RUNSC_INNER_SOCKET_ROOT"]
-        proxy_root = socket_root / "private-proxy"
-        service_root = socket_root / "service"
+        proxy_root = root / "private-proxy"
+        service_root = root / "service"
         for directory in (
             proxy_root,
             service_root,
             root / "model-relay",
             root / "trial-relay",
             root / "trial-scratch",
-            root / "trial-runtime",
+            root / "trial-child-home",
         ):
             directory.mkdir(mode=0o700, exist_ok=True)
         proxy_path = proxy_root / "proxy.sock"
         service_socket = service_root / "checker.sock"
-        service_config = {
-            "socket_path": f"{inner_socket_root}/service/checker.sock",
-            "model_proxy_socket": f"{inner_socket_root}/private-proxy/proxy.sock",
-            "model_relay_root": f"{inner}/model-relay",
-            "trial_authority_manifest_path": f"{inner}/trial-authority.json",
-            "trial_authority_manifest_digest": manifest_digest,
-            "trial_runtime": {
-                "relay_root": f"{inner}/trial-relay",
-                "scratch_root": f"{inner}/trial-scratch",
-                "runtime_root": f"{inner}/trial-runtime",
-                "runtime_configuration": "/etc/docker/pilot-daemon.json",
-                "outer_runtime_config_digest": env["WORKSTREAM_TS_RUNSC_DAEMON_DIGEST"],
-                "offline_cache_root": "/workstream-state/cache/content",
-                "deployment_owner": "terminal-systems-runsc-qualification",
-                "runtime_key": "runsc-trial",
-                "builder_image_id": env["WORKSTREAM_TS_RUNSC_BUILDER_ID"],
-                "trusted_launcher_path": env["WORKSTREAM_TS_RUNSC_LAUNCHER_PATH"],
-                "trusted_launcher_digest": env["WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST"],
-                "maximum_candidate_archive_bytes": 64 * 1024 * 1024,
-            },
-            "material_root": f"{inner}/post-scratch",
-            "docker_binary": "/usr/local/bin/docker",
-            "runtime": "runsc",
-            "isolation_mode": "gvisor",
-            "operating_system": "linux",
-            "architecture": "amd64",
-            "sandbox_uid": os.geteuid(),
-            "sandbox_gid": os.getegid(),
-            "cache": [
-                {
-                    "repository": env["WORKSTREAM_TS_RUNSC_CHECKER_REPOSITORY"],
-                    "platform_manifest_digest": env[
-                        "WORKSTREAM_TS_RUNSC_CHECKER_DIGEST"
-                    ],
-                    "platform_manifest_media_type": "application/vnd.docker.distribution.manifest.v2+json",
-                    "platform_manifest_byte_count": 1,
-                    "operating_system": "linux",
-                    "architecture": "amd64",
-                    "config_image_id": env["WORKSTREAM_TS_RUNSC_CHECKER_ID"],
-                }
-            ],
-        }
+        service_config = json.loads(json.dumps(node))
+        service_config.update(
+            socket_path=str(service_socket),
+            model_proxy_socket=str(proxy_path),
+            model_relay_root=str(root / "model-relay"),
+            trial_authority_manifest_path=str(manifest_path),
+            trial_authority_manifest_digest=manifest_digest,
+            material_root=str(post_scratch),
+            docker_binary="",
+            sandbox_uid=os.geteuid(),
+            sandbox_gid=os.getegid(),
+        )
+        service_config["trial_runtime"].update(
+            relay_root=str(root / "trial-relay"),
+            scratch_root=str(root / "trial-scratch"),
+            child_home_root=str(root / "trial-child-home"),
+            deployment_owner="terminal-systems-smol-qualification",
+        )
+        runtime_configuration_digest = _runtime_configuration_digest(service_config)
+        service_config["trial_runtime"][
+            "outer_runtime_config_digest"
+        ] = runtime_configuration_digest
+        assert profile.outer_runtime_config_digest == runtime_configuration_digest
+        assert profile.child_runtime_config_digest == runtime_configuration_digest
+        assert service_config["trial_runtime"]["builder_image_id"] == builder_image[
+            "config_image_id"
+        ]
+        assert service_config["smol"]["binary_sha256"] == profile.engine_identity_digest
+        assert service_config["smol"]["guest_sha256"] == profile.guest_binary_digest
+        assert service_config["trial_runtime"]["filesystem_tool_digest"] == (
+            profile.filesystem_tool_digest
+        )
         config_path = root / "service.json"
         config_path.write_text(
             json.dumps(service_config, sort_keys=True, separators=(",", ":")),
@@ -915,6 +998,10 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
         )
         config_path.chmod(0o400)
         service_log = (root / "service.stderr").open("w", encoding="utf-8")
+        vms_root = Path(node["smol"]["home"]) / ".cache/smolvm/vms"
+        cgroup_root = Path(node["smol"]["cgroup_root"])
+        before_vms = _directory_children(vms_root)
+        before_cgroups = _directory_children(cgroup_root)
         service = None
         try:
             async with ModelProxyTransport(
@@ -925,31 +1012,55 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 write_timeout_seconds=60.0,
                 shutdown_timeout_seconds=30.0,
             ):
-                command = [
-                    "docker",
-                    "exec",
-                    "--user",
-                    f"{os.geteuid()}:{os.getegid()}",
-                    env["WORKSTREAM_TS_RUNSC_CONTAINER"],
-                    f"{inner}/bin/ld-linux-x86-64.so.2",
-                    "--library-path",
-                    f"{inner}/bin",
-                    f"{inner}/bin/workstream-checker-service",
-                    f"{inner}/service.json",
-                ]
                 service = subprocess.Popen(
-                    command,
+                    [str(service_binary), str(config_path)],
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=service_log,
                     text=True,
                 )
                 _wait_for_socket(service_socket, service)
+                intake = UnixSocketTrustedIntakeAdapter(
+                    socket_path=service_socket,
+                    image_digest=intake_image["platform_manifest_digest"],
+                    config_digest=intake_image["config_image_id"],
+                )
+                intake_health = await intake.health()
+                assert (
+                    intake_health.image_digest,
+                    intake_health.config_digest,
+                    intake_health.runtime,
+                    intake_health.isolation_mode,
+                ) == (
+                    intake_image["platform_manifest_digest"],
+                    intake_image["config_image_id"],
+                    "smolvm",
+                    "smol-microvm",
+                )
+                monkeypatch.setattr(
+                    material_helpers,
+                    "LocalIntakeAdapter",
+                    lambda _inspector=None: intake,
+                )
+                h.service = DiagnosticMaterialization(
+                    post_submission_materialization(
+                        sessions=h.factory,
+                        store=h.store,
+                        namespace=h.namespace,
+                        preparation=h.preparation,
+                        intake=material_helpers.LocalIntakeAdapter(h.inspector),
+                        archive_limits=SubmissionArchiveLimits(),
+                        artifact_deadline_ms=120_000,
+                    )
+                )
                 adapter = UnixSocketExternalCheckerAdapter(
                     socket_path=service_socket, timeout_seconds=660.0
                 )
                 health = await adapter.health()
-                assert (health.runtime, health.isolation_mode) == ("runsc", "gvisor")
+                assert (health.runtime, health.isolation_mode) == (
+                    "smolvm",
+                    "smol-microvm",
+                )
                 await reserve(h)
                 executor = live_executor(
                     h,
@@ -964,6 +1075,13 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 len(observations),
             )
             assert len(result.execution.external_members) == 2
+            # This qualification is an initial submission: it proves the
+            # current-only least-material path and explicitly does not claim a
+            # predecessor/archive revision journey.
+            assert all(
+                member.input_receipt is None
+                for member in result.execution.external_members
+            )
             assert {
                 member.requirement_id: (member.result.outcome, member.result.verdict)
                 for member in result.execution.external_members
@@ -983,24 +1101,24 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 assert receipt["cleanup_confirmed"] is True
                 assert (
                     receipt["engine_identity_digest"]
-                    == env["WORKSTREAM_TS_RUNSC_ENGINE_DIGEST"]
+                    == node["smol"]["binary_sha256"]
                 )
                 execution = receipt["execution"]
                 assert (
                     execution["platform_identity_digest"]
-                    == env["WORKSTREAM_TS_RUNSC_PLATFORM_IDENTITY"]
+                    == env["WORKSTREAM_TS_SMOL_PLATFORM_IDENTITY"]
                 )
                 assert (
                     execution["builder_image_digest"]
-                    == env["WORKSTREAM_TS_RUNSC_BUILDER_ID"]
+                    == builder_image["platform_manifest_digest"]
                 )
                 assert (
                     execution["trusted_launcher_digest"]
-                    == env["WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST"]
+                    == node["trial_runtime"]["trusted_launcher_digest"]
                 )
                 assert (
                     execution["offline_cache_digest"]
-                    == env["WORKSTREAM_TS_RUNSC_CACHE_DIGEST"]
+                    == env["WORKSTREAM_TS_SMOL_CACHE_DIGEST"]
                 )
                 assert execution["base_image_digests"] == [ALPINE_DIGEST]
                 assert execution["build"]["outcome"] == "succeeded"
@@ -1049,52 +1167,11 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                     }
                     for item in sorted(effects, key=lambda item: item.id)
                 ]
-            for directory in ("trial-relay", "trial-scratch", "trial-runtime"):
+            for directory in ("trial-relay", "trial-scratch", "trial-child-home"):
                 assert list((root / directory).iterdir()) == []
-            checkers = subprocess.check_output(
-                [
-                    "docker",
-                    "exec",
-                    env["WORKSTREAM_TS_RUNSC_CONTAINER"],
-                    "docker",
-                    "container",
-                    "ls",
-                    "-aq",
-                    "--filter",
-                    "label=workstream.external-checker=true",
-                ],
-                text=True,
-            )
-            assert checkers.strip() == ""
-            inventory = subprocess.check_output(
-                [
-                    "docker",
-                    "exec",
-                    env["WORKSTREAM_TS_RUNSC_CONTAINER"],
-                    "docker",
-                    "container",
-                    "ls",
-                    "-aq",
-                    "--filter",
-                    "label=workstream.trial.deployment-owner=terminal-systems-runsc-qualification",
-                ],
-                text=True,
-            )
-            assert inventory.strip() == ""
-            candidates = subprocess.check_output(
-                [
-                    "docker",
-                    "exec",
-                    env["WORKSTREAM_TS_RUNSC_CONTAINER"],
-                    "docker",
-                    "images",
-                    "-q",
-                    "--filter",
-                    "reference=workstream-trial:*",
-                ],
-                text=True,
-            )
-            assert candidates.strip() == ""
+            assert _directory_children(service_root / "smol-leases") == set()
+            assert _directory_children(vms_root) == before_vms
+            assert _directory_children(cgroup_root) == before_cgroups
         finally:
             if service is not None and service.poll() is None:
                 service.terminate()
@@ -1116,8 +1193,8 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
         "provider_mode": "controlled",
         "guide_to_contribution_proven": False,
         "image": {
-            "digest": env["WORKSTREAM_TS_RUNSC_CHECKER_DIGEST"],
-            "id": env["WORKSTREAM_TS_RUNSC_CHECKER_ID"],
+            "digest": env["WORKSTREAM_TS_SMOL_CHECKER_DIGEST"],
+            "id": checker_image["config_image_id"],
         },
         "profile": {
             "id": str(profile.selector.profile_id),
@@ -1131,27 +1208,35 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
         },
         "authority_manifest_digest": manifest_digest,
         "runtime": {
+            "runtime": "smolvm",
+            "isolation_mode": "smol-microvm",
             "platform": profile.platform,
-            "platform_identity_digest": env["WORKSTREAM_TS_RUNSC_PLATFORM_IDENTITY"],
-            "outer_configuration_digest": env["WORKSTREAM_TS_RUNSC_DAEMON_DIGEST"],
+            "platform_identity_digest": env[
+                "WORKSTREAM_TS_SMOL_PLATFORM_IDENTITY"
+            ],
+            "outer_configuration_digest": profile.outer_runtime_config_digest,
             "child_configuration_digest": profile.child_runtime_config_digest,
-            "engine_digest": env["WORKSTREAM_TS_RUNSC_ENGINE_DIGEST"],
-            "launcher_digest": env["WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST"],
-            "builder_image_id": env["WORKSTREAM_TS_RUNSC_BUILDER_ID"],
-            "builder_manifest": env["WORKSTREAM_TS_RUNSC_BUILDER_MANIFEST"],
-            "offline_cache_digest": env["WORKSTREAM_TS_RUNSC_CACHE_DIGEST"],
+            "engine_digest": profile.engine_identity_digest,
+            "guest_digest": profile.guest_binary_digest,
+            "filesystem_tool_digest": profile.filesystem_tool_digest,
+            "launcher_digest": profile.trusted_launcher_digest,
+            "builder_image_id": builder_image["config_image_id"],
+            "builder_manifest": builder_image["platform_manifest_digest"],
+            "offline_cache_digest": env["WORKSTREAM_TS_SMOL_CACHE_DIGEST"],
             "base_image_digests": list(profile.approved_base_digests),
+            "maximum_disk_bytes": profile.limits.maximum_disk_bytes,
         },
         "model_effects": model_summary,
         "trials": trial_summary,
         "replay_additional_provider_calls": len(creates) - 4,
+        "predecessor_material_exercised": False,
         "owned_runtime_resources_removed": True,
     }
     encoded = json.dumps(
         summary, sort_keys=True, separators=(",", ":"), allow_nan=False
     ).encode()
     assert len(encoded) <= 64 * 1024
-    summary_path = Path(env["WORKSTREAM_TS_RUNSC_SUMMARY_PATH"])
+    summary_path = Path(env["WORKSTREAM_TS_SMOL_SUMMARY_PATH"])
     assert summary_path.is_absolute() and root not in summary_path.parents
     descriptor = os.open(summary_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "wb") as output:
