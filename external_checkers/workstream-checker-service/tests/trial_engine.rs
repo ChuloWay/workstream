@@ -57,6 +57,8 @@ struct FakeBackend {
     outcomes: Mutex<VecDeque<TrialOperationOutcome>>,
     export_outcomes: Mutex<VecDeque<TrialExportOutcome>>,
     build_cpu_time_ms: AtomicU64,
+    baseline_bytes: AtomicU64,
+    baseline_entries: AtomicU64,
     retained_image_bytes: AtomicU64,
     retained_image_entries: AtomicU64,
     step_cpu_time_ms: Mutex<VecDeque<u64>>,
@@ -68,9 +70,11 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
         let profile = profile();
         SandboxBackendIdentity {
             engine_identity_digest: profile.engine_identity_digest,
+            guest_binary_digest: profile.guest_binary_digest,
+            filesystem_tool_digest: profile.filesystem_tool_digest,
             child_runtime: profile.child_runtime,
             child_runtime_config_digest: profile.child_runtime_config_digest,
-            child_host_uds: profile.child_host_uds,
+            child_transport: profile.child_transport,
             platform: profile.platform,
             platform_identity_digest: profile.platform_identity_digest,
             builder_image_digest: profile.builder_image_digest,
@@ -78,6 +82,13 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
             offline_cache_digest: profile.offline_cache_digest,
             approved_base_digests: profile.approved_base_digests,
         }
+    }
+
+    fn baseline_usage(&self) -> Result<SandboxBaselineUsage, SandboxFailure> {
+        Ok(SandboxBaselineUsage {
+            bytes: self.baseline_bytes.load(Ordering::Relaxed).max(1),
+            entries: self.baseline_entries.load(Ordering::Relaxed).max(1),
+        })
     }
 
     fn build(
@@ -219,10 +230,12 @@ fn profile() -> TrialProfile {
         checker_image_digest: digest('3'),
         configuration_sha256: digest('4'),
         engine_identity_digest: digest('5'),
+        guest_binary_digest: digest('5'),
+        filesystem_tool_digest: digest('5'),
         outer_runtime_config_digest: digest('6'),
-        child_runtime: "runsc".into(),
+        child_runtime: "smolvm".into(),
         child_runtime_config_digest: digest('5'),
-        child_host_uds: "none".into(),
+        child_transport: "workstream.smol_guest_io.v1".into(),
         platform: "linux/amd64".into(),
         platform_identity_digest: digest('6'),
         builder_image_digest: digest('7'),
@@ -576,6 +589,29 @@ fn projections_and_build_context_share_one_entry_budget() {
     // aggregate does not. The backend must never receive a build request.
     plan.resources.maximum_entries = 10;
     let backend = Arc::new(FakeBackend::default());
+    let failure = GenericTrialEngine::new(backend.clone())
+        .execute(
+            &context,
+            &plan,
+            Instant::now() + Duration::from_secs(2),
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+        )
+        .unwrap_err();
+    assert_eq!(failure.code, TrialRelayFailure::CapacityExceeded);
+    assert_eq!(backend.builds.load(Ordering::Relaxed), 0);
+    assert_eq!(backend.cleanups.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn trusted_runtime_baseline_is_charged_before_build() {
+    let root = Root::new();
+    let context = context(&root);
+    let plan = plan();
+    let backend = Arc::new(FakeBackend::default());
+    backend
+        .baseline_bytes
+        .store(plan.resources.disk_bytes + 1, Ordering::Relaxed);
     let failure = GenericTrialEngine::new(backend.clone())
         .execute(
             &context,

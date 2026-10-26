@@ -5,9 +5,6 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
-[features]
-trial-docker-qualification = []
-
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
@@ -17,9 +14,3 @@ flate2 = { version = "1.1.10", default-features = false, features = ["rust_backe
 workstream-checker-sdk = { path = "../workstream-checker-sdk" }
 workstream-checker-guest = { path = "../workstream-checker-guest" }
 
-[[bin]]
-name = "qualify-trial-docker"
-path = "src/bin/qualify_trial_docker.rs"
-test = false
-bench = false
-required-features = ["trial-docker-qualification"]

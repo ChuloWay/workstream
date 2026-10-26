@@ -18,6 +18,7 @@ const INPUT_CONTEXT: &str = "/workstream-bootstrap/input/context";
 const INPUT_CACHE: &str = "/workstream-bootstrap/input/cache";
 const INPUT_WORKSPACE: &str = "/workstream-bootstrap/input/workspace";
 const INPUT_ROLES: &str = "/workstream-bootstrap/input/roles";
+const TRIAL_CGROUP: &str = "/sys/fs/cgroup/workstream-trial";
 const INFRASTRUCTURE_EXIT: i32 = 125;
 const STATUS_SCHEMA: &str = "workstream.trial_launcher_status.v1";
 
@@ -137,12 +138,26 @@ fn main() {
 
 fn run() -> Result<()> {
     require_static_pid_one()?;
+    enter_trial_cgroup()?;
     make_mounts_private()?;
     let mode = parse_arguments(env::args_os().skip(1).collect())?;
     match mode {
         Mode::Builder(arguments) => run_builder(arguments),
         Mode::Step(arguments) => run_step(arguments),
     }
+}
+
+fn enter_trial_cgroup() -> Result<()> {
+    let group = Path::new(TRIAL_CGROUP);
+    let metadata = fs::symlink_metadata(group)?;
+    if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+        return Err(failure("trial cgroup unavailable"));
+    }
+    // cgroup v2 interprets zero as the writing process. This is the first
+    // mutable action after static/PID1 custody, so builder/workload setup and
+    // every descendant are accounted under the guest-enforced child limits.
+    fs::write(group.join("cgroup.procs"), b"0")?;
+    Ok(())
 }
 
 fn require_static_pid_one() -> Result<()> {
@@ -351,8 +366,14 @@ fn validate_visible_roles(roles: &[VisibleRole]) -> Result<()> {
 fn run_builder(arguments: BuilderArguments) -> Result<()> {
     require_empty_export()?;
     require_export_owner(arguments.export_owner)?;
-    create_clean_directory(Path::new(ROOT), 0o700)?;
-    mount_tmpfs(Path::new(ROOT), &arguments.root, 0o755, false)?;
+    require_bounded_mount(Path::new(ROOT), &arguments.root)?;
+    require_bounded_mount(&Path::new(ROOT).join("tmp"), &arguments.temporary)?;
+    require_bounded_mount(&Path::new(ROOT).join("dev/shm"), &arguments.shared_memory)?;
+    require_distinct_mounts(&[
+        Path::new(ROOT).to_path_buf(),
+        Path::new(ROOT).join("tmp"),
+        Path::new(ROOT).join("dev/shm"),
+    ])?;
     prepare_builder_root(&arguments)?;
     let export = open_export_directory()?;
     let output = open_directory(Path::new(ROOT).join("out"))?;
@@ -398,7 +419,7 @@ fn run_builder(arguments: BuilderArguments) -> Result<()> {
     )
 }
 
-fn prepare_builder_root(arguments: &BuilderArguments) -> Result<()> {
+fn prepare_builder_root(_arguments: &BuilderArguments) -> Result<()> {
     for path in [
         "workspace",
         "cache",
@@ -410,13 +431,13 @@ fn prepare_builder_root(arguments: &BuilderArguments) -> Result<()> {
         "etc/ssl",
         "etc/ssl/certs",
         "proc",
-        "dev",
-        "dev/shm",
         "sys",
-        "tmp",
     ] {
         create_directory(&Path::new(ROOT).join(path), 0o755)?;
     }
+    require_directory_without_symlink(&Path::new(ROOT).join("dev"))?;
+    require_directory_without_symlink(&Path::new(ROOT).join("dev/shm"))?;
+    require_directory_without_symlink(&Path::new(ROOT).join("tmp"))?;
     create_file(&Path::new(ROOT).join("kaniko/executor"), 0o500)?;
     bind_readonly(
         Path::new("/kaniko/executor"),
@@ -431,21 +452,23 @@ fn prepare_builder_root(arguments: &BuilderArguments) -> Result<()> {
         true,
     )?;
     bind_readonly(Path::new(INPUT_CACHE), &Path::new(ROOT).join("cache"), true)?;
-    mount_process_filesystems(Path::new(ROOT), &arguments.shared_memory)?;
-    mount_tmpfs(
-        &Path::new(ROOT).join("tmp"),
-        &arguments.temporary,
-        0o1777,
-        true,
-    )?;
+    mount_process_filesystems(Path::new(ROOT))?;
     Ok(())
 }
 
 fn run_step(arguments: StepArguments) -> Result<()> {
     require_empty_export()?;
     require_export_owner(arguments.export_owner)?;
-    create_clean_directory(Path::new(ROOT), 0o700)?;
-    mount_tmpfs(Path::new(ROOT), &arguments.root, 0o755, false)?;
+    require_bounded_mount(Path::new(ROOT), &arguments.root)?;
+    require_bounded_mount(&Path::new(ROOT).join("workspace"), &arguments.workspace)?;
+    require_bounded_mount(&Path::new(ROOT).join("tmp"), &arguments.temporary)?;
+    require_bounded_mount(&Path::new(ROOT).join("dev/shm"), &arguments.shared_memory)?;
+    require_distinct_mounts(&[
+        Path::new(ROOT).to_path_buf(),
+        Path::new(ROOT).join("workspace"),
+        Path::new(ROOT).join("tmp"),
+        Path::new(ROOT).join("dev/shm"),
+    ])?;
     prepare_candidate_skeleton(Path::new(ROOT))?;
     let visible_role_placeholders = prepare_step_workspace(&arguments)?;
     let export = open_export_directory()?;
@@ -504,15 +527,13 @@ fn run_step(arguments: StepArguments) -> Result<()> {
 
 fn prepare_step_workspace(arguments: &StepArguments) -> Result<Vec<PathBuf>> {
     let root = Path::new(ROOT);
-    mount_tmpfs(&root.join("workspace"), &arguments.workspace, 0o700, false)?;
     change_owner(&root.join("workspace"), arguments.uid, arguments.gid)?;
     copy_tree_contents(
         Path::new(INPUT_WORKSPACE),
         &root.join("workspace"),
         Some((arguments.uid, arguments.gid)),
     )?;
-    mount_tmpfs(&root.join("tmp"), &arguments.temporary, 0o1777, true)?;
-    mount_process_filesystems(root, &arguments.shared_memory)?;
+    mount_process_filesystems(root)?;
     let mut placeholders = Vec::new();
     for role in &arguments.visible_roles {
         let source = Path::new(INPUT_ROLES).join(&role.role);
@@ -584,8 +605,11 @@ fn prepare_candidate_skeleton(root: &Path) -> Result<()> {
         }
         mirror_readonly_entry(&source, &root.join(&name))?;
     }
-    for path in ["dev", "dev/shm", "proc", "sys", "tmp", "workspace"] {
+    for path in ["proc", "sys"] {
         create_directory(&root.join(path), 0o755)?;
+    }
+    for path in ["dev", "dev/shm", "tmp", "workspace"] {
+        require_directory_without_symlink(&root.join(path))?;
     }
     mount_empty_readonly(&root.join("workstream-bootstrap"))?;
     fs::set_permissions(root, fs::Permissions::from_mode(0o555))?;
@@ -610,7 +634,7 @@ fn mirror_readonly_entry(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-fn mount_process_filesystems(root: &Path, shared_memory: &FilesystemLimit) -> Result<()> {
+fn mount_process_filesystems(root: &Path) -> Result<()> {
     mount_fs(
         Some("proc"),
         &root.join("proc"),
@@ -632,7 +656,7 @@ fn mount_process_filesystems(root: &Path, shared_memory: &FilesystemLimit) -> Re
     ] {
         symlink(target, root.join("dev").join(name))?;
     }
-    mount_tmpfs(&root.join("dev/shm"), shared_memory, 0o1777, true)
+    Ok(())
 }
 
 fn mount_empty_readonly(destination: &Path) -> Result<()> {
@@ -663,22 +687,70 @@ fn make_mounts_private() -> Result<()> {
     )
 }
 
-fn mount_tmpfs(destination: &Path, limit: &FilesystemLimit, mode: u32, noexec: bool) -> Result<()> {
-    let data = format!(
-        "size={},nr_inodes={},mode={mode:o}",
-        limit.bytes, limit.inodes
-    );
-    let mut flags = libc::MS_NOSUID | libc::MS_NODEV;
-    if noexec {
-        flags |= libc::MS_NOEXEC;
+fn require_bounded_mount(destination: &Path, limit: &FilesystemLimit) -> Result<()> {
+    let metadata = fs::symlink_metadata(destination)?;
+    let parent = destination
+        .parent()
+        .ok_or_else(|| failure("bounded filesystem has no parent"))?;
+    let parent_metadata = fs::symlink_metadata(parent)?;
+    if !metadata.file_type().is_dir()
+        || metadata.file_type().is_symlink()
+        || metadata.dev() == parent_metadata.dev()
+    {
+        return Err(failure("bounded filesystem mount missing"));
     }
-    mount_fs(
-        Some("tmpfs"),
-        destination,
-        Some("tmpfs"),
-        flags,
-        Some(&data),
+    let mut statistics = std::mem::MaybeUninit::<libc::statfs>::uninit();
+    let path = path_cstring(destination)?;
+    if unsafe { libc::statfs(path.as_ptr(), statistics.as_mut_ptr()) } != 0 {
+        return Err(io::Error::last_os_error().into());
+    }
+    let statistics = unsafe { statistics.assume_init() };
+    if statistics.f_bsize <= 0 {
+        return Err(failure("bounded filesystem must be ext4"));
+    }
+    let block_size = statistics.f_bsize as u64;
+    let total_bytes = (statistics.f_blocks as u64)
+        .checked_mul(block_size)
+        .ok_or_else(|| failure("bounded filesystem size overflow"))?;
+    let free_bytes = (statistics.f_bavail as u64)
+        .checked_mul(block_size)
+        .ok_or_else(|| failure("bounded filesystem free space overflow"))?;
+    validate_filesystem_statistics(
+        statistics.f_type,
+        total_bytes,
+        free_bytes,
+        statistics.f_ffree as u64,
+        limit,
     )
+}
+
+fn validate_filesystem_statistics(
+    filesystem_type: libc::c_long,
+    total_bytes: u64,
+    free_bytes: u64,
+    free_inodes: u64,
+    limit: &FilesystemLimit,
+) -> Result<()> {
+    const EXT4_SUPER_MAGIC: libc::c_long = 0xef53;
+    if filesystem_type != EXT4_SUPER_MAGIC
+        || total_bytes > limit.bytes
+        || free_bytes > limit.bytes
+        || free_inodes > limit.inodes
+    {
+        return Err(failure("bounded filesystem exceeds authorized quota"));
+    }
+    Ok(())
+}
+
+fn require_distinct_mounts(mounts: &[PathBuf]) -> Result<()> {
+    let mut devices = BTreeMap::new();
+    for path in mounts {
+        let metadata = fs::symlink_metadata(path)?;
+        if devices.insert(metadata.dev(), path).is_some() {
+            return Err(failure("bounded filesystems must be distinct"));
+        }
+    }
+    Ok(())
 }
 
 fn mount_fs(
@@ -2114,6 +2186,27 @@ mod tests {
         assert_eq!(
             logical_limit.classified_export_failure(),
             Some(ExportFailure::CapacityExceeded)
+        );
+    }
+
+    #[test]
+    fn premounted_filesystems_require_ext4_and_conservative_free_limits() {
+        let limit = FilesystemLimit {
+            bytes: 1024 * 1024,
+            inodes: 128,
+        };
+        assert!(
+            validate_filesystem_statistics(0xef53, limit.bytes, 512 * 1024, 64, &limit).is_ok()
+        );
+        assert!(validate_filesystem_statistics(0x0102_1994, limit.bytes, 1, 1, &limit).is_err());
+        assert!(validate_filesystem_statistics(0xef53, limit.bytes + 1, 1, 1, &limit).is_err());
+        assert!(
+            validate_filesystem_statistics(0xef53, limit.bytes, limit.bytes + 1, 1, &limit)
+                .is_err()
+        );
+        assert!(
+            validate_filesystem_statistics(0xef53, limit.bytes, 1, limit.inodes + 1, &limit)
+                .is_err()
         );
     }
 }

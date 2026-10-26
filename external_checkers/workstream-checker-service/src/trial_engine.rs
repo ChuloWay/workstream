@@ -16,7 +16,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use workstream_checker_sdk::canonical_hash;
 
+#[path = "trial_engine/image_archive.rs"]
 pub(crate) mod image_archive;
+#[path = "trial_engine/offline_cache.rs"]
+pub(crate) mod offline_cache;
 
 static ENGINE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -90,6 +93,12 @@ pub(crate) struct SandboxEnforcementOverruns {
     pub(crate) entries: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SandboxBaselineUsage {
+    pub(crate) bytes: u64,
+    pub(crate) entries: u64,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct SandboxBuildResult {
     pub(crate) observation: TrialBuildObservation,
@@ -112,6 +121,7 @@ pub(crate) struct SandboxFailure {
 pub(crate) struct SandboxBackendIdentity {
     pub(crate) engine_identity_digest: String,
     pub(crate) guest_binary_digest: String,
+    pub(crate) filesystem_tool_digest: String,
     pub(crate) child_runtime: String,
     pub(crate) child_runtime_config_digest: String,
     pub(crate) child_transport: String,
@@ -125,6 +135,9 @@ pub(crate) struct SandboxBackendIdentity {
 
 pub(crate) trait TrialSandboxBackend: Send + Sync + 'static {
     fn identity(&self) -> SandboxBackendIdentity;
+
+    /// Exact persistent runtime/cache/tool usage held for this invocation.
+    fn baseline_usage(&self) -> Result<SandboxBaselineUsage, SandboxFailure>;
 
     fn build(
         &self,
@@ -210,6 +223,7 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
         let backend = self.backend.identity();
         if backend.engine_identity_digest != context.profile.engine_identity_digest
             || backend.guest_binary_digest != context.profile.guest_binary_digest
+            || backend.filesystem_tool_digest != context.profile.filesystem_tool_digest
             || backend.child_runtime != context.profile.child_runtime
             || backend.child_runtime_config_digest != context.profile.child_runtime_config_digest
             || backend.child_transport != context.profile.child_transport
@@ -222,14 +236,22 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
         {
             return Err(implementation_failure());
         }
+        let baseline = self
+            .backend
+            .baseline_usage()
+            .map_err(|value| sandbox_failure("baseline", value))?;
+        if baseline.bytes == 0 || baseline.entries == 0 {
+            return Err(implementation_failure());
+        }
+        let mut invocation_budget =
+            ProjectionBudget::new(plan.resources.maximum_entries, plan.resources.disk_bytes);
+        invocation_budget.reserve_retained(baseline.bytes, baseline.entries)?;
         inspect_roles(
             &context.verified_material_root,
             &context.profile.source_material_roles,
             plan.resources.maximum_entries,
             plan.resources.disk_bytes,
         )?;
-        let mut invocation_budget =
-            ProjectionBudget::new(plan.resources.maximum_entries, plan.resources.disk_bytes);
         let projections = materialize_projections(context, owned, &mut invocation_budget)?;
         let inventories = projection_inventories(
             &projections,

@@ -3,16 +3,14 @@
 use crate::smol::Reservation;
 use crate::trial_engine::{
     image_archive::{validate_single_image_archive, ImageArchiveFailure, ValidatedImageArchive},
-    SandboxBackendIdentity, SandboxBuildRequest, SandboxBuildResult, SandboxFailure,
-    SandboxStepRequest, SandboxStepResult, TrialSandboxBackend,
+    SandboxBackendIdentity, SandboxBaselineUsage, SandboxBuildRequest, SandboxBuildResult,
+    SandboxFailure, SandboxStepRequest, SandboxStepResult, TrialSandboxBackend,
 };
 use crate::trial_relay::{
     TrialBuildObservation, TrialExportOutcome, TrialOperationOutcome, TrialRelayFailure,
     TrialStepObservation,
 };
-use sha2::{Digest, Sha256};
-use std::fs::{self, File};
-use std::io::Read;
+use std::fs;
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Instant;
 
@@ -43,8 +41,10 @@ pub(crate) struct SmolTrialChildResult {
     pub(crate) termination: SmolTrialTermination,
     pub(crate) exit_code: Option<i32>,
     pub(crate) signal: Option<i32>,
-    pub(crate) stdout: String,
-    pub(crate) stderr: String,
+    pub(crate) stdout_sha256: String,
+    pub(crate) stderr_sha256: String,
+    pub(crate) stdout_bytes: u64,
+    pub(crate) stderr_bytes: u64,
     pub(crate) export_outcome: TrialExportOutcome,
     pub(crate) elapsed_ms: u64,
     pub(crate) cpu_time_ms: u64,
@@ -56,7 +56,8 @@ pub(crate) struct SmolTrialChildResult {
     pub(crate) workspace_before_sha256: Option<String>,
     pub(crate) workspace_after_sha256: Option<String>,
     /// True only after the guest reaped descendants and the host guardian
-    /// confirmed the sibling VM, cgroup, disks, and private import lease absent.
+    /// confirmed the sibling VM, cgroup, and disks absent. The invocation-owned
+    /// prepared candidate lease intentionally remains until `cleanup_owner`.
     pub(crate) cleanup_confirmed: bool,
 }
 
@@ -83,6 +84,11 @@ pub(crate) enum SmolTrialRuntimeFailure {
 /// Invocation-bound Smol control. Implementations retain the one atomic outer
 /// plus child reservation and acquire its sequential child credit internally.
 pub(crate) trait SmolTrialRuntime: Send + Sync + 'static {
+    fn baseline_usage(
+        &self,
+        config: &SmolTrialConfiguration,
+    ) -> Result<SandboxBaselineUsage, SmolTrialRuntimeFailure>;
+
     fn run_build(
         &self,
         config: &SmolTrialConfiguration,
@@ -152,6 +158,7 @@ impl SmolTrialBackend {
             || !valid_digest(&config.identity.platform_identity_digest)
             || !valid_digest(&config.identity.builder_image_digest)
             || !valid_digest(&config.identity.trusted_launcher_digest)
+            || !valid_digest(&config.identity.filesystem_tool_digest)
             || !valid_digest(&config.identity.offline_cache_digest)
             || config
                 .identity
@@ -186,6 +193,12 @@ impl SmolTrialBackend {
 impl TrialSandboxBackend for SmolTrialBackend {
     fn identity(&self) -> SandboxBackendIdentity {
         self.config.identity.clone()
+    }
+
+    fn baseline_usage(&self) -> Result<SandboxBaselineUsage, SandboxFailure> {
+        self.runtime
+            .baseline_usage(&self.config)
+            .map_err(runtime_failure)
     }
 
     fn build(
@@ -251,6 +264,7 @@ impl TrialSandboxBackend for SmolTrialBackend {
                 expanded_bytes,
                 expanded_entries,
                 deadline,
+                &[invocation_cancelled, relay_cancelled],
             ) {
                 Ok(validated) => validated,
                 Err(ImageArchiveFailure::Invalid) => {
@@ -273,10 +287,10 @@ impl TrialSandboxBackend for SmolTrialBackend {
                 }
                 Err(error) => return Err(archive_failure(error)),
             };
-            let archive_sha256 = hash_file(
-                &request.output_archive,
-                self.config.maximum_candidate_archive_bytes,
-            )?;
+            let archive_sha256 = validated.archive_sha256.clone();
+            if validated.archive_byte_count != metadata.len() {
+                return Err(infrastructure(TrialRelayFailure::ImplementationUnavailable));
+            }
             let prepared = self
                 .runtime
                 .prepare_candidate(
@@ -367,10 +381,10 @@ impl TrialSandboxBackend for SmolTrialBackend {
                 outcome: operation_outcome(&result)?,
                 exit_code: result.exit_code,
                 signal: result.signal,
-                stdout: result.stdout.clone(),
-                stdout_sha256: sha256_text(&result.stdout),
-                stderr: result.stderr.clone(),
-                stderr_sha256: sha256_text(&result.stderr),
+                stdout: String::new(),
+                stdout_sha256: result.stdout_sha256.clone(),
+                stderr: String::new(),
+                stderr_sha256: result.stderr_sha256.clone(),
                 workspace_before_sha256,
                 workspace_after_sha256,
                 export_outcome: result.export_outcome,
@@ -414,7 +428,12 @@ fn validate_child_result(
     }
     if result.measurement_method.is_empty()
         || result.measurement_method.len() > 256
-        || result.stdout.len().saturating_add(result.stderr.len()) > maximum_output_bytes
+        || !valid_digest(&result.stdout_sha256)
+        || !valid_digest(&result.stderr_sha256)
+        || result
+            .stdout_bytes
+            .checked_add(result.stderr_bytes)
+            .is_none_or(|value| value > maximum_output_bytes as u64)
         || result.elapsed_ms > timeout_ms.saturating_add(overruns.wall_time_ms)
         || result.cpu_time_ms > cpu_time_ms.saturating_add(overruns.cpu_time_ms)
         || result.peak_memory_bytes > memory_bytes.saturating_add(overruns.memory_bytes)
@@ -453,7 +472,9 @@ fn validate_child_result(
             | SmolTrialTermination::DiskExceeded
             | SmolTrialTermination::OutputExceeded
     );
-    if result.export_outcome == TrialExportOutcome::NotStarted
+    let operation = operation_outcome(result)?;
+    if (result.export_outcome == TrialExportOutcome::NotStarted
+        && (step || operation == TrialOperationOutcome::Succeeded))
         || (result.export_outcome == TrialExportOutcome::Unavailable && !forced)
         || (matches!(
             result.export_outcome,
@@ -462,7 +483,6 @@ fn validate_child_result(
     {
         return Err(infrastructure(TrialRelayFailure::ImplementationUnavailable));
     }
-    operation_outcome(result)?;
     Ok(())
 }
 
@@ -502,10 +522,10 @@ fn build_observation(
         outcome: operation_outcome(result)?,
         exit_code: result.exit_code,
         signal: result.signal,
-        stdout: result.stdout.clone(),
-        stdout_sha256: sha256_text(&result.stdout),
-        stderr: result.stderr.clone(),
-        stderr_sha256: sha256_text(&result.stderr),
+        stdout: String::new(),
+        stdout_sha256: result.stdout_sha256.clone(),
+        stderr: String::new(),
+        stderr_sha256: result.stderr_sha256.clone(),
         candidate_image_digest: None,
         candidate_archive_digest: None,
         export_outcome: result.export_outcome,
@@ -530,6 +550,7 @@ fn archive_failure(value: ImageArchiveFailure) -> SandboxFailure {
         ImageArchiveFailure::DeadlineExceeded => {
             infrastructure(TrialRelayFailure::DeadlineExceeded)
         }
+        ImageArchiveFailure::Cancelled => infrastructure(TrialRelayFailure::Cancelled),
     }
 }
 
@@ -552,29 +573,6 @@ fn runtime_failure(value: SmolTrialRuntimeFailure) -> SandboxFailure {
     }
 }
 
-fn hash_file(path: &std::path::Path, maximum_bytes: u64) -> Result<String, SandboxFailure> {
-    let mut file = File::open(path)
-        .map_err(|_| infrastructure(TrialRelayFailure::ImplementationUnavailable))?;
-    let metadata = file
-        .metadata()
-        .map_err(|_| infrastructure(TrialRelayFailure::ImplementationUnavailable))?;
-    if metadata.len() == 0 || metadata.len() > maximum_bytes {
-        return Err(infrastructure(TrialRelayFailure::CapacityExceeded));
-    }
-    let mut digest = Sha256::new();
-    let mut buffer = [0_u8; 65536];
-    loop {
-        let count = file
-            .read(&mut buffer)
-            .map_err(|_| infrastructure(TrialRelayFailure::ImplementationUnavailable))?;
-        if count == 0 {
-            break;
-        }
-        digest.update(&buffer[..count]);
-    }
-    Ok(format!("sha256:{:x}", digest.finalize()))
-}
-
 fn valid_digest(value: &str) -> bool {
     value.len() == 71
         && value.starts_with("sha256:")
@@ -589,10 +587,6 @@ fn valid_owner_component(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
-}
-
-fn sha256_text(value: &str) -> String {
-    format!("sha256:{:x}", Sha256::digest(value.as_bytes()))
 }
 
 fn infrastructure(code: TrialRelayFailure) -> SandboxFailure {
@@ -611,6 +605,16 @@ mod tests {
     struct NoopRuntime;
 
     impl SmolTrialRuntime for NoopRuntime {
+        fn baseline_usage(
+            &self,
+            _config: &SmolTrialConfiguration,
+        ) -> Result<SandboxBaselineUsage, SmolTrialRuntimeFailure> {
+            Ok(SandboxBaselineUsage {
+                bytes: 1,
+                entries: 1,
+            })
+        }
+
         fn run_build(
             &self,
             _: &SmolTrialConfiguration,
@@ -699,6 +703,7 @@ mod tests {
                 platform_identity_digest: digest('4'),
                 builder_image_digest: digest('5'),
                 trusted_launcher_digest: digest('6'),
+                filesystem_tool_digest: digest('8'),
                 offline_cache_digest: digest('7'),
                 approved_base_digests: vec![digest('8')],
             },
@@ -717,8 +722,10 @@ mod tests {
             termination: SmolTrialTermination::Exited,
             exit_code: Some(0),
             signal: None,
-            stdout: String::new(),
-            stderr: String::new(),
+            stdout_sha256: digest('a'),
+            stderr_sha256: digest('b'),
+            stdout_bytes: 0,
+            stderr_bytes: 0,
             export_outcome: TrialExportOutcome::Exported,
             elapsed_ms: 10,
             cpu_time_ms: 5,
@@ -753,6 +760,9 @@ mod tests {
         let mut wrong_guest = configuration();
         wrong_guest.identity.guest_binary_digest = digest('A');
         assert!(SmolTrialBackend::new(wrong_guest, Arc::new(NoopRuntime)).is_err());
+        let mut wrong_filesystem_tool = configuration();
+        wrong_filesystem_tool.identity.filesystem_tool_digest = "sha256:short".into();
+        assert!(SmolTrialBackend::new(wrong_filesystem_tool, Arc::new(NoopRuntime)).is_err());
         let mut root_child = configuration();
         root_child.candidate_uid = 0;
         assert!(SmolTrialBackend::new(root_child, Arc::new(NoopRuntime)).is_err());

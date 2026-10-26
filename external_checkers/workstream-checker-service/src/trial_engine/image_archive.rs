@@ -6,7 +6,9 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -14,10 +16,13 @@ pub(crate) enum ImageArchiveFailure {
     Invalid,
     CapacityExceeded,
     DeadlineExceeded,
+    Cancelled,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct ValidatedImageArchive {
+    pub(crate) archive_sha256: String,
+    pub(crate) archive_byte_count: u64,
     pub(crate) expanded_bytes: u64,
     pub(crate) expanded_entries: u64,
     pub(crate) config_image_id: String,
@@ -42,6 +47,32 @@ struct ImageArchiveManifest {
     layers: Vec<String>,
 }
 
+#[derive(Deserialize)]
+struct OciDescriptor {
+    #[serde(rename = "mediaType")]
+    media_type: String,
+    digest: String,
+    size: u64,
+}
+
+#[derive(Deserialize)]
+struct OciImageManifest {
+    #[serde(rename = "schemaVersion")]
+    schema_version: u64,
+    #[serde(rename = "mediaType")]
+    media_type: String,
+    config: OciDescriptor,
+    layers: Vec<OciDescriptor>,
+}
+
+struct OuterArchive {
+    file: File,
+    entries: HashMap<String, (u64, u64)>,
+    manifest: ImageArchiveManifest,
+    archive_sha256: String,
+    archive_byte_count: u64,
+}
+
 pub(crate) fn validate_single_image_archive(
     archive: &Path,
     expected_tag: &str,
@@ -50,16 +81,196 @@ pub(crate) fn validate_single_image_archive(
     maximum_expanded_bytes: u64,
     maximum_expanded_entries: u64,
     deadline: Instant,
+    cancellations: &[&AtomicBool],
 ) -> Result<ValidatedImageArchive, ImageArchiveFailure> {
-    let mut file = File::open(archive).map_err(|_| invalid())?;
+    let OuterArchive {
+        mut file,
+        entries,
+        manifest,
+        archive_sha256,
+        archive_byte_count,
+    } = read_outer_archive(archive, maximum_bytes, deadline, Some(cancellations))?;
+    if manifest.repo_tags.as_slice() != [expected_tag] || manifest.layers.is_empty() {
+        return Err(invalid());
+    }
+    let mut validated = validate_archive_graph(
+        &mut file,
+        &entries,
+        &manifest,
+        expected_platform,
+        maximum_expanded_bytes,
+        maximum_expanded_entries,
+        deadline,
+        HashSet::new(),
+        Some(cancellations),
+    )?;
+    validated.archive_sha256 = archive_sha256;
+    validated.archive_byte_count = archive_byte_count;
+    Ok(validated)
+}
+
+/// Validate a pinned builder archive against its approved OCI platform graph.
+/// RepoTags are intentionally not authority for this path.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn validate_pinned_builder_archive(
+    archive: &Path,
+    expected_platform_manifest_digest: &str,
+    expected_config_image_id: &str,
+    expected_platform: &str,
+    maximum_bytes: u64,
+    maximum_expanded_bytes: u64,
+    maximum_expanded_entries: u64,
+    deadline: Instant,
+    cancellations: &[&AtomicBool],
+) -> Result<ValidatedImageArchive, ImageArchiveFailure> {
+    require_available(deadline, Some(cancellations))?;
+    if !valid_sha256(expected_platform_manifest_digest) || !valid_sha256(expected_config_image_id) {
+        return Err(invalid());
+    }
+    let OuterArchive {
+        mut file,
+        entries,
+        manifest,
+        archive_sha256,
+        archive_byte_count,
+    } = read_outer_archive(archive, maximum_bytes, deadline, Some(cancellations))?;
+    if manifest.layers.is_empty()
+        || manifest.repo_tags.len() > 1
+        || manifest
+            .repo_tags
+            .iter()
+            .any(|tag| tag.is_empty() || tag.len() > 512)
+    {
+        return Err(invalid());
+    }
+    let platform_path = format!("blobs/sha256/{}", &expected_platform_manifest_digest[7..]);
+    let platform_bytes = read_indexed(&mut file, &entries, &platform_path, 1024 * 1024)?;
+    if format!("sha256:{:x}", Sha256::digest(&platform_bytes)) != expected_platform_manifest_digest
+    {
+        return Err(invalid());
+    }
+    let platform: OciImageManifest =
+        serde_json::from_slice(&platform_bytes).map_err(|_| invalid())?;
+    if platform.schema_version != 2
+        || !matches!(
+            platform.media_type.as_str(),
+            "application/vnd.oci.image.manifest.v1+json"
+                | "application/vnd.docker.distribution.manifest.v2+json"
+        )
+        || platform.config.digest != expected_config_image_id
+        || platform.config.size == 0
+        || platform.config.size > 16 * 1024 * 1024
+        || !matches!(
+            platform.config.media_type.as_str(),
+            "application/vnd.oci.image.config.v1+json"
+                | "application/vnd.docker.container.image.v1+json"
+        )
+        || platform.layers.len() != manifest.layers.len()
+    {
+        return Err(invalid());
+    }
+    let config_path = format!("blobs/sha256/{}", &expected_config_image_id[7..]);
+    if manifest.config != config_path
+        || entries.get(&config_path).map(|entry| entry.1) != Some(platform.config.size)
+    {
+        return Err(invalid());
+    }
+    let mut additional = HashSet::from([platform_path]);
+    let mut compressed_layers = Vec::with_capacity(platform.layers.len());
+    for descriptor in &platform.layers {
+        if !valid_sha256(&descriptor.digest)
+            || descriptor.size == 0
+            || !matches!(
+                descriptor.media_type.as_str(),
+                "application/vnd.oci.image.layer.v1.tar"
+                    | "application/vnd.oci.image.layer.v1.tar+gzip"
+                    | "application/vnd.docker.image.rootfs.diff.tar.gzip"
+            )
+        {
+            return Err(invalid());
+        }
+        let path = format!("blobs/sha256/{}", &descriptor.digest[7..]);
+        if entries.get(&path).map(|entry| entry.1) != Some(descriptor.size)
+            || !additional.insert(path.clone())
+        {
+            return Err(invalid());
+        }
+        hash_indexed(
+            &mut file,
+            &entries,
+            &path,
+            &descriptor.digest,
+            deadline,
+            Some(cancellations),
+        )?;
+        compressed_layers.push(path);
+    }
+    let validated = validate_archive_graph(
+        &mut file,
+        &entries,
+        &manifest,
+        expected_platform,
+        maximum_expanded_bytes,
+        maximum_expanded_entries,
+        deadline,
+        additional,
+        Some(cancellations),
+    )?;
+    if validated.config_image_id != expected_config_image_id {
+        return Err(invalid());
+    }
+    verify_compressed_layer_graph(
+        &compressed_layers,
+        &mut file,
+        &entries,
+        &manifest,
+        maximum_expanded_bytes,
+        deadline,
+        cancellations,
+    )?;
+    Ok(ValidatedImageArchive {
+        archive_sha256,
+        archive_byte_count,
+        ..validated
+    })
+}
+
+fn read_outer_archive(
+    archive: &Path,
+    maximum_bytes: u64,
+    deadline: Instant,
+    cancellations: Option<&[&AtomicBool]>,
+) -> Result<OuterArchive, ImageArchiveFailure> {
+    require_available(deadline, cancellations)?;
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(archive)
+        .map_err(|_| invalid())?;
     let length = file.metadata().map_err(|_| invalid())?.len();
     if length == 0 || length > maximum_bytes || length % 512 != 0 {
+        return Err(invalid());
+    }
+    let mut archive_hash = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    let mut hashed = 0_u64;
+    loop {
+        require_available(deadline, cancellations)?;
+        let count = file.read(&mut buffer).map_err(|_| invalid())?;
+        if count == 0 {
+            break;
+        }
+        hashed = hashed.checked_add(count as u64).ok_or_else(invalid)?;
+        archive_hash.update(&buffer[..count]);
+    }
+    if hashed != length {
         return Err(invalid());
     }
     let mut offset = 0_u64;
     let mut manifest = None;
     let mut entries = HashMap::new();
     while offset.saturating_add(512) <= length {
+        require_available(deadline, cancellations)?;
         file.seek(SeekFrom::Start(offset)).map_err(|_| invalid())?;
         let mut header = [0_u8; 512];
         file.read_exact(&mut header).map_err(|_| invalid())?;
@@ -68,10 +279,18 @@ pub(crate) fn validate_single_image_archive(
                 return Err(invalid());
             }
             file.seek(SeekFrom::Start(offset)).map_err(|_| invalid())?;
-            let mut trailing = vec![0_u8; (length - offset) as usize];
-            file.read_exact(&mut trailing).map_err(|_| invalid())?;
-            if trailing.iter().any(|byte| *byte != 0) {
-                return Err(invalid());
+            let mut remaining = length - offset;
+            let mut trailing = [0_u8; 32 * 1024];
+            while remaining != 0 {
+                require_available(deadline, cancellations)?;
+                let count =
+                    usize::try_from(remaining.min(trailing.len() as u64)).map_err(|_| invalid())?;
+                file.read_exact(&mut trailing[..count])
+                    .map_err(|_| invalid())?;
+                if trailing[..count].iter().any(|byte| *byte != 0) {
+                    return Err(invalid());
+                }
+                remaining -= count as u64;
             }
             offset = length;
             break;
@@ -124,9 +343,36 @@ pub(crate) fn validate_single_image_archive(
     if manifests.len() != 1 {
         return Err(invalid());
     }
-    let manifest = manifests.first().expect("length checked");
+    let manifest = manifests.into_iter().next().expect("length checked");
+    Ok(OuterArchive {
+        file,
+        entries,
+        manifest,
+        archive_sha256: format!("sha256:{:x}", archive_hash.finalize()),
+        archive_byte_count: length,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_archive_graph(
+    file: &mut File,
+    entries: &HashMap<String, (u64, u64)>,
+    manifest: &ImageArchiveManifest,
+    expected_platform: &str,
+    maximum_expanded_bytes: u64,
+    maximum_expanded_entries: u64,
+    deadline: Instant,
+    additional_referenced: HashSet<String>,
+    cancellations: Option<&[&AtomicBool]>,
+) -> Result<ValidatedImageArchive, ImageArchiveFailure> {
     let config_digest = if valid_sha256(&manifest.config) {
         &manifest.config[7..]
+    } else if manifest
+        .config
+        .strip_prefix("blobs/sha256/")
+        .is_some_and(valid_raw_sha256)
+    {
+        &manifest.config[13..]
     } else if manifest.config.len() == 69
         && manifest.config.ends_with(".json")
         && manifest.config[..64]
@@ -137,9 +383,6 @@ pub(crate) fn validate_single_image_archive(
     } else {
         return Err(invalid());
     };
-    if manifest.repo_tags.as_slice() != [expected_tag] || manifest.layers.is_empty() {
-        return Err(invalid());
-    }
     let Some((config_offset, config_size)) = entries.get(&manifest.config).copied() else {
         return Err(invalid());
     };
@@ -154,6 +397,7 @@ pub(crate) fn validate_single_image_archive(
         return Err(invalid());
     }
     let mut referenced = HashSet::from(["manifest.json".to_owned(), manifest.config.clone()]);
+    referenced.extend(additional_referenced);
     for layer in &manifest.layers {
         if !valid_archive_path(layer)
             || layer == "manifest.json"
@@ -167,14 +411,15 @@ pub(crate) fn validate_single_image_archive(
     if referenced.len() != entries.len() {
         return Err(invalid());
     }
-    let expanded = validate_layers(
-        &mut file,
-        &entries,
+    let expanded = validate_layers_bounded(
+        file,
+        entries,
         &manifest.layers,
         &config_bytes,
         maximum_expanded_bytes,
         maximum_expanded_entries,
         deadline,
+        cancellations,
     )?;
     let config: serde_json::Value = serde_json::from_slice(&config_bytes).map_err(|_| invalid())?;
     let os = config
@@ -191,12 +436,117 @@ pub(crate) fn validate_single_image_archive(
     }
     let environment = validated_environment(&config)?;
     Ok(ValidatedImageArchive {
+        archive_sha256: String::new(),
+        archive_byte_count: 0,
         expanded_bytes: expanded.bytes,
         expanded_entries: expanded.entries,
         config_image_id: format!("sha256:{config_digest}"),
         platform,
         environment,
     })
+}
+
+fn read_indexed(
+    file: &mut File,
+    entries: &HashMap<String, (u64, u64)>,
+    path: &str,
+    maximum: u64,
+) -> Result<Vec<u8>, ImageArchiveFailure> {
+    let (offset, size) = entries.get(path).copied().ok_or_else(invalid)?;
+    if size == 0 || size > maximum || size > usize::MAX as u64 {
+        return Err(if size > maximum {
+            capacity()
+        } else {
+            invalid()
+        });
+    }
+    file.seek(SeekFrom::Start(offset)).map_err(|_| invalid())?;
+    let mut bytes = vec![0; size as usize];
+    file.read_exact(&mut bytes).map_err(|_| invalid())?;
+    Ok(bytes)
+}
+
+fn hash_indexed(
+    file: &mut File,
+    entries: &HashMap<String, (u64, u64)>,
+    path: &str,
+    expected: &str,
+    deadline: Instant,
+    cancellations: Option<&[&AtomicBool]>,
+) -> Result<(), ImageArchiveFailure> {
+    let (offset, size) = entries.get(path).copied().ok_or_else(invalid)?;
+    file.seek(SeekFrom::Start(offset)).map_err(|_| invalid())?;
+    let mut source = file.by_ref().take(size);
+    let mut digest = Sha256::new();
+    let mut buffer = [0; 32 * 1024];
+    let mut read = 0_u64;
+    loop {
+        require_available(deadline, cancellations)?;
+        let count = source.read(&mut buffer).map_err(|_| invalid())?;
+        if count == 0 {
+            break;
+        }
+        read = read.checked_add(count as u64).ok_or_else(invalid)?;
+        digest.update(&buffer[..count]);
+    }
+    if read != size || format!("sha256:{:x}", digest.finalize()) != expected {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn verify_compressed_layer_graph(
+    compressed: &[String],
+    file: &mut File,
+    entries: &HashMap<String, (u64, u64)>,
+    manifest: &ImageArchiveManifest,
+    maximum_expanded_bytes: u64,
+    deadline: Instant,
+    cancellations: &[&AtomicBool],
+) -> Result<(), ImageArchiveFailure> {
+    let config = read_indexed(file, entries, &manifest.config, 16 * 1024 * 1024)?;
+    let config: serde_json::Value = serde_json::from_slice(&config).map_err(|_| invalid())?;
+    let diff_ids = config
+        .get("rootfs")
+        .and_then(|rootfs| rootfs.get("diff_ids"))
+        .and_then(|value| value.as_array())
+        .ok_or_else(invalid)?;
+    if diff_ids.len() != compressed.len() {
+        return Err(invalid());
+    }
+    let mut total = 0_u64;
+    for (path, expected) in compressed.iter().zip(diff_ids) {
+        require_available(deadline, Some(cancellations))?;
+        let (offset, size) = entries.get(path).copied().ok_or_else(invalid)?;
+        file.seek(SeekFrom::Start(offset)).map_err(|_| invalid())?;
+        let mut magic = [0; 2];
+        file.read_exact(&mut magic).map_err(|_| invalid())?;
+        file.seek(SeekFrom::Start(offset)).map_err(|_| invalid())?;
+        let source = file.by_ref().take(size);
+        let mut reader: Box<dyn Read + '_> = if magic == [0x1f, 0x8b] {
+            Box::new(MultiGzDecoder::new(source))
+        } else {
+            Box::new(source)
+        };
+        let mut digest = Sha256::new();
+        let mut buffer = [0; 32 * 1024];
+        loop {
+            require_available(deadline, Some(cancellations))?;
+            let count = reader.read(&mut buffer).map_err(|_| invalid())?;
+            if count == 0 {
+                break;
+            }
+            total = total
+                .checked_add(count as u64)
+                .filter(|value| *value <= maximum_expanded_bytes)
+                .ok_or_else(capacity)?;
+            digest.update(&buffer[..count]);
+        }
+        if expected.as_str() != Some(format!("sha256:{:x}", digest.finalize()).as_str()) {
+            return Err(invalid());
+        }
+    }
+    Ok(())
 }
 
 /// Charge every layer, including repeated content, without materializing it.
@@ -208,6 +558,29 @@ pub(crate) fn validate_layers(
     maximum_bytes: u64,
     maximum_entries: u64,
     deadline: Instant,
+) -> Result<ExpandedImage, ImageArchiveFailure> {
+    validate_layers_bounded(
+        file,
+        entries,
+        layers,
+        config,
+        maximum_bytes,
+        maximum_entries,
+        deadline,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_layers_bounded(
+    file: &mut File,
+    entries: &HashMap<String, (u64, u64)>,
+    layers: &[String],
+    config: &[u8],
+    maximum_bytes: u64,
+    maximum_entries: u64,
+    deadline: Instant,
+    cancellations: Option<&[&AtomicBool]>,
 ) -> Result<ExpandedImage, ImageArchiveFailure> {
     let config: serde_json::Value = serde_json::from_slice(config).map_err(|_| invalid())?;
     validate_runtime_configuration(&config)?;
@@ -225,9 +598,7 @@ pub(crate) fn validate_layers(
     let mut expanded = ExpandedImage::default();
     for (layer, expected_digest) in layers.iter().zip(diff_ids) {
         let (offset, size) = *entries.get(layer).ok_or_else(invalid)?;
-        if Instant::now() >= deadline {
-            return Err(ImageArchiveFailure::DeadlineExceeded);
-        }
+        require_available(deadline, cancellations)?;
         if size < 2 {
             return Err(invalid());
         }
@@ -248,6 +619,7 @@ pub(crate) fn validate_layers(
             maximum_bytes,
             maximum_entries,
             deadline,
+            cancellations,
         };
         inspect_tar(&mut stream)?;
         if expected_digest.as_str()
@@ -291,6 +663,7 @@ fn validated_environment(config: &serde_json::Value) -> Result<Vec<String>, Imag
             let (name, _) = value.split_once('=').ok_or_else(invalid)?;
             let mut characters = name.bytes();
             if value.len() > 8192
+                || value.contains('\0')
                 || !characters
                     .next()
                     .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
@@ -315,13 +688,12 @@ struct LayerStream<'a> {
     maximum_bytes: u64,
     maximum_entries: u64,
     deadline: Instant,
+    cancellations: Option<&'a [&'a AtomicBool]>,
 }
 
 impl LayerStream<'_> {
     fn read(&mut self, output: &mut [u8]) -> Result<usize, ImageArchiveFailure> {
-        if Instant::now() >= self.deadline {
-            return Err(ImageArchiveFailure::DeadlineExceeded);
-        }
+        require_available(self.deadline, self.cancellations)?;
         let count = self.reader.read(output).map_err(|_| invalid())?;
         self.expanded.bytes = self
             .expanded
@@ -578,11 +950,35 @@ fn valid_sha256(value: &str) -> bool {
             .all(|item| item.is_ascii_hexdigit() && !item.is_ascii_uppercase())
 }
 
+fn valid_raw_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|item| item.is_ascii_hexdigit() && !item.is_ascii_uppercase())
+}
+
 fn invalid() -> ImageArchiveFailure {
     ImageArchiveFailure::Invalid
 }
 fn capacity() -> ImageArchiveFailure {
     ImageArchiveFailure::CapacityExceeded
+}
+
+fn require_available(
+    deadline: Instant,
+    cancellations: Option<&[&AtomicBool]>,
+) -> Result<(), ImageArchiveFailure> {
+    if cancellations.is_some_and(|values| {
+        values
+            .iter()
+            .any(|cancelled| cancelled.load(Ordering::SeqCst))
+    }) {
+        return Err(ImageArchiveFailure::Cancelled);
+    }
+    if Instant::now() >= deadline {
+        return Err(ImageArchiveFailure::DeadlineExceeded);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -701,9 +1097,119 @@ mod tests {
             1024 * 1024,
             4096,
             Instant::now() + Duration::from_secs(5),
+            &[],
         );
         std::fs::remove_file(path).unwrap();
         result
+    }
+
+    fn pinned_builder_archive(corrupt_layer_blob: bool) -> (Vec<u8>, String, String) {
+        let plain = layer("usr/bin/builder", b"builder");
+        let compressed = gzip(&plain);
+        let config = serde_json::to_vec(&serde_json::json!({
+            "os": "linux",
+            "architecture": "amd64",
+            "config": {"Env": ["PATH=/usr/bin"]},
+            "rootfs": {"type":"layers", "diff_ids":[format!("sha256:{:x}", Sha256::digest(&plain))]},
+        }))
+        .unwrap();
+        let config_digest = format!("sha256:{:x}", Sha256::digest(&config));
+        let layer_digest = format!("sha256:{:x}", Sha256::digest(&compressed));
+        let platform = serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "config": {"mediaType":"application/vnd.oci.image.config.v1+json",
+                       "digest":config_digest,"size":config.len()},
+            "layers": [{"mediaType":"application/vnd.oci.image.layer.v1.tar+gzip",
+                        "digest":layer_digest,"size":compressed.len()}],
+        }))
+        .unwrap();
+        let platform_digest = format!("sha256:{:x}", Sha256::digest(&platform));
+        let config_path = format!("blobs/sha256/{}", &config_digest[7..]);
+        let layer_path = format!("blobs/sha256/{}", &layer_digest[7..]);
+        let platform_path = format!("blobs/sha256/{}", &platform_digest[7..]);
+        let manifest = serde_json::to_vec(&serde_json::json!([{
+            "Config": config_path,
+            "RepoTags": ["operator-label-is-not-authority:latest"],
+            "Layers": ["layer.tar"],
+        }]))
+        .unwrap();
+        let mut result = entry("manifest.json", b'0', &manifest);
+        result.extend(entry(&config_path, b'0', &config));
+        result.extend(entry("layer.tar", b'0', &plain));
+        result.extend(entry(&platform_path, b'0', &platform));
+        let layer_body: &[u8] = if corrupt_layer_blob {
+            b"corrupt"
+        } else {
+            &compressed
+        };
+        result.extend(entry(&layer_path, b'0', layer_body));
+        result.extend([0; 1024]);
+        (result, platform_digest, config_digest)
+    }
+
+    fn validate_builder(
+        bytes: &[u8],
+        platform_digest: &str,
+        config_digest: &str,
+        cancellations: &[&AtomicBool],
+    ) -> Result<ValidatedImageArchive, ImageArchiveFailure> {
+        let path = std::env::temp_dir().join(format!(
+            "ws-builder-archive-{}-{}",
+            std::process::id(),
+            SEQUENCE.fetch_add(1, Ordering::SeqCst)
+        ));
+        std::fs::write(&path, bytes).unwrap();
+        let result = validate_pinned_builder_archive(
+            &path,
+            platform_digest,
+            config_digest,
+            "linux/amd64",
+            1024 * 1024,
+            1024 * 1024,
+            4096,
+            Instant::now() + Duration::from_secs(5),
+            cancellations,
+        );
+        std::fs::remove_file(path).unwrap();
+        result
+    }
+
+    #[test]
+    fn pinned_builder_binds_platform_config_and_both_layer_representations() {
+        let (archive, platform, config) = pinned_builder_archive(false);
+        let validated =
+            validate_builder(&archive, &platform, &config, &[&AtomicBool::new(false)]).unwrap();
+        assert_eq!(validated.config_image_id, config);
+        assert_eq!(validated.platform, "linux/amd64");
+        assert_eq!(validated.environment, ["PATH=/usr/bin"]);
+        assert_eq!(
+            validate_builder(
+                &archive,
+                &format!("sha256:{}", "f".repeat(64)),
+                &config,
+                &[&AtomicBool::new(false)]
+            ),
+            Err(ImageArchiveFailure::Invalid)
+        );
+        assert_eq!(
+            validate_builder(
+                &archive,
+                &platform,
+                &format!("sha256:{}", "e".repeat(64)),
+                &[&AtomicBool::new(false)]
+            ),
+            Err(ImageArchiveFailure::Invalid)
+        );
+        let (corrupt, platform, config) = pinned_builder_archive(true);
+        assert_eq!(
+            validate_builder(&corrupt, &platform, &config, &[&AtomicBool::new(false)]),
+            Err(ImageArchiveFailure::Invalid)
+        );
+        assert_eq!(
+            validate_builder(&archive, &platform, &config, &[&AtomicBool::new(true)]),
+            Err(ImageArchiveFailure::Cancelled)
+        );
     }
 
     #[test]
@@ -726,6 +1232,7 @@ mod tests {
             serde_json::json!(["missing_separator"]),
             serde_json::json!(["DUP=one", "DUP=two"]),
             serde_json::json!(["1INVALID=value"]),
+            serde_json::json!(["NUL=value\u{0}hidden"]),
         ] {
             let malformed = archive(serde_json::json!({
                 "os": "linux",
