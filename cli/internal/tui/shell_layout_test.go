@@ -87,7 +87,7 @@ func TestCompactShellReflowPreservesStateAndUsesOneColumn(t *testing.T) {
 	press(t, m, "enter")
 	selected, page, generation := m.selected, m.page, m.generation
 	before := len(f.calls)
-	for _, size := range [][2]int{{80, 24}, {40, 10}, {120, 40}, {80, 24}} {
+	for _, size := range [][2]int{{80, 24}, {40, 10}, {40, 24}, {59, 24}, {60, 24}, {99, 24}, {100, 24}, {109, 24}, {110, 24}, {120, 40}, {80, 24}} {
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		content := m.View().Content
 		if lipgloss.Height(content) > size[1] {
@@ -280,6 +280,33 @@ func assertShellBounded(t *testing.T, m *Model, width, height int) {
 	for _, line := range strings.Split(content, "\n") {
 		if lipgloss.Width(line) > width {
 			t.Fatalf("view exceeds %d columns: %q", width, line)
+		}
+	}
+}
+
+func TestEmptyAndFilteredListsKeepOnlyApplicableControls(t *testing.T) {
+	for _, screen := range []string{"empty", "filter-miss"} {
+		m, _ := renderFixture(t, screen)
+		m.plain, m.noColor = false, true
+		for _, size := range [][2]int{{40, 10}, {40, 24}, {80, 24}, {120, 40}} {
+			for _, more := range []bool{false, true} {
+				m.cursor = nil
+				if more {
+					cursor := "opaque-next"
+					m.cursor = &cursor
+				}
+				m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
+				view := m.View().Content
+				if strings.Contains(view, "Enter") || strings.Contains(m.footerText(), "n next") != more {
+					t.Fatal("empty list advertises unavailable inspection or wrong continuation", view)
+				}
+				for _, key := range []string{"/ filter", "? help", "q quit"} {
+					if !strings.Contains(view, key) {
+						t.Fatal("empty list lost recovery key", key, view)
+					}
+				}
+				assertShellBounded(t, m, size[0], size[1])
+			}
 		}
 	}
 }

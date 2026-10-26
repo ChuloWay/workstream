@@ -95,7 +95,7 @@ func renderFixture(t *testing.T, screen string) (*Model, *fakeClient) {
 func TestRepresentativeRenderBoundsAndPureReflow(t *testing.T) {
 	for _, screen := range []string{"projects", "ready", "mine", "intake", "guide-confirmation", "submission", "findings", "empty", "filter-miss", "denied", "help"} {
 		for _, mode := range []string{"dark", "light", "no-color", "plain"} {
-			for _, size := range [][2]int{{120, 40}, {80, 24}, {40, 10}} {
+			for _, size := range [][2]int{{120, 40}, {100, 24}, {80, 24}, {60, 24}, {59, 24}, {40, 24}, {40, 10}} {
 				name := fmt.Sprintf("%s-%s-%dx%d", screen, mode, size[0], size[1])
 				t.Run(name, func(t *testing.T) {
 					m, f := renderFixture(t, screen)

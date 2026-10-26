@@ -125,7 +125,18 @@ func (m *Model) footerText() string {
 	if m.loading {
 		return "Loading...  r refresh  ? help  q quit"
 	}
-	if m.height < 16 {
+	if !m.detail && len(m.visible()) == 0 {
+		navigation := "/ filter  r refresh"
+		if !m.picker {
+			navigation = "Tab collection  " + navigation
+		}
+		exit := "? help  q quit"
+		if m.cursor != nil {
+			exit = "n next  " + exit
+		}
+		return navigation + "\n" + exit
+	}
+	if m.height < 16 || m.width < 60 {
 		if m.detail {
 			if m.tab == mine && m.section == 3 {
 				if m.context != nil && len(m.context.GuideDocuments) > 0 {
@@ -145,9 +156,15 @@ func (m *Model) footerText() string {
 			return "PgUp/PgDn scroll  Esc back\n? help  q quit"
 		}
 		if m.picker {
-			return "Enter project  ? help  q quit"
+			if m.cursor != nil {
+				return "Up/Down select  Enter project\n/ filter  n next  ? help  q quit"
+			}
+			return "Up/Down select  Enter project\n/ filter  ? help  q quit"
 		}
-		return "Enter inspect  / filter  q quit"
+		if m.cursor != nil {
+			return "Up/Down select  Enter inspect\nTab  / filter  n next  ? help  q quit"
+		}
+		return "Up/Down select  Enter inspect\nTab collection  / filter  ? help  q quit"
 	}
 	if m.width >= 110 {
 		switch {
@@ -370,7 +387,7 @@ func (m *Model) failureHelp() string {
 func (m *Model) previewText() string {
 	selected, ok := m.selectedRow()
 	if !ok {
-		return "Select a row to preview.\nEnter to inspect full details."
+		return "No row selected on this loaded page.\nUse / to adjust the local filter."
 	}
 	return "Selected on this page\n" + m.clean(selected.title) + "\nStatus: " + m.clean(selected.status) + "\nProject ID: " + m.clean(selected.project) + "\n\nEnter to inspect full details.\nA list summary is not full instructions or a reservation."
 }

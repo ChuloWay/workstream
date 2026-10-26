@@ -53,8 +53,8 @@ normal panes with a scrollable exact-target review. At widths of at least
 terminals use sequential, single-column list and detail views; `--plain`
 always uses that layout, even on a wide terminal. Reflow preserves selection,
 exact project, section and confirmation target, and dispatches no request.
-At less than 40×10, show only resize and quit guidance (`q` ordinarily,
-Ctrl+C during text entry): hidden content
+At less than 40×10, show only resize and context-appropriate quit guidance.
+`q` exits outside text entry; Ctrl+C always exits. Hidden content
 cannot be selected and `y` cannot stage or dispatch a download. Restoring size
 still requires deliberate confirmation.
 

@@ -57,11 +57,20 @@ class Terminal:
     behind a screen parser that ignores them.
     """
 
-    def __init__(self, origin, token, *args, columns=120, rows=40, extra_env=None):
+    def __init__(
+        self,
+        origin,
+        token,
+        *args,
+        columns=120,
+        rows=40,
+        extra_env=None,
+        light_background=False,
+    ):
         assert os.name == "posix", "unsupported native terminal host"
         self.master, self.slave = pty.openpty()
         self.original = termios.tcgetattr(self.slave)
-        self._screen_setup(columns, rows)
+        self._screen_setup(columns, rows, light_background)
         self.resize(columns, rows, notify=False)
         self.process = subprocess.Popen(  # noqa: S603 - built binary, fixed test argv
             [executable(), "tui", *args],
@@ -72,9 +81,10 @@ class Terminal:
             start_new_session=True,
         )
 
-    def _screen_setup(self, columns, rows):
+    def _screen_setup(self, columns, rows, light_background=False):
         self.columns, self.rows = columns, rows
-        self.light_background = False
+        self.light_background = light_background
+        self.background_queries = 0
         self.raw = bytearray()
         self.decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         self.pending = ""
@@ -170,6 +180,7 @@ class Terminal:
                     sequence = match.group()
                     self.pending = self.pending[match.end() :]
                     if sequence.startswith("\x1b]11;?"):
+                        self.background_queries += 1
                         background = (
                             "ffff/ffff/ffff"
                             if self.light_background
@@ -520,6 +531,7 @@ if os.name == "nt":
             rows=40,
             extra_env=None,
             redirect=None,
+            light_background=False,
         ):
             self.api = api = _WindowsAPI()
             self._handles = []
@@ -533,7 +545,7 @@ if os.name == "nt":
             self._temporary = tempfile.TemporaryDirectory(prefix="workstream-conpty-")
             self._receipt = Path(self._temporary.name) / "modes.json"
             self.process = None
-            self._screen_setup(columns, rows)
+            self._screen_setup(columns, rows, light_background)
             try:
                 input_read, self._input = self._pipe()
                 self._output, output_write = self._pipe()

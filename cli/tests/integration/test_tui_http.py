@@ -191,15 +191,20 @@ def reveal_detail(terminal, text):
 
 
 @pytest.mark.parametrize("light", [False, True])
-def test_minimum_terminal_navigation_and_light_background(light):
+@pytest.mark.parametrize("rows", [10, 24])
+def test_minimum_terminal_navigation_and_light_background(light, rows):
     reads = Reads()
     with (
         socket_peer(reads) as (origin, requests),
         Terminal(
-            origin, TOKEN, columns=40, rows=10, extra_env={"COLORTERM": "truecolor"}
+            origin,
+            TOKEN,
+            columns=40,
+            rows=rows,
+            extra_env={"COLORTERM": "truecolor"},
+            light_background=light,
         ) as terminal,
     ):
-        terminal.light_background = light
         open_ready(terminal)
         terminal.send("\r")
         terminal.wait("[Overview]")
@@ -209,14 +214,18 @@ def test_minimum_terminal_navigation_and_light_background(light):
         calls = len(requests)
         terminal.resize(120, 40)
         terminal.pump(0.2)
-        terminal.resize(40, 10)
+        terminal.resize(40, rows)
         terminal.pump(0.2)
         assert len(requests) == calls, "resize dispatched a read"
         terminal.send("\x1b")
         terminal.wait("Ready terminal task")
         expected_focus = b"38;2;8;126;140" if light else b"38;2;105;215;227"
         assert expected_focus in terminal.raw, (
-            "terminal background did not select its readable palette"
+            "terminal background did not select its readable palette",
+            {
+                "background_queries": terminal.background_queries,
+                "sgr": sorted(set(re.findall(rb"\x1b\[[0-9;:]*m", terminal.raw)))[:40],
+            },
         )
         terminal.quit()
         assert TOKEN.encode() not in terminal.raw
