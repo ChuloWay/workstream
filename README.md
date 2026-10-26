@@ -98,7 +98,7 @@ These parts work in a local test run:
 The local test run used recorded AI model output. It does not prove project
 setup with a live AI model.
 
-An isolated hosted API/worker/Smol/AWS run also passed both review-policy
+An isolated hosted API/Celery/Smol/AWS run also passed both review-policy
 branches. A separate live OpenRouter POST reached automatic acceptance with
 recorded model usage and replay protection. These runs used fixture identity
 and engineering submissions; they do not prove the full real-project journey.
