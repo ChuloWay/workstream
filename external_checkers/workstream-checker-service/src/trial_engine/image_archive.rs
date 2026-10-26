@@ -621,7 +621,6 @@ fn validate_layers_bounded(
     cancellations: Option<&[&AtomicBool]>,
 ) -> Result<ExpandedImage, ImageArchiveFailure> {
     let config: serde_json::Value = serde_json::from_slice(config).map_err(|_| invalid())?;
-    validate_runtime_configuration(&config)?;
     let rootfs = config.get("rootfs").ok_or_else(invalid)?;
     if rootfs.get("type").and_then(|v| v.as_str()) != Some("layers") {
         return Err(invalid());
@@ -667,18 +666,6 @@ fn validate_layers_bounded(
         }
     }
     Ok(expanded)
-}
-
-fn validate_runtime_configuration(config: &serde_json::Value) -> Result<(), ImageArchiveFailure> {
-    // Docker creates image-declared anonymous volumes before the trusted
-    // launcher runs. They would sit outside its bounded filesystem and owner
-    // ledger, so this runtime does not admit that image capability.
-    if let Some(volumes) = config.get("config").and_then(|value| value.get("Volumes")) {
-        if !volumes.is_null() && !volumes.as_object().is_some_and(|value| value.is_empty()) {
-            return Err(invalid());
-        }
-    }
-    Ok(())
 }
 
 fn validated_environment(config: &serde_json::Value) -> Result<Vec<String>, ImageArchiveFailure> {
@@ -1453,20 +1440,17 @@ mod tests {
     }
 
     #[test]
-    fn image_declared_volumes_cannot_create_unaccounted_writable_storage() {
-        for volumes in [
-            serde_json::json!({"/data": {}}),
-            serde_json::json!(["/data"]),
-        ] {
-            assert_eq!(
-                validate_runtime_configuration(
-                    &serde_json::json!({"config": {"Volumes": volumes}})
-                ),
-                Err(invalid())
-            );
-        }
-        validate_runtime_configuration(&serde_json::json!({"config": {"Volumes": {}}})).unwrap();
-        validate_runtime_configuration(&serde_json::json!({"config": {"Volumes": null}})).unwrap();
+    fn smol_volume_metadata_does_not_create_storage_or_change_layer_accounting() {
+        // Smol does not implement Docker anonymous-volume creation. The exact
+        // config remains pinned, while launcher filesystems own writable space.
+        let base = serde_json::json!({"os": "linux", "architecture": "amd64", "config": {}});
+        let baseline = validate_archive(&archive(base.clone()), "linux/amd64").unwrap();
+        let mut declared = base;
+        declared["config"]["Volumes"] = serde_json::json!({"/busybox": {}});
+        let actual = validate_archive(&archive(declared), "linux/amd64").unwrap();
+        assert_ne!(actual.config_image_id, baseline.config_image_id);
+        assert_eq!(actual.expanded_bytes, baseline.expanded_bytes);
+        assert_eq!(actual.expanded_entries, baseline.expanded_entries);
     }
 
     #[test]

@@ -84,14 +84,14 @@ copied by the checker. Unsupported runtime or material remains an explicit gap;
 it is not permission to expose the host Docker socket or add a named-project
 service branch.
 
-Candidate images are checked before Docker loads them: ordered uncompressed
+Candidate images are checked before Smol loads them: ordered uncompressed
 layer digests must match the image configuration, and streaming expansion plus
 conservative file/directory allocation must fit the invocation's remaining
 byte and entry allowances. Repeated layers consume that allowance again.
-Malformed archives, unsupported sparse/device representations and image-declared
-anonymous volumes are refused; those volumes would be created outside the
-trial filesystem's quota. These are runtime capability limits, not additional
-project requirements. Project checks must report unavailable execution distinctly
+Malformed archives and unsupported sparse/device representations are refused.
+Smol does not create anonymous storage from image `Volumes` metadata; the
+trusted launcher owns writable mounts and their quotas. These are runtime
+capability limits, not additional project requirements. Project checks must report unavailable execution distinctly
 from a verified work failure.
 
 Every completed build or step records `export_outcome` separately from the

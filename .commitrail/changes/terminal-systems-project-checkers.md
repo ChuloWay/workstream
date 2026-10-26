@@ -667,3 +667,30 @@ the large-context regression fail its aggregate-budget assertion; restored
 source preserves the reservation. Guest envelope/launcher evidence at
 `bc58f2424`: 31 focused tests and an offline static-musl build passed. These are
 not a complete KVM composition or current-head hosted CI qualification.
+
+
+### Canonical prepared image archive
+
+Real Smol qualification found that Docker-save adds nullable tags, compatibility
+metadata and directory entries to the approved builder graph. The existing
+`backend/scripts/checker_smol_cache.py` validates graph identities but retains
+that wrapper, which the bounded trial validator correctly refuses as undeclared
+content. This change also owns that preparation command, its existing
+`backend/tests/test_checker_smol_cache.py` tests and the cache instructions in
+`external_checkers/README.md`. It prepares an exclusive new canonical archive
+containing the verified platform/config/layer bytes and a closed Docker-save
+manifest, returns its own archive digest, and preserves the source archive.
+No policy/image identity is rewritten, no files are extracted, and runtime
+manifest or graph validation is not relaxed. Existing callers adopt the explicit
+archive-output argument; there is no raw-archive fallback. Verification must
+cover source preservation, exact graph bytes, output substitution/collision,
+failed-output cleanup and import of the actual prepared builder in Smol.
+
+
+The real pinned builder also exposed a superseded Docker anonymous-volume
+refusal. Smol probes with and without the original `/busybox` declaration show
+identical block devices and no declaration-driven mount; the directory remains
+on the root filesystem. The Smol trial validator therefore preserves that exact
+config metadata and removes the Docker-only refusal. Writable storage still
+belongs to the trusted launcher's bounded filesystems. The regression checks
+unchanged layer accounting and distinct exact config identity.
