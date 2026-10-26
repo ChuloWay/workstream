@@ -19,13 +19,13 @@ custody adds linear migrations 0063 and 0064 after that dependency.
 
 ## Bounded change
 
-The intended execution target is the current Smol microVM service. Earlier
-gVisor evidence remains valid only for that implementation and does not satisfy
-deployment readiness. Reconcile the model/trial and predecessor-material
-capabilities with the existing Smol guest, lease and resource owners before
-marking this work ready. Review the transport and execution design before
-implementation; retain the generic model ledger, ART custody and project image
-contracts. The independently owned upload/intake work remains separate.
+The execution target is the Smol microVM service. Its controlled native
+composition, direct predecessor custody and guest resource enforcement have
+qualified evidence below; the three active nested cancellation/death cases
+remain pending. Earlier gVisor evidence applies only to its recorded historical
+implementation. Preserve the existing Smol guest, lease and resource owners,
+generic model ledger, ART custody and project image contracts. The independently
+owned hosted and full-project journey work remains separate.
 
 Allowed project paths are `pilots/terminal_systems/checkers/**`, the project
 README, affected current roadmap/runbook claims, this record and proportionate
@@ -1144,3 +1144,13 @@ empty-HOME fixture: it invoked the forbidden CLI, while the corrected marker
 returned pending without a CLI call or target mutation. Independent frozen
 source review passed. Physical cancellation/death cases are still pending;
 the hosted baseline and paid stage retain the VM window.
+
+Final current-document reconciliation is limited to the project checker README,
+external-checker README, roadmap, WS-EXEC-001 overview and this record. It points
+current readers to native build b2ce/direct 36/composition 013, labels gVisor
+evidence as historical, and links separately tracked hosted composition/AWS
+evidence in [PR #692](https://github.com/Flow-Research/workstream/pull/692), whose
+owned baseline passed with fixture identity. It preserves pending active nested
+recovery, live-provider and full-project evidence.
+No disposition change, native rebuild or new qualification claim follows from
+these documentation edits.
