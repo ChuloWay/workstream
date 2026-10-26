@@ -46,12 +46,12 @@ func TestGuidePreservesOrderAndPublishesOnlyAfterConfirmation(t *testing.T) {
 	}}
 	m := openMineGuide(t, f)
 	text := m.detailText()
-	for _, want := range []string{"Label: First", "Order: 2", doc1.SHA256, "Label: Second", "Order: 7", doc2.SHA256, "bytes not downloaded"} {
+	for _, want := range []string{"1. First", "2. Second", "Label: First", "Order: 2", doc1.DocumentID, doc1.SHA256, "bytes not downloaded"} {
 		if !strings.Contains(text, want) {
 			t.Fatal(want, text)
 		}
 	}
-	if strings.Index(text, "Label: First") > strings.Index(text, "Label: Second") {
+	if strings.Index(text, "1. First") > strings.Index(text, "2. Second") || strings.Contains(text, doc2.SHA256) {
 		t.Fatal(text)
 	}
 	directory := filepath.Join(t.TempDir(), "qgr")
@@ -59,6 +59,14 @@ func TestGuidePreservesOrderAndPublishesOnlyAfterConfirmation(t *testing.T) {
 		t.Fatal(err)
 	}
 	press(t, m, "down")
+	for _, want := range []string{"Label: Second", "Order: 7", doc2.DocumentID, doc2.SHA256, "Bytes (server metadata; bytes not downloaded): 5"} {
+		if !strings.Contains(m.detailText(), want) {
+			t.Fatal("selected original lost exact metadata", want, m.detailText())
+		}
+	}
+	if strings.Contains(m.detailText(), doc1.SHA256) {
+		t.Fatal("previous original metadata retained as selected")
+	}
 	press(t, m, "d")
 	press(t, m, "?")
 	if m.guideDirectory != "?" {
@@ -233,7 +241,7 @@ func TestFindingsNavigationPaginationAndMisbinding(t *testing.T) {
 	press(t, m, "enter")
 	press(t, m, "tab")
 	text := m.detailText()
-	for _, want := range []string{"Run: " + runID, "Current: true", "Predecessor run: " + actorID, "Checker: lint", "Check ID: lint.safe", "Finding status: coverage_incomplete", "Severity: medium", "Path: answer.md", "Line: 8", "Suggested fix: repair", "Checker: format\nCheck ID: not supplied\nFinding status: passed\nSeverity: info\nPath: not supplied\nLine: not supplied\nMessage: not supplied\nSuggested fix: not supplied", "not acceptance"} {
+	for _, want := range []string{"Run: " + runID, "Current: true", "Predecessor run: " + actorID, "Checker: lint", "Check ID: lint.safe", "Finding status: coverage_incomplete", "Severity: medium", "Path: answer.md", "Line: 8", "Suggested fix\nrepair", "Severity: info\nFinding status: passed\nChecker: format\nCheck ID: not supplied\nMessage: not supplied\nPath: not supplied\nLine: not supplied\nSuggested fix: not supplied", "stored submission outcome determines disposition"} {
 		if !strings.Contains(text, want) {
 			t.Fatal(want, text)
 		}
@@ -258,7 +266,7 @@ func TestGuideAndFindingsViewsFitMinimumTerminal(t *testing.T) {
 	}}
 	guide := openMineGuide(t, guideClient)
 	guide.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
-	assertBoundedView(t, guide.View().Content, 40, 10, "GUIDE")
+	assertBoundedView(t, guide.View().Content, 40, 10, "[Guide]")
 
 	findings := boot(t, &fakeClient{})
 	press(t, findings, "enter")
@@ -267,7 +275,7 @@ func TestGuideAndFindingsViewsFitMinimumTerminal(t *testing.T) {
 	press(t, findings, "enter")
 	press(t, findings, "tab")
 	findings.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
-	assertBoundedView(t, findings.View().Content, 40, 10, "FINDINGS")
+	assertBoundedView(t, findings.View().Content, 40, 10, "[Findings]")
 }
 
 func assertBoundedView(t *testing.T, content string, width, height int, heading string) {

@@ -27,41 +27,56 @@ non-terminal input/output and JSON mode before making an API request.
 Start with your exact-grant projects, then browse **Ready**, **Mine** (active
 assignments) and **Submissions**. Enter opens fresh contributor-safe task or
 owned Submission detail. Active Mine details offer Context, Intake and Guide
-sections. Submission detail also offers paged Findings. Each list fetches one page; filtering searches only that loaded
-page. Project membership, terms and action hints are observations, not authority
-for a later operation. Workstream rechecks each public read.
+sections after Overview. Submission detail offers Overview and paged Findings.
+The header keeps the project, collection and active section visible. At
+100×24 or larger, a stable left worklist and scrollable right detail pane keep
+long instructions and acceptance criteria readable. Guide confirmation replaces
+both panes with a scrollable exact-target review; smaller usable terminals
+show one pane at a time, and `--plain` is always single-column. Below 40×10,
+the workspace shows only resize/quit guidance and cannot confirm a download.
+An unopened row previews only loaded-page facts; Enter makes a fresh exact read.
+Each list fetches one page, and filtering searches only that loaded page. The
+status line labels loaded rows, page/continuation and local observation time,
+not a total or a server-wide search. Project membership, potential locked terms
+and action hints are observations, not authority for a later operation.
+Instructions and criteria lead task detail; exact IDs, hashes and decimal
+terms remain available separately. Workstream rechecks each public read.
 
 | Key | Action |
 |---|---|
-| Arrows / Enter | Select, scroll and inspect |
+| Arrows / Enter | Select a row or scroll detail; Enter inspects freshly |
 | Tab / Esc | Change section / go back or cancel |
 | `g` | Fetch the project picker again |
 | `n` / `r` | Fetch the next page / refresh the current view |
 | `/` | Filter loaded names/titles locally; Enter finishes and Esc cancels |
 | `c` / `?` | Show inert CLI arguments / keyboard help |
-| `d` in Guide | Enter an existing download directory; Enter reviews the target, `y` confirms |
+| `d` in Guide | Enter an existing download directory; Enter reviews the scrollable exact target, `y` confirms |
 | `q` / Ctrl+C | Quit and cancel outstanding client reads; `q` is text during text entry, Ctrl+C always quits |
 
 The workspace makes no product mutation requests: it does not claim/start work,
 prepare or submit ZIPs, export records, poll, acquire tokens or save local
 history. Guide metadata is not proof of downloaded-byte integrity. In Guide,
-select one document, enter an existing real directory and confirm the exact
-target. Verified bytes are published under the document's UUID filename without
-overwriting an existing file. Cancelled or failed downloads are not published.
+select one document, enter an existing real directory and confirm its label,
+document/task IDs, path, UUID filename, byte count and hash. Verified bytes are
+published under that filename without overwriting an existing file. Cancelled
+or failed downloads are not published.
 PDF/Office documents are downloaded, not rendered or opened automatically.
 Findings display each returned run's identity, current flag and checker evidence;
-they do not imply acceptance. `n` fetches one next findings page.
+they do not imply the stored Submission outcome or acceptance. `n` fetches one
+next findings page. Contribution facts, available through the explicit CLI,
+do not establish payment or fulfillment.
 Contribution evidence remains a manual CLI handoff: use
 `contributions --project PROJECT_ID`. Displayed arguments never execute or copy
 automatically.
 
 A denial clears affected content; expired authentication clears the session's
-work data. Network failure is shown as unavailable, never as an empty queue or
-successful operation. Refresh is deliberate. No background request retries or
-write recovery occur. The profile read may perform Workstream's existing actor
+work data. A failed current read clears its content and continuation and is
+shown as unavailable, never as an empty queue or successful operation. Refresh
+is deliberate. No background request retries or write recovery occur. The
+profile read may perform Workstream's existing actor
 admission, last-seen and audit effects; “read-only” does not mean no server-side
 effects. This local interface does not establish a deployed service, payment,
-or completion of the broader [terminal design](../docs/design/cli-terminal-experience.md).
+or future write/management workflows. See the [terminal presentation contract](../docs/design/cli-terminal-experience.md).
 
 ## Explicit commands
 

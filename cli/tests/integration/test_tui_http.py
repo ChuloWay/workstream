@@ -138,13 +138,13 @@ def open_guide(terminal):
     terminal.send("\r")
     terminal.wait(SECRET)
     terminal.send("\t")
-    terminal.wait("CONTEXT")
+    terminal.wait("[Context]")
     terminal.wait("Locked guide version: guide-1")
     terminal.send("\t")
-    terminal.wait("INTAKE")
+    terminal.wait("[Intake]")
     terminal.wait("answer.md")
     terminal.send("\t")
-    terminal.wait("GUIDE")
+    terminal.wait("[Guide]")
     terminal.wait("Locked instructions")
 
 
@@ -178,6 +178,78 @@ def open_findings(terminal):
     terminal.send("\r")
     terminal.wait("Exact owned submission summary")
     terminal.send("\t")
+
+
+def reveal_detail(terminal, text):
+    """Inspect a long detail through real keyboard scrolling, not raw history."""
+    for _ in range(100):
+        terminal.pump(0.03)
+        if text in terminal.screen:
+            return
+        terminal.send("\x1b[B")
+    assert text in terminal.screen, (text, terminal.screen)
+
+
+@pytest.mark.parametrize("light", [False, True])
+def test_minimum_terminal_navigation_and_light_background(light):
+    reads = Reads()
+    with (
+        socket_peer(reads) as (origin, requests),
+        Terminal(
+            origin, TOKEN, columns=40, rows=10, extra_env={"COLORTERM": "truecolor"}
+        ) as terminal,
+    ):
+        terminal.light_background = light
+        open_ready(terminal)
+        terminal.send("\r")
+        terminal.wait("[Overview]")
+        reveal_detail(terminal, SECRET)
+        assert "[Ready]" in terminal.screen
+        assert "quit" in terminal.screen
+        calls = len(requests)
+        terminal.resize(120, 40)
+        terminal.pump(0.2)
+        terminal.resize(40, 10)
+        terminal.pump(0.2)
+        assert len(requests) == calls, "resize dispatched a read"
+        terminal.send("\x1b")
+        terminal.wait("Ready terminal task")
+        expected_focus = b"38;2;8;126;140" if light else b"38;2;105;215;227"
+        assert expected_focus in terminal.raw, (
+            "terminal background did not select its readable palette"
+        )
+        terminal.quit()
+        assert TOKEN.encode() not in terminal.raw
+
+
+def test_hidden_native_confirmation_does_not_download(tmp_path):
+    reads = guide_reads()
+    with (
+        socket_peer(reads) as (origin, requests),
+        Terminal(origin, TOKEN, "--plain") as terminal,
+    ):
+        open_guide(terminal)
+        terminal.send("d")
+        terminal.wait("Download directory")
+        terminal.send(str(tmp_path))
+        terminal.send("\r")
+        terminal.wait("Confirm download")
+        terminal.resize(30, 8)
+        terminal.wait("Resize")
+        terminal.send("y")
+        terminal.pump(0.2)
+        assert not list(tmp_path.iterdir())
+        assert not any(
+            target == GUIDE_DOCUMENT["read_reference"] for _, target, _ in requests
+        )
+        terminal.resize(80, 24)
+        terminal.wait("Confirm download")
+        reveal_detail(terminal, "Expected SHA-256")
+        assert not list(tmp_path.iterdir())
+        terminal.send("y")
+        terminal.wait("Downloaded")
+        assert (tmp_path / f"{ACTOR}.md").read_bytes() == GUIDE_BYTES
+        terminal.quit()
 
 
 def test_guide_download_requires_confirmation_and_verifies_bytes(tmp_path):
@@ -410,7 +482,7 @@ def test_guide_and_findings_remain_navigable_in_narrow_terminal(surface):
             terminal.wait("Locked instructions")
         else:
             open_findings(terminal)
-            terminal.wait("FINDINGS")
+            terminal.wait("[Findings]")
             terminal.wait(RUN)
             terminal.send("c")
             terminal.wait("argument: findings")
@@ -499,10 +571,10 @@ def test_keyboard_journey_uses_only_nine_fresh_public_reads():
         terminal.send("\r")
         terminal.wait(SECRET)
         terminal.send("\t")
-        terminal.wait("CONTEXT")
+        terminal.wait("[Context]")
         terminal.wait("guide-1")
         terminal.send("\t")
-        terminal.wait("INTAKE")
+        terminal.wait("[Intake]")
         terminal.wait("answer.md")
         terminal.send("\x1b")
         terminal.wait("Assigned terminal task")
@@ -784,9 +856,11 @@ def test_hostile_text_resizing_plain_and_ctrl_c_restore_terminal(
         terminal.wait(SECRET)
         before = len(requests)
         terminal.resize(80, 24)
-        terminal.wait(TASK)
         terminal.wait(SECRET)
+        reveal_detail(terminal, TASK)
         assert TASK in terminal.screen
+        terminal.send("\x1b[5~")
+        terminal.wait(SECRET)
         assert len(requests) == before
         for forbidden in (
             b"\x1b]52;c;",

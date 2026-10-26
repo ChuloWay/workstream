@@ -74,6 +74,7 @@ class Terminal:
 
     def _screen_setup(self, columns, rows):
         self.columns, self.rows = columns, rows
+        self.light_background = False
         self.raw = bytearray()
         self.decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         self.pending = ""
@@ -169,7 +170,12 @@ class Terminal:
                     sequence = match.group()
                     self.pending = self.pending[match.end() :]
                     if sequence.startswith("\x1b]11;?"):
-                        self._write(b"\x1b]11;rgb:0000/0000/0000\x1b\\")
+                        background = (
+                            "ffff/ffff/ffff"
+                            if self.light_background
+                            else "0000/0000/0000"
+                        )
+                        self._write(f"\x1b]11;rgb:{background}\x1b\\".encode())
                     elif sequence.startswith("\x1b]10;?"):
                         self._write(b"\x1b]10;rgb:ffff/ffff/ffff\x1b\\")
                     continue
