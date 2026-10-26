@@ -26,6 +26,7 @@ PRE model access is unsupported: `configured_model_profile_selector` rejects mod
 - `external_checkers/deploy/workstream-checker.service` and `external_checkers/README.md`: align the existing native service configuration and document operator-managed provisioning and shutdown.
 - `scripts/verify_hosted_release_images.py`, `scripts/test_hosted_release_images.py`, `scripts/test_hosted_release_config.py` and existing focused deployment tests: qualify hosted backend images separately from native-node readiness, and exercise the rendered topology and meaningful refusal paths.
 - Existing `experiments/pilot04_external_checker_runtime/` public journey helpers and their focused `scripts/` tests: attach to the actual hosted API and durable workers, retain scoped fault injection and verify native acknowledgements without substituting an in-process API or recorded worker.
+- `.github/workflows/release-images.yml`: run the new hosted attachment/model qualification refusal tests in its existing frozen backend environment; include their paths without weakening or replacing existing image/runtime proof.
 - Owned disposable EC2 qualification resources, source-pinned release builds and isolated database/release records and newly owned content-addressed keys within the existing approved AWS namespace: exercise the rendered hosted release without modifying shared services or production state. Reuse the existing simulated RS256 issuer fixture and label its identity proof accurately.
 - `docs/decision_0014_external_service_adapter_convention.md`, `docs/architecture_checker_framework.md` and affected `docs/roadmap_status.md` claims: reconcile the intended hosted boundary and explicit evidence limits.
 - This combined change record.
@@ -203,3 +204,15 @@ account and primary group at the fixed IDs, with collision refusal and no Docker
 or sudo grant. The isolated node provisions only its newly owned service identity;
 existing accounts, services and `/etc/workstream` are preserved. This fixes the
 missing prerequisite without changing node privileges or execution behavior.
+
+Fresh baseline setup also lacked a usable registry ordering: it expected
+registered capabilities before bootstrapping the Operator allowed to register
+them. At `9db6d68b1`, the existing setup grants public Operator authority and then
+registers exactly the supplied PRE/POST capability identities through the public
+registry. Their image comes from the independently validated native cache; typed
+receipts must preserve the full spec digest, operation and actor. Root review and
+14 focused attachment tests passed, including refusal before mutation for a
+missing/ambiguous image and refusal of substituted replies. No hidden owner
+operation or second bootstrap was added. The release-image workflow now runs
+the attachment and model-qualification guard tests in its frozen backend
+environment, without changing existing deployment proof or timeout bounds.
