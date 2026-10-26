@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -16,6 +17,8 @@ const (
 	taskID       = "30000000-0000-7000-8000-000000000001"
 	submissionID = "40000000-0000-7000-8000-000000000001"
 	policyID     = "50000000-0000-7000-8000-000000000001"
+	runID        = "60000000-0000-7000-8000-000000000001"
+	findingID    = "70000000-0000-7000-8000-000000000001"
 )
 
 type fakeClient struct {
@@ -26,6 +29,8 @@ type fakeClient struct {
 	task                             func(context.Context, string) (api.Result[api.ContributorTaskDetail], error)
 	context                          func(context.Context, string) (api.Result[api.WorkContext], error)
 	intake                           func(context.Context, string) (api.Result[api.SubmissionRequirements], error)
+	findings                         func(context.Context, string, string, int, *string) (api.Result[api.SubmissionFindingsResult], error)
+	download                         func(context.Context, string, api.TaskGuideDocument, io.Writer) error
 	assignmentQuery, submissionQuery api.PageQuery
 }
 
@@ -87,6 +92,23 @@ func (f *fakeClient) SubmissionRequirements(ctx context.Context, id string) (api
 func (f *fakeClient) Submission(context.Context, string) (api.Result[api.SubmissionHistory], error) {
 	f.calls = append(f.calls, "submission")
 	return api.Result[api.SubmissionHistory]{Value: api.SubmissionHistory{ID: submissionID, Task: taskID, Status: "review_pending", Summary: "Stored summary"}}, nil
+}
+func (f *fakeClient) SubmissionFindings(ctx context.Context, submission, run string, limit int, cursor *string) (api.Result[api.SubmissionFindingsResult], error) {
+	f.calls = append(f.calls, "findings")
+	if f.findings != nil {
+		return f.findings(ctx, submission, run, limit, cursor)
+	}
+	page := api.SubmissionCheckerPage{Items: []api.SubmissionCheckerRun{{ID: runID, Task: taskID, Submission: submission, Status: "completed", Current: true,
+		Results: []api.ContributorFinding{{ID: findingID, Checker: "lint", Status: "passed", Severity: "info"}}}}}
+	return api.Result[api.SubmissionFindingsResult]{Value: api.SubmissionFindingsResult{Page: &page}}, nil
+}
+func (f *fakeClient) DownloadGuideDocument(ctx context.Context, task string, document api.TaskGuideDocument, target io.Writer) error {
+	f.calls = append(f.calls, "download")
+	if f.download != nil {
+		return f.download(ctx, task, document, target)
+	}
+	_, err := target.Write([]byte("guide"))
+	return err
 }
 
 func apply(t *testing.T, m *Model, cmd tea.Cmd) {

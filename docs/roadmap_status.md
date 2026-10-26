@@ -56,11 +56,14 @@ atomic retry evidence. The CLI consumes all nine existing routes through
 hosted S3 operation remains a separate proof boundary.
 The [CLI distribution path](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-44.md)
 prepares native four-platform GitHub Releases proof and a protected manual
-publisher. No approved release tag or public binary has been published yet.
+publisher. Publication and public-installation verification are tracked in
+[#562](https://github.com/Flow-Research/workstream/issues/562); a tag or passing
+build alone is not public distribution.
 The opt-in [contributor terminal workbench](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-48.md)
 adds local read-only project/task/Submission navigation through existing typed
-public reads. Detailed findings and contribution evidence remain explicit CLI
-handoffs; TUI mutations and management are separate work. Neither this interface
+public reads. WS-CLI-001-49 adds paged detailed findings and explicit verified
+locked-guide downloads. Contribution evidence remains an explicit CLI
+handoff; TUI product mutations and management are separate work. Neither this interface
 nor release automation establishes hosted operation or a published binary.
 
 ## Product Goal
@@ -452,8 +455,10 @@ projects, Ready tasks, active own assignments and own Submissions, with fresh
 task/attempt details and explicit Mine context/intake reads. It uses the existing
 API client, one page per deliberate continuation and no local authority rules.
 Denial removes affected content; late responses cannot replace the current
-view. Detailed findings/Evidence are inert CLI handoffs, not automatic export.
-All writes, downloads, polling, management forms and operation-specific recovery
+view. WS-CLI-001-49 adds Guide selection and confirmed single-document downloads
+through shared private staging and no-overwrite publication, plus exact-Submission
+paged Findings. Evidence remains an inert CLI handoff, not automatic export.
+Product writes, polling, management forms and operation-specific recovery
 remain outside this bounded workbench. Explicit text/JSON commands stay usable
 without a terminal.
 The [Operator checker CLI](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-29.md)
@@ -591,7 +596,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Review decision and revision | **Checker revision implemented; human decisions planned** | Review/revision policy identities and mutation authority, with `requires_second_review` fixed false through typed and database boundaries; REV-04A immutable Review storage; REV-04B source storage; REV-04C hidden source-neutral FinalAcceptance/TASK/CON participant; ARCH-04E2-B source AUTH and complete database/audit/outbox closure for hidden automated outcomes. PILOT-08 supplies required project-policy N>=0, assignment-scoped attempts, immediate exhaustion/release, atomic complete-context rebase and acknowledgement, setup-blocked clock pause/resume, PM attention/repair, and durable timeout rejection/reclaim. The CLI now makes the existing exact manager repair POST available with caller-owned key and source, preserving backend eligibility and replay authority | Genuine human decision authority/composition and revision integration remain #554 work under the same intended policy; hosted operation remains unproven |
 | Contribution and compensation truth | **Hidden shared participant plus public policy administration** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings and project-points units (internal Finance commands); public Finance policy administration; REV-04B shared acceptance source storage; CON-03C immutable ContributionRecord/CompensationAward storage; obsolete guide-keyed payment storage and task-local payment fields removed; CON-07 source-neutral submitter participant and complete frozen award sets; REV-04C composes it with FinalAcceptance/TASK effects in the caller transaction; 04F2 checker remediation and terminal infrastructure retry create no contribution or award. The bounded local public drill produced exactly one false-policy FinalAcceptance, submitter ContributionRecord and project-points award, with no Review | ARCH-04E2-B supplies exact routing authority/evidence, complete-set database closure and audit/outbox under REV-12A4A. Selected production request/completion delivery, 04F3 exact-cause replacement and the 04F4 owner with supported public terminal recovery are implemented; supported false-guide activation is implemented. Only actual Reviews create reviewer records. Obligation/root/ordinal custody remains deferred until fulfillment activation; no public recognition or fulfillment route is live |
 | Contribution evidence reads | **Public fixed-membership REST and complete CLI export** | PILOT-10A exposes current human self-read and one-project JSON/CSV export for covering Project Managers or exact-project Finance Authorities. Each page has fresh authority and one repeatable-read response transaction; selections through 100,000 contributions retain page-one membership behind signed scope/filter/format/limit-bound cursors, with complete zero/one/two immutable awards, exact decimals, recorded-time filters and formula-neutralized CSV. The CLI follows JSON or CSV continuation internally with unchanged filters, validates cross-page order/identity, and publishes only the complete JSON result or one private no-overwrite CSV | No recognition mutation, fulfillment, payout, deployed-service or published-binary claim |
-| CLI and terminal interface | **Public CLI clients and opt-in read-only contributor workbench** | Existing explicit commands retain text/JSON/noninteractive behavior. [WS-CLI-001-48](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-48.md) adds exact-grant project, Ready/active Mine/own Submission browsing and fresh details/context/intake through nine existing typed reads, with explicit pagination and fresh-denial handling | Detailed findings/Evidence remain manual CLI handoffs; a shared typed single-page contribution port precedes in-TUI Evidence. TUI writes/recovery and management remain separate. Protected first binary publication and hosted journey proof remain outstanding |
+| CLI and terminal interface | **Public CLI clients and opt-in contributor read workbench** | Existing explicit commands retain text/JSON/noninteractive behavior. [WS-CLI-001-48](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-48.md) adds exact-grant project, Ready/active Mine/own Submission browsing and fresh details/context/intake with explicit pagination and fresh-denial handling. [WS-CLI-001-49](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-49.md) adds locked-guide metadata, confirmed verified local downloads and paged checker findings through the shared client | Contribution Evidence remains a manual CLI handoff; a shared typed single-page contribution port precedes in-TUI Contribution Evidence. TUI product writes/recovery and management remain separate. Protected first binary publication and hosted journey proof remain outstanding |
 | Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention, AUTH-OUTBOX-02 live dispatcher authority, retained phase audit decisions, Celery delivery/recovery scans and CON-02B custody | Feature-specific handlers and authority, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
 | Runtime diagnostics | **Implemented foundation; release configuration prepared** | Closed structured logging, explicit API/Celery tracing, bounded metrics, safe correlation and optional typed OTLP export; hosted composition accepts only an optional HTTPS collector origin and keeps exporter outage outside product correctness | Restrict broker publishers; configure and secure collector/log access, egress, encryption and finite deletion; prove privacy, correlation and collector outage during the deployed release drill; no deployed monitoring claim |
 | Frontend and pilot | **Local runtime foundation; release configuration prepared; project inputs prepared** | An original [Terminal Systems guide, example and five task briefs](../pilots/terminal_systems/README.md) provide inputs for fresh project onboarding. The fixed five-task sample, its checker, private runtime continuation and sample-only proof workflow are retired. Checkout-isolated Docker Compose API, prefork Celery, Beat, PostgreSQL, Redis and MinIO remain available, alongside digest-only hosted backend composition and the existing native Smol image service. The generic image command tests project samples and publishes a verified digest to ECR without registering or activating it. The opt-in [local agent-loop overlay](engineering/local-agent-loop.md) adds that service, a separately built networkless proof checker and operator scripts; Docker Desktop (Apple Silicon) proof covers registration, checker execution and lifecycle activation, not this project’s requirements. Setup supports inference and explicitly manager-authored rules through the same governed proposal path. Inference is limited to PRE/POST specifications, with strict JSON and bounded correction; PM policy choices remain separate. The retained real Terminal Systems proposal preserves null project limits on the unchanged guide; its independent review predates the PRE/POST-only scope, with ten explicit implementation/runtime gaps and no bindings in that retained proposal. The [project-owned PRE image](../pilots/terminal_systems/checkers/README.md) now implements layout and metadata intake with local rule and networkless container samples; it has no task-name allowlist or shared-runner project code. The independent offline gVisor feasibility spike remains historical mechanism evidence | Obtain a fresh PRE/POST-only correction of the retained proposal, then reconcile the implemented PRE image, implement the remaining POST checks and resolve their runtime/material gaps; register the required images, obtain corrected policy bindings and separate approvals, then activate, import, screen and release tasks. Then prove the real contribution journey, runtime limits and interruption recovery on the intended local/hosted stack. Guide assets, image builds and former sample results are not live-project evidence. Hosted identity/AWS configuration, isolation, diagnostics, backup/restore and broader macOS runtime proof remain; the agent-loop overlay still needs approved guide bindings and a persistent-stack FinalAcceptance drill |
@@ -931,8 +936,10 @@ cannot be reused as post-submission review-gate evidence. See the
   `project list`, without changing exact-grant `me projects`.
   The [read-only contributor TUI](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-48.md)
   uses those existing typed reads for one-page navigation and fresh details,
-  without changing product authority or adding writes. Detailed findings and
-  contribution evidence remain manual CLI handoffs; broader TUI work remains
+  without changing product authority or adding product writes.
+  [WS-CLI-001-49](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-49.md)
+  adds confirmed verified locked-guide downloads and paged checker findings.
+  Contribution Evidence remains a manual CLI handoff; broader TUI work remains
   separate. Further public commands require their own usable API contracts;
   binary-release automation is prepared, while protected first publication
   remains outstanding. CLI reads do not complete unfinished product lifecycle work.
@@ -1366,7 +1373,9 @@ Delivered foundations (bounded local journey proven; no deployment claim)
   WS-CLI-001-44 native CLI release proof + gated manual publisher (not yet published)
   WS-CLI-001-48 existing typed public reads -> opt-in read-only contributor TUI
     exact-grant projects -> Ready / active Mine / own Submissions -> fresh detail
-    explicit Mine context/intake; findings/Evidence -> manual CLI handoff
+    explicit Mine context/intake
+  WS-CLI-001-49 -> locked-guide metadata + confirmed verified local download
+    own Submission -> paged checker findings; Contribution Evidence -> manual CLI handoff
     later Evidence needs typed single-page port; writes need per-operation recovery
   task/assignment/Submission lineage + public ZIP intake/admission-backed creation
   ARCH-03D exact approved historical guide through durable intake handoff
@@ -1499,7 +1508,7 @@ and award history never changes.
 ## Remaining Release Gates
 
 Client scope remains distinct from product completion: the local read-only TUI
-does not complete human review, payment or hosted proof. In-TUI evidence and
+does not complete human review, payment or hosted proof. In-TUI Contribution Evidence and
 mutations are separate optional interface boundaries, not new backend lifecycle
 prerequisites. CLI binary distribution still requires protected publication and
 independent public-asset/install verification.

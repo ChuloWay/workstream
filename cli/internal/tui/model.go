@@ -26,6 +26,14 @@ type row struct {
 	id, task, project, title, status string
 }
 
+type guideMode int
+
+const (
+	guideBrowse guideMode = iota
+	guideDestination
+	guideConfirm
+)
+
 // Model owns one fetched page and one exact detail, never an authority cache.
 type Model struct {
 	client                                            ReadClient
@@ -53,6 +61,13 @@ type Model struct {
 	context                                           *api.WorkContext
 	intake                                            *api.SubmissionRequirements
 	submission                                        *api.SubmissionHistory
+	findings                                          *api.SubmissionCheckerPage
+	findingsCursor, findingsPageCursor                string
+	findingsPage                                      int
+	guideSelected                                     int
+	guideMode                                         guideMode
+	guideDirectory, guideNotice                       string
+	download                                          *guideDownload
 	viewport                                          viewport.Model
 }
 
@@ -95,13 +110,19 @@ func (m *Model) invalidate() {
 		m.cancel()
 		m.cancel = nil
 	}
+	if m.download != nil {
+		m.download.abort()
+		m.download = nil
+	}
 	m.generation++
 	m.loading = false
 }
 
 func (m *Model) clearDetail() {
 	m.detail, m.section = false, 0
-	m.task, m.context, m.intake, m.submission = nil, nil, nil, nil
+	m.task, m.context, m.intake, m.submission, m.findings = nil, nil, nil, nil, nil
+	m.findingsCursor, m.findingsPageCursor, m.findingsPage = "", "", 1
+	m.guideSelected, m.guideMode, m.guideDirectory, m.guideNotice = 0, guideBrowse, "", ""
 	m.handoff = false
 	m.viewport.GotoTop()
 }
@@ -139,7 +160,7 @@ func (m *Model) selectedRow() (row, bool) {
 
 func (m *Model) key(key tea.KeyPressMsg) tea.Cmd {
 	k := key.String()
-	if k == "ctrl+c" || (!m.filtering && k == "q") {
+	if k == "ctrl+c" || (!m.filtering && m.guideMode != guideDestination && k == "q") {
 		m.closed = true
 		m.invalidate()
 		m.stop()
@@ -162,6 +183,36 @@ func (m *Model) key(key tea.KeyPressMsg) tea.Cmd {
 			}
 		}
 		m.selected = 0
+		return nil
+	}
+	if m.guideMode == guideDestination {
+		switch k {
+		case "enter":
+			if m.guideDirectory != "" {
+				m.guideMode = guideConfirm
+			}
+		case "esc":
+			m.guideMode, m.guideDirectory = guideBrowse, ""
+		case "backspace":
+			_, size := utf8.DecodeLastRuneInString(m.guideDirectory)
+			if size > 0 {
+				m.guideDirectory = m.guideDirectory[:len(m.guideDirectory)-size]
+			}
+		default:
+			if key.Text != "" && len(m.guideDirectory)+len(key.Text) <= 4096 {
+				m.guideDirectory += key.Text
+			}
+		}
+		return nil
+	}
+	if m.guideMode == guideConfirm {
+		if k == "esc" {
+			m.guideMode, m.guideDirectory = guideBrowse, ""
+			return nil
+		}
+		if k == "y" {
+			return m.beginGuideDownload()
+		}
 		return nil
 	}
 	if k == "?" {
@@ -195,6 +246,13 @@ func (m *Model) key(key tea.KeyPressMsg) tea.Cmd {
 		return m.scroll(k)
 	}
 	if k == "esc" && m.detail {
+		if m.tab == submissions && m.section == 1 {
+			m.invalidate()
+			m.section, m.findings = 0, nil
+			m.findingsCursor, m.findingsPageCursor, m.findingsPage = "", "", 1
+			m.viewport.GotoTop()
+			return nil
+		}
 		m.invalidate()
 		m.clearDetail()
 		m.failure = ""
@@ -207,12 +265,13 @@ func (m *Model) key(key tea.KeyPressMsg) tea.Cmd {
 		return m.begin(pageRead)
 	}
 	if k == "r" {
-		if m.loading {
-			return nil
-		}
 		if m.detail {
+			m.guideNotice = ""
+			if m.tab == submissions && m.section == 1 {
+				m.findings, m.findingsCursor, m.findingsPageCursor, m.findingsPage = nil, "", "", 1
+				return m.begin(findingsRead)
+			}
 			m.context, m.intake, m.task, m.submission = nil, nil, nil, nil
-			m.section = 0
 			return m.begin(m.detailKind())
 		}
 		m.clearPage()
@@ -229,14 +288,51 @@ func (m *Model) key(key tea.KeyPressMsg) tea.Cmd {
 	}
 	if m.detail {
 		if k == "tab" && m.tab == mine {
-			m.section = (m.section + 1) % 3
+			m.section = (m.section + 1) % 4
 			m.viewport.GotoTop()
 			switch m.section {
 			case 1:
 				return m.begin(contextRead)
 			case 2:
 				return m.begin(intakeRead)
+			case 3:
+				return m.begin(contextRead)
 			}
+		}
+		if k == "tab" && m.tab == submissions {
+			m.invalidate()
+			m.section = (m.section + 1) % 2
+			m.viewport.GotoTop()
+			if m.section == 1 {
+				m.findings, m.findingsCursor, m.findingsPageCursor, m.findingsPage = nil, "", "", 1
+				return m.begin(findingsRead)
+			}
+			m.findings = nil
+			return nil
+		}
+		if m.tab == mine && m.section == 3 && m.context != nil {
+			switch k {
+			case "up":
+				m.guideSelected = max(0, m.guideSelected-1)
+			case "down":
+				m.guideSelected = min(max(0, len(m.context.GuideDocuments)-1), m.guideSelected+1)
+			case "d":
+				if len(m.context.GuideDocuments) > 0 {
+					m.guideMode, m.guideDirectory, m.guideNotice = guideDestination, "", ""
+				}
+			default:
+				return m.scroll(k)
+			}
+			return nil
+		}
+		if m.tab == submissions && m.section == 1 {
+			if k == "n" && m.findingsCursor != "" {
+				cursor := m.findingsCursor
+				m.findings, m.findingsCursor = nil, ""
+				m.findingsPage++
+				return m.beginCursor(findingsRead, cursor)
+			}
+			return m.scroll(k)
 		}
 		return m.scroll(k)
 	}
@@ -277,7 +373,16 @@ func (m *Model) key(key tea.KeyPressMsg) tea.Cmd {
 
 func (m *Model) detailKind() readKind {
 	if m.tab == submissions {
+		if m.section == 1 {
+			return findingsRead
+		}
 		return submissionRead
+	}
+	switch m.section {
+	case 1, 3:
+		return contextRead
+	case 2:
+		return intakeRead
 	}
 	return taskRead
 }
