@@ -1,21 +1,206 @@
-//! Inspect candidate layers before granting Docker any decompression work.
+//! Inspect candidate image archives before granting a sandbox runtime decompression work.
 
-use super::{tar_octal, tar_text, validate_tar_checksum, RuntimeControlFailure};
 use flate2::read::MultiGzDecoder;
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
+use std::path::Path;
 use std::time::Instant;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ImageArchiveFailure {
+    Invalid,
+    CapacityExceeded,
+    DeadlineExceeded,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct ValidatedImageArchive {
+    pub(crate) expanded_bytes: u64,
+    pub(crate) expanded_entries: u64,
+    pub(crate) config_image_id: String,
+    pub(crate) platform: String,
+    pub(crate) environment: Vec<String>,
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
-pub(super) struct ExpandedImage {
-    pub(super) bytes: u64,
-    pub(super) entries: u64,
+pub(crate) struct ExpandedImage {
+    pub(crate) bytes: u64,
+    pub(crate) entries: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ImageArchiveManifest {
+    #[serde(rename = "Config")]
+    config: String,
+    #[serde(rename = "RepoTags")]
+    repo_tags: Vec<String>,
+    #[serde(rename = "Layers")]
+    layers: Vec<String>,
+}
+
+pub(crate) fn validate_single_image_archive(
+    archive: &Path,
+    expected_tag: &str,
+    expected_platform: &str,
+    maximum_bytes: u64,
+    maximum_expanded_bytes: u64,
+    maximum_expanded_entries: u64,
+    deadline: Instant,
+) -> Result<ValidatedImageArchive, ImageArchiveFailure> {
+    let mut file = File::open(archive).map_err(|_| invalid())?;
+    let length = file.metadata().map_err(|_| invalid())?.len();
+    if length == 0 || length > maximum_bytes || length % 512 != 0 {
+        return Err(invalid());
+    }
+    let mut offset = 0_u64;
+    let mut manifest = None;
+    let mut entries = HashMap::new();
+    while offset.saturating_add(512) <= length {
+        file.seek(SeekFrom::Start(offset)).map_err(|_| invalid())?;
+        let mut header = [0_u8; 512];
+        file.read_exact(&mut header).map_err(|_| invalid())?;
+        if header.iter().all(|byte| *byte == 0) {
+            if length.saturating_sub(offset) < 1024 {
+                return Err(invalid());
+            }
+            file.seek(SeekFrom::Start(offset)).map_err(|_| invalid())?;
+            let mut trailing = vec![0_u8; (length - offset) as usize];
+            file.read_exact(&mut trailing).map_err(|_| invalid())?;
+            if trailing.iter().any(|byte| *byte != 0) {
+                return Err(invalid());
+            }
+            offset = length;
+            break;
+        }
+        validate_tar_checksum(&header)?;
+        if !matches!(header[156], 0 | b'0') || header[157..257].iter().any(|byte| *byte != 0) {
+            return Err(invalid());
+        }
+        let name = tar_text(&header[0..100])?;
+        let prefix = tar_text(&header[345..500])?;
+        let path = if prefix.is_empty() {
+            name
+        } else {
+            format!("{prefix}/{name}")
+        };
+        if !valid_archive_path(&path)
+            || entries.len() >= 4096
+            || entries.contains_key(&path)
+            || path == "repositories"
+        {
+            return Err(invalid());
+        }
+        let size = tar_octal(&header[124..136])?;
+        let data = offset.checked_add(512).ok_or_else(invalid)?;
+        let padded = size
+            .checked_add(511)
+            .map(|value| value / 512 * 512)
+            .ok_or_else(invalid)?;
+        offset = data
+            .checked_add(padded)
+            .filter(|value| *value <= length)
+            .ok_or_else(invalid)?;
+        entries.insert(path.clone(), (data, size));
+        if path == "manifest.json" {
+            if manifest.is_some() || size > 1024 * 1024 {
+                return Err(invalid());
+            }
+            file.seek(SeekFrom::Start(data)).map_err(|_| invalid())?;
+            let mut bytes = vec![0_u8; size as usize];
+            file.read_exact(&mut bytes).map_err(|_| invalid())?;
+            manifest = Some(bytes);
+        }
+    }
+    if offset != length {
+        return Err(invalid());
+    }
+    let manifest = manifest.ok_or_else(invalid)?;
+    let manifests: Vec<ImageArchiveManifest> =
+        serde_json::from_slice(&manifest).map_err(|_| invalid())?;
+    if manifests.len() != 1 {
+        return Err(invalid());
+    }
+    let manifest = manifests.first().expect("length checked");
+    let config_digest = if valid_sha256(&manifest.config) {
+        &manifest.config[7..]
+    } else if manifest.config.len() == 69
+        && manifest.config.ends_with(".json")
+        && manifest.config[..64]
+            .bytes()
+            .all(|item| item.is_ascii_hexdigit() && !item.is_ascii_uppercase())
+    {
+        &manifest.config[..64]
+    } else {
+        return Err(invalid());
+    };
+    if manifest.repo_tags.as_slice() != [expected_tag] || manifest.layers.is_empty() {
+        return Err(invalid());
+    }
+    let Some((config_offset, config_size)) = entries.get(&manifest.config).copied() else {
+        return Err(invalid());
+    };
+    if config_size == 0 || config_size > 16 * 1024 * 1024 {
+        return Err(invalid());
+    }
+    file.seek(SeekFrom::Start(config_offset))
+        .map_err(|_| invalid())?;
+    let mut config_bytes = vec![0_u8; config_size as usize];
+    file.read_exact(&mut config_bytes).map_err(|_| invalid())?;
+    if format!("{:x}", Sha256::digest(&config_bytes)) != config_digest {
+        return Err(invalid());
+    }
+    let mut referenced = HashSet::from(["manifest.json".to_owned(), manifest.config.clone()]);
+    for layer in &manifest.layers {
+        if !valid_archive_path(layer)
+            || layer == "manifest.json"
+            || layer == &manifest.config
+            || !entries.contains_key(layer)
+        {
+            return Err(invalid());
+        }
+        referenced.insert(layer.clone());
+    }
+    if referenced.len() != entries.len() {
+        return Err(invalid());
+    }
+    let expanded = validate_layers(
+        &mut file,
+        &entries,
+        &manifest.layers,
+        &config_bytes,
+        maximum_expanded_bytes,
+        maximum_expanded_entries,
+        deadline,
+    )?;
+    let config: serde_json::Value = serde_json::from_slice(&config_bytes).map_err(|_| invalid())?;
+    let os = config
+        .get("os")
+        .and_then(|value| value.as_str())
+        .ok_or_else(invalid)?;
+    let architecture = config
+        .get("architecture")
+        .and_then(|value| value.as_str())
+        .ok_or_else(invalid)?;
+    let platform = format!("{os}/{architecture}");
+    if platform != expected_platform {
+        return Err(invalid());
+    }
+    let environment = validated_environment(&config)?;
+    Ok(ValidatedImageArchive {
+        expanded_bytes: expanded.bytes,
+        expanded_entries: expanded.entries,
+        config_image_id: format!("sha256:{config_digest}"),
+        platform,
+        environment,
+    })
 }
 
 /// Charge every layer, including repeated content, without materializing it.
-pub(super) fn validate_layers(
+pub(crate) fn validate_layers(
     file: &mut File,
     entries: &HashMap<String, (u64, u64)>,
     layers: &[String],
@@ -23,7 +208,7 @@ pub(super) fn validate_layers(
     maximum_bytes: u64,
     maximum_entries: u64,
     deadline: Instant,
-) -> Result<ExpandedImage, RuntimeControlFailure> {
+) -> Result<ExpandedImage, ImageArchiveFailure> {
     let config: serde_json::Value = serde_json::from_slice(config).map_err(|_| invalid())?;
     validate_runtime_configuration(&config)?;
     let rootfs = config.get("rootfs").ok_or_else(invalid)?;
@@ -41,7 +226,7 @@ pub(super) fn validate_layers(
     for (layer, expected_digest) in layers.iter().zip(diff_ids) {
         let (offset, size) = *entries.get(layer).ok_or_else(invalid)?;
         if Instant::now() >= deadline {
-            return Err(RuntimeControlFailure::DeadlineExceeded);
+            return Err(ImageArchiveFailure::DeadlineExceeded);
         }
         if size < 2 {
             return Err(invalid());
@@ -74,7 +259,7 @@ pub(super) fn validate_layers(
     Ok(expanded)
 }
 
-fn validate_runtime_configuration(config: &serde_json::Value) -> Result<(), RuntimeControlFailure> {
+fn validate_runtime_configuration(config: &serde_json::Value) -> Result<(), ImageArchiveFailure> {
     // Docker creates image-declared anonymous volumes before the trusted
     // launcher runs. They would sit outside its bounded filesystem and owner
     // ledger, so this runtime does not admit that image capability.
@@ -84,6 +269,43 @@ fn validate_runtime_configuration(config: &serde_json::Value) -> Result<(), Runt
         }
     }
     Ok(())
+}
+
+fn validated_environment(config: &serde_json::Value) -> Result<Vec<String>, ImageArchiveFailure> {
+    let Some(environment) = config.get("config").and_then(|value| value.get("Env")) else {
+        return Ok(Vec::new());
+    };
+    if environment.is_null() {
+        return Ok(Vec::new());
+    }
+    let environment = environment.as_array().ok_or_else(invalid)?;
+    if environment.len() > 1024 {
+        return Err(invalid());
+    }
+    let mut total = 0_usize;
+    let mut names = HashSet::new();
+    environment
+        .iter()
+        .map(|value| {
+            let value = value.as_str().ok_or_else(invalid)?;
+            let (name, _) = value.split_once('=').ok_or_else(invalid)?;
+            let mut characters = name.bytes();
+            if value.len() > 8192
+                || !characters
+                    .next()
+                    .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
+                || !characters.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                || !names.insert(name.to_owned())
+            {
+                return Err(invalid());
+            }
+            total = total.checked_add(value.len()).ok_or_else(capacity)?;
+            if total > 1024 * 1024 {
+                return Err(capacity());
+            }
+            Ok(value.to_owned())
+        })
+        .collect()
 }
 
 struct LayerStream<'a> {
@@ -96,9 +318,9 @@ struct LayerStream<'a> {
 }
 
 impl LayerStream<'_> {
-    fn read(&mut self, output: &mut [u8]) -> Result<usize, RuntimeControlFailure> {
+    fn read(&mut self, output: &mut [u8]) -> Result<usize, ImageArchiveFailure> {
         if Instant::now() >= self.deadline {
-            return Err(RuntimeControlFailure::DeadlineExceeded);
+            return Err(ImageArchiveFailure::DeadlineExceeded);
         }
         let count = self.reader.read(output).map_err(|_| invalid())?;
         self.expanded.bytes = self
@@ -113,7 +335,7 @@ impl LayerStream<'_> {
         Ok(count)
     }
 
-    fn exact(&mut self, mut output: &mut [u8]) -> Result<(), RuntimeControlFailure> {
+    fn exact(&mut self, mut output: &mut [u8]) -> Result<(), ImageArchiveFailure> {
         while !output.is_empty() {
             let count = self.read(output)?;
             if count == 0 {
@@ -124,7 +346,7 @@ impl LayerStream<'_> {
         Ok(())
     }
 
-    fn discard(&mut self, mut bytes: u64) -> Result<(), RuntimeControlFailure> {
+    fn discard(&mut self, mut bytes: u64) -> Result<(), ImageArchiveFailure> {
         let mut buffer = [0; 32 * 1024];
         while bytes != 0 {
             let count = usize::try_from(bytes.min(buffer.len() as u64)).map_err(|_| invalid())?;
@@ -134,7 +356,7 @@ impl LayerStream<'_> {
         Ok(())
     }
 
-    fn charge_entries(&mut self, count: u64) -> Result<(), RuntimeControlFailure> {
+    fn charge_entries(&mut self, count: u64) -> Result<(), ImageArchiveFailure> {
         self.expanded.entries = self
             .expanded
             .entries
@@ -156,7 +378,7 @@ impl LayerStream<'_> {
     }
 }
 
-fn inspect_tar(stream: &mut LayerStream<'_>) -> Result<(), RuntimeControlFailure> {
+fn inspect_tar(stream: &mut LayerStream<'_>) -> Result<(), ImageArchiveFailure> {
     let mut next_path: Option<String> = None;
     let mut metadata_pending = false;
     loop {
@@ -245,7 +467,7 @@ fn inspect_tar(stream: &mut LayerStream<'_>) -> Result<(), RuntimeControlFailure
     }
 }
 
-fn path_entries(path: &str) -> Result<u64, RuntimeControlFailure> {
+fn path_entries(path: &str) -> Result<u64, ImageArchiveFailure> {
     if path.is_empty() || path.len() > 4096 || path.starts_with('/') || path.contains('\0') {
         return Err(invalid());
     }
@@ -260,7 +482,7 @@ fn path_entries(path: &str) -> Result<u64, RuntimeControlFailure> {
     Ok(count.max(1))
 }
 
-fn pax_path(bytes: &[u8]) -> Result<Option<String>, RuntimeControlFailure> {
+fn pax_path(bytes: &[u8]) -> Result<Option<String>, ImageArchiveFailure> {
     let mut remaining = bytes;
     let mut path = None;
     let mut keys = std::collections::HashSet::new();
@@ -298,11 +520,69 @@ fn pax_path(bytes: &[u8]) -> Result<Option<String>, RuntimeControlFailure> {
     Ok(path)
 }
 
-fn invalid() -> RuntimeControlFailure {
-    RuntimeControlFailure::InvalidObservation
+fn valid_archive_path(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 4096
+        && !value.starts_with('/')
+        && !value.ends_with('/')
+        && !value.contains('\\')
+        && value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'.' | b'_' | b'-' | b':')
+        })
+        && value
+            .split('/')
+            .all(|part| !part.is_empty() && part != "." && part != "..")
 }
-fn capacity() -> RuntimeControlFailure {
-    RuntimeControlFailure::CapacityExceeded
+
+fn validate_tar_checksum(header: &[u8; 512]) -> Result<(), ImageArchiveFailure> {
+    let expected = tar_octal(&header[148..156])?;
+    let actual: u64 = header
+        .iter()
+        .enumerate()
+        .map(|(index, byte)| {
+            if (148..156).contains(&index) {
+                u64::from(b' ')
+            } else {
+                u64::from(*byte)
+            }
+        })
+        .sum();
+    if actual != expected {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn tar_text(bytes: &[u8]) -> Result<String, ImageArchiveFailure> {
+    let end = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
+    std::str::from_utf8(&bytes[..end])
+        .map(str::to_owned)
+        .map_err(|_| invalid())
+}
+
+fn tar_octal(bytes: &[u8]) -> Result<u64, ImageArchiveFailure> {
+    let text = std::str::from_utf8(bytes)
+        .map_err(|_| invalid())?
+        .trim_matches(|character| character == '\0' || character == ' ');
+    u64::from_str_radix(text, 8).map_err(|_| invalid())
+}
+
+fn valid_sha256(value: &str) -> bool {
+    value.len() == 71
+        && value.starts_with("sha256:")
+        && value[7..]
+            .bytes()
+            .all(|item| item.is_ascii_hexdigit() && !item.is_ascii_uppercase())
+}
+
+fn invalid() -> ImageArchiveFailure {
+    ImageArchiveFailure::Invalid
+}
+fn capacity() -> ImageArchiveFailure {
+    ImageArchiveFailure::CapacityExceeded
 }
 
 #[cfg(test)]
@@ -350,7 +630,7 @@ mod tests {
         copies: usize,
         bytes: u64,
         entries: u64,
-    ) -> Result<ExpandedImage, RuntimeControlFailure> {
+    ) -> Result<ExpandedImage, ImageArchiveFailure> {
         let path = std::env::temp_dir().join(format!(
             "ws-image-layers-{}-{}",
             std::process::id(),
@@ -379,6 +659,84 @@ mod tests {
             entries,
             Instant::now() + Duration::from_secs(5),
         )
+    }
+
+    fn archive(config: serde_json::Value) -> Vec<u8> {
+        let plain = layer("usr/bin/value", b"value");
+        let mut config = config;
+        config["rootfs"] = serde_json::json!({
+            "type": "layers",
+            "diff_ids": [format!("sha256:{:x}", Sha256::digest(&plain))],
+        });
+        let config = serde_json::to_vec(&config).unwrap();
+        let config_name = format!("{:x}.json", Sha256::digest(&config));
+        let manifest = serde_json::to_vec(&serde_json::json!([{
+            "Config": config_name,
+            "RepoTags": ["workstream-trial:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+            "Layers": ["layer.tar"],
+        }]))
+        .unwrap();
+        let mut result = entry("manifest.json", b'0', &manifest);
+        result.extend(entry(&config_name, b'0', &config));
+        result.extend(entry("layer.tar", b'0', &plain));
+        result.extend([0; 1024]);
+        result
+    }
+
+    fn validate_archive(
+        bytes: &[u8],
+        platform: &str,
+    ) -> Result<ValidatedImageArchive, ImageArchiveFailure> {
+        let path = std::env::temp_dir().join(format!(
+            "ws-image-archive-{}-{}",
+            std::process::id(),
+            SEQUENCE.fetch_add(1, Ordering::SeqCst)
+        ));
+        std::fs::write(&path, bytes).unwrap();
+        let result = validate_single_image_archive(
+            &path,
+            "workstream-trial:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            platform,
+            1024 * 1024,
+            1024 * 1024,
+            4096,
+            Instant::now() + Duration::from_secs(5),
+        );
+        std::fs::remove_file(path).unwrap();
+        result
+    }
+
+    #[test]
+    fn archive_platform_and_environment_are_exact_pre_import_facts() {
+        let bytes = archive(serde_json::json!({
+            "os": "linux",
+            "architecture": "amd64",
+            "config": {"Env": ["PATH=/bin", "VALUE=one"]},
+        }));
+        let validated = validate_archive(&bytes, "linux/amd64").unwrap();
+        assert_eq!(validated.platform, "linux/amd64");
+        assert_eq!(validated.environment, ["PATH=/bin", "VALUE=one"]);
+        assert!(validated.config_image_id.starts_with("sha256:"));
+        assert_eq!(
+            validate_archive(&bytes, "linux/arm64"),
+            Err(ImageArchiveFailure::Invalid)
+        );
+
+        for environment in [
+            serde_json::json!(["missing_separator"]),
+            serde_json::json!(["DUP=one", "DUP=two"]),
+            serde_json::json!(["1INVALID=value"]),
+        ] {
+            let malformed = archive(serde_json::json!({
+                "os": "linux",
+                "architecture": "amd64",
+                "config": {"Env": environment},
+            }));
+            assert_eq!(
+                validate_archive(&malformed, "linux/amd64"),
+                Err(ImageArchiveFailure::Invalid)
+            );
+        }
     }
 
     #[test]

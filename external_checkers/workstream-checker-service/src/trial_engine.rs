@@ -16,6 +16,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use workstream_checker_sdk::canonical_hash;
 
+pub(crate) mod image_archive;
+
 static ENGINE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug)]
@@ -109,9 +111,10 @@ pub(crate) struct SandboxFailure {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SandboxBackendIdentity {
     pub(crate) engine_identity_digest: String,
+    pub(crate) guest_binary_digest: String,
     pub(crate) child_runtime: String,
     pub(crate) child_runtime_config_digest: String,
-    pub(crate) child_host_uds: String,
+    pub(crate) child_transport: String,
     pub(crate) platform: String,
     pub(crate) platform_identity_digest: String,
     pub(crate) builder_image_digest: String,
@@ -206,9 +209,10 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
         require_available(deadline, invocation_cancelled, relay_cancelled)?;
         let backend = self.backend.identity();
         if backend.engine_identity_digest != context.profile.engine_identity_digest
+            || backend.guest_binary_digest != context.profile.guest_binary_digest
             || backend.child_runtime != context.profile.child_runtime
             || backend.child_runtime_config_digest != context.profile.child_runtime_config_digest
-            || backend.child_host_uds != context.profile.child_host_uds
+            || backend.child_transport != context.profile.child_transport
             || backend.platform != context.profile.platform
             || backend.platform_identity_digest != context.profile.platform_identity_digest
             || backend.builder_image_digest != context.profile.builder_image_digest

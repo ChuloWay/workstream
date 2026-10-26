@@ -1,6 +1,7 @@
 //! Digest-bound Docker/runsc backend for the generic trial engine.
 
 use crate::trial_engine::{
+    image_archive::{self, ImageArchiveFailure},
     SandboxBackendIdentity, SandboxBuildRequest, SandboxBuildResult, SandboxEnforcementOverruns,
     SandboxFailure, SandboxStepRequest, SandboxStepResult, TrialSandboxBackend,
 };
@@ -12,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom};
+use std::io::Read;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -22,9 +23,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use workstream_checker_sdk::canonical_hash;
-
-#[path = "trial_docker/image_archive.rs"]
-mod image_archive;
 
 static RUNTIME_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -173,6 +171,7 @@ pub(crate) trait RuntimeControl: Send + Sync + 'static {
         owner: &RuntimeOwner,
         archive: &std::path::Path,
         expected_tag: &str,
+        expected_platform: &str,
         maximum_bytes: u64,
         maximum_expanded_bytes: u64,
         maximum_expanded_entries: u64,
@@ -240,6 +239,7 @@ impl<C: RuntimeControl> RuntimeControl for Arc<C> {
         owner: &RuntimeOwner,
         archive: &std::path::Path,
         expected_tag: &str,
+        expected_platform: &str,
         maximum_bytes: u64,
         maximum_expanded_bytes: u64,
         maximum_expanded_entries: u64,
@@ -249,6 +249,7 @@ impl<C: RuntimeControl> RuntimeControl for Arc<C> {
             owner,
             archive,
             expected_tag,
+            expected_platform,
             maximum_bytes,
             maximum_expanded_bytes,
             maximum_expanded_entries,
@@ -507,7 +508,7 @@ impl RuntimeControl for DockerRuntimeControl {
             || !valid_sha256(&identity.child_runtime_config_digest)
             || !valid_sha256(&identity.platform_identity_digest)
             || identity.child_runtime != "runsc"
-            || identity.child_host_uds != "none"
+            || identity.child_transport != "none"
         {
             return Err(RuntimeControlFailure::InvalidConfiguration);
         }
@@ -860,6 +861,7 @@ impl RuntimeControl for DockerRuntimeControl {
         owner: &RuntimeOwner,
         archive: &std::path::Path,
         expected_tag: &str,
+        expected_platform: &str,
         maximum_bytes: u64,
         maximum_expanded_bytes: u64,
         maximum_expanded_entries: u64,
@@ -878,14 +880,16 @@ impl RuntimeControl for DockerRuntimeControl {
         {
             return Err(RuntimeControlFailure::InvalidObservation);
         }
-        let expanded = validate_single_image_archive(
+        let expanded = image_archive::validate_single_image_archive(
             &canonical,
             expected_tag,
+            expected_platform,
             maximum_bytes,
             maximum_expanded_bytes,
             maximum_expanded_entries,
             deadline,
-        )?;
+        )
+        .map_err(map_archive_failure)?;
         if image_exists(self, expected_tag, deadline)? {
             return Err(RuntimeControlFailure::InvalidObservation);
         }
@@ -954,8 +958,8 @@ impl RuntimeControl for DockerRuntimeControl {
             config_image_id,
             archive_sha256,
             archive_byte_count: metadata.len(),
-            expanded_byte_count: expanded.bytes,
-            expanded_entry_count: expanded.entries,
+            expanded_byte_count: expanded.expanded_bytes,
+            expanded_entry_count: expanded.expanded_entries,
         })
     }
 
@@ -1776,219 +1780,6 @@ fn validate_image_tag(value: &str) -> Result<(), RuntimeControlFailure> {
     Ok(())
 }
 
-fn validate_single_image_archive(
-    archive: &std::path::Path,
-    expected_tag: &str,
-    maximum_bytes: u64,
-    maximum_expanded_bytes: u64,
-    maximum_expanded_entries: u64,
-    deadline: Instant,
-) -> Result<image_archive::ExpandedImage, RuntimeControlFailure> {
-    let mut file = File::open(archive).map_err(|_| RuntimeControlFailure::InvalidObservation)?;
-    let length = file
-        .metadata()
-        .map_err(|_| RuntimeControlFailure::InvalidObservation)?
-        .len();
-    if length == 0 || length > maximum_bytes {
-        return Err(RuntimeControlFailure::InvalidObservation);
-    }
-    if length % 512 != 0 {
-        return Err(RuntimeControlFailure::InvalidObservation);
-    }
-    let mut offset = 0_u64;
-    let mut manifest = None;
-    let mut entries = HashMap::new();
-    while offset.saturating_add(512) <= length {
-        file.seek(SeekFrom::Start(offset))
-            .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
-        let mut header = [0_u8; 512];
-        file.read_exact(&mut header)
-            .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
-        if header.iter().all(|byte| *byte == 0) {
-            if length.saturating_sub(offset) < 1024 {
-                return Err(RuntimeControlFailure::InvalidObservation);
-            }
-            file.seek(SeekFrom::Start(offset))
-                .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
-            let mut trailing = vec![0_u8; (length - offset) as usize];
-            file.read_exact(&mut trailing)
-                .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
-            if trailing.iter().any(|byte| *byte != 0) {
-                return Err(RuntimeControlFailure::InvalidObservation);
-            }
-            offset = length;
-            break;
-        }
-        validate_tar_checksum(&header)?;
-        if !matches!(header[156], 0 | b'0') || header[157..257].iter().any(|byte| *byte != 0) {
-            return Err(RuntimeControlFailure::InvalidObservation);
-        }
-        let name = tar_text(&header[0..100])?;
-        let prefix = tar_text(&header[345..500])?;
-        let path = if prefix.is_empty() {
-            name
-        } else {
-            format!("{prefix}/{name}")
-        };
-        if !valid_archive_path(&path) {
-            return Err(RuntimeControlFailure::InvalidObservation);
-        }
-        if entries.len() >= 4096 || entries.contains_key(&path) || path == "repositories" {
-            return Err(RuntimeControlFailure::InvalidObservation);
-        }
-        let size = tar_octal(&header[124..136])?;
-        let data = offset
-            .checked_add(512)
-            .ok_or(RuntimeControlFailure::InvalidObservation)?;
-        let padded = size
-            .checked_add(511)
-            .map(|value| value / 512 * 512)
-            .ok_or(RuntimeControlFailure::InvalidObservation)?;
-        offset = data
-            .checked_add(padded)
-            .filter(|value| *value <= length)
-            .ok_or(RuntimeControlFailure::InvalidObservation)?;
-        entries.insert(path.clone(), (data, size));
-        if path == "manifest.json" {
-            if manifest.is_some() || size > 1024 * 1024 {
-                return Err(RuntimeControlFailure::InvalidObservation);
-            }
-            file.seek(SeekFrom::Start(data))
-                .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
-            let mut bytes = vec![0_u8; size as usize];
-            file.read_exact(&mut bytes)
-                .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
-            manifest = Some(bytes);
-        }
-    }
-    if offset != length {
-        return Err(RuntimeControlFailure::InvalidObservation);
-    }
-    let manifest = manifest.ok_or(RuntimeControlFailure::InvalidObservation)?;
-    let manifests: Vec<ImageArchiveManifest> =
-        serde_json::from_slice(&manifest).map_err(|_| RuntimeControlFailure::InvalidObservation)?;
-    if manifests.len() != 1 {
-        return Err(RuntimeControlFailure::InvalidObservation);
-    }
-    let manifest = manifests.first().unwrap();
-    let config_digest = if valid_sha256(&manifest.config) {
-        &manifest.config[7..]
-    } else if manifest.config.len() == 69
-        && manifest.config.ends_with(".json")
-        && manifest.config[..64]
-            .bytes()
-            .all(|item| item.is_ascii_hexdigit() && !item.is_ascii_uppercase())
-    {
-        &manifest.config[..64]
-    } else {
-        return Err(RuntimeControlFailure::InvalidObservation);
-    };
-    if manifest.repo_tags.as_slice() != [expected_tag] || manifest.layers.is_empty() {
-        return Err(RuntimeControlFailure::InvalidObservation);
-    }
-    let Some((config_offset, config_size)) = entries.get(&manifest.config).copied() else {
-        return Err(RuntimeControlFailure::InvalidObservation);
-    };
-    if config_size == 0 || config_size > 16 * 1024 * 1024 {
-        return Err(RuntimeControlFailure::InvalidObservation);
-    }
-    file.seek(SeekFrom::Start(config_offset))
-        .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
-    let mut config_bytes = vec![0_u8; config_size as usize];
-    file.read_exact(&mut config_bytes)
-        .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
-    if format!("{:x}", Sha256::digest(&config_bytes)) != config_digest {
-        return Err(RuntimeControlFailure::InvalidObservation);
-    }
-    let mut referenced = HashSet::from(["manifest.json".to_owned(), manifest.config.clone()]);
-    for layer in &manifest.layers {
-        if !valid_archive_path(layer)
-            || layer == "manifest.json"
-            || layer == &manifest.config
-            || !entries.contains_key(layer)
-        {
-            return Err(RuntimeControlFailure::InvalidObservation);
-        }
-        // OCI/Docker layer sequences may legitimately reuse the same content
-        // digest (for example, repeated empty metadata layers). The archive
-        // still contains one canonical regular entry for that digest.
-        referenced.insert(layer.clone());
-    }
-    if referenced.len() != entries.len() {
-        return Err(RuntimeControlFailure::InvalidObservation);
-    }
-    image_archive::validate_layers(
-        &mut file,
-        &entries,
-        &manifest.layers,
-        &config_bytes,
-        maximum_expanded_bytes,
-        maximum_expanded_entries,
-        deadline,
-    )
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ImageArchiveManifest {
-    #[serde(rename = "Config")]
-    config: String,
-    #[serde(rename = "RepoTags")]
-    repo_tags: Vec<String>,
-    #[serde(rename = "Layers")]
-    layers: Vec<String>,
-}
-
-fn valid_archive_path(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 4096
-        && !value.starts_with('/')
-        && !value.ends_with('/')
-        && !value.contains('\\')
-        && value.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'.' | b'_' | b'-' | b':')
-        })
-        && value
-            .split('/')
-            .all(|part| !part.is_empty() && part != "." && part != "..")
-}
-
-fn validate_tar_checksum(header: &[u8; 512]) -> Result<(), RuntimeControlFailure> {
-    let expected = tar_octal(&header[148..156])?;
-    let actual: u64 = header
-        .iter()
-        .enumerate()
-        .map(|(index, byte)| {
-            if (148..156).contains(&index) {
-                u64::from(b' ')
-            } else {
-                u64::from(*byte)
-            }
-        })
-        .sum();
-    if actual != expected {
-        return Err(RuntimeControlFailure::InvalidObservation);
-    }
-    Ok(())
-}
-
-fn tar_text(bytes: &[u8]) -> Result<String, RuntimeControlFailure> {
-    let end = bytes
-        .iter()
-        .position(|byte| *byte == 0)
-        .unwrap_or(bytes.len());
-    let value = std::str::from_utf8(&bytes[..end])
-        .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
-    Ok(value.to_owned())
-}
-
-fn tar_octal(bytes: &[u8]) -> Result<u64, RuntimeControlFailure> {
-    let text = std::str::from_utf8(bytes)
-        .map_err(|_| RuntimeControlFailure::InvalidObservation)?
-        .trim_matches(|character| character == '\0' || character == ' ');
-    u64::from_str_radix(text, 8).map_err(|_| RuntimeControlFailure::InvalidObservation)
-}
-
 fn hash_bounded_file(
     path: &std::path::Path,
     maximum_bytes: u64,
@@ -2042,7 +1833,7 @@ impl<C: RuntimeControl> DockerTrialBackend<C> {
         let launcher_metadata = fs::symlink_metadata(&trusted_launcher_path)
             .map_err(|_| infrastructure(TrialRelayFailure::InvalidRequest))?;
         if config.identity.child_runtime != "runsc"
-            || config.identity.child_host_uds != "none"
+            || config.identity.child_transport != "none"
             || config.runtime_key.is_empty()
             || config.runtime_key.len() > 100
             || !config
@@ -2370,6 +2161,7 @@ impl<C: RuntimeControl> TrialSandboxBackend for DockerTrialBackend<C> {
                     &owner,
                     &request.output_archive,
                     &request.destination,
+                    &request.platform,
                     self.config.maximum_candidate_archive_bytes,
                     expanded_bytes,
                     expanded_entries,
@@ -2870,6 +2662,14 @@ fn owned_mount(
     })
 }
 
+fn map_archive_failure(value: ImageArchiveFailure) -> RuntimeControlFailure {
+    match value {
+        ImageArchiveFailure::Invalid => RuntimeControlFailure::InvalidObservation,
+        ImageArchiveFailure::CapacityExceeded => RuntimeControlFailure::CapacityExceeded,
+        ImageArchiveFailure::DeadlineExceeded => RuntimeControlFailure::DeadlineExceeded,
+    }
+}
+
 fn runtime_failure(value: RuntimeControlFailure) -> SandboxFailure {
     eprintln!("trial runtime stage=control failure={value:?}");
     match value {
@@ -3014,6 +2814,8 @@ mod runtime_journal_tests {
         let mut layer = tar_entry("work/value", b'0', "", b"value");
         layer.extend([0_u8; 1024]);
         let mut config: serde_json::Value = serde_json::from_slice(config_bytes).unwrap();
+        config["os"] = serde_json::json!("linux");
+        config["architecture"] = serde_json::json!("amd64");
         config["rootfs"] = serde_json::json!({"type": "layers", "diff_ids": [format!("sha256:{:x}", Sha256::digest(&layer))]});
         let config_bytes = serde_json::to_vec(&config).unwrap();
         let config_bytes = config_bytes.as_slice();
@@ -3039,14 +2841,16 @@ mod runtime_journal_tests {
     ) -> Result<(), RuntimeControlFailure> {
         let path = root.join("candidate.tar");
         fs::write(&path, bytes).unwrap();
-        validate_single_image_archive(
+        image_archive::validate_single_image_archive(
             &path,
             "workstream-trial:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "linux/amd64",
             1024 * 1024,
             1024 * 1024,
             4096,
             Instant::now() + Duration::from_secs(10),
         )
+        .map_err(map_archive_failure)
         .map(|_| ())
     }
 
@@ -3119,6 +2923,7 @@ mod runtime_journal_tests {
                 &owner(),
                 &archive,
                 "workstream-trial:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "linux/amd64",
                 1024 * 1024,
                 1,
                 4096,
