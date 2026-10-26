@@ -86,7 +86,9 @@ and default-deny networking. Runtime insufficiency is an infrastructure failure.
    POST, invalid work vs infrastructure failure, retry, cancellation, timeout,
    controller restart, foreign-resource survival and final contribution evidence.
 
-These are reviewable PR boundaries, not stopping points for the authorized task.
+Boundary 1 has its own runtime change record. Boundaries 2 and 3 form the
+combined intake/deployment change record WS-EXEC-001-02 and its public proof.
+These remain distinct implementation responsibilities within that delivery.
 Do not merge any PR without specific user approval. Use isolated EC2 directories,
 services, ports and databases; preserve the other integration work and data.
 

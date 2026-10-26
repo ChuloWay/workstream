@@ -1345,7 +1345,7 @@ Delivered foundations (bounded local journey proven; no deployment claim)
   digest-only API/Celery/Beat/checker release configuration (hosted proof still required)
   WS-EXEC-001-01 Smol node + existing typed execution adapter + exact-lease recovery
   WS-EXEC-001-02 authorized upload/download overlap + trusted guest ZIP/default intake
-  WS-EXEC-001-03 public Smol API/Celery proof + required hosted intake configuration
+  WS-EXEC-001-02 public Smol API/Celery proof + required hosted intake configuration
     -> locked true: review_pending; locked false: shared acceptance + contribution + applicable award
     -> intended hosted deployment proof with actual Flow/AWS identities remains separate
   automatic unified setup + separate manager pre/post approvals
@@ -1687,7 +1687,7 @@ of the hosted Docker composition. Its node-level proof uses synthetic ART grants
 the [trusted intake boundary](../.commitrail/initiatives/WS-EXEC-001/WS-EXEC-001-02.md)
 connects authorized upload/download, retained-reader inspection, verified raw
 export and guest default evaluation through ART's explicit typed adapter. The
-[public deployment boundary](../.commitrail/initiatives/WS-EXEC-001/WS-EXEC-001-03.md)
+[public deployment boundary](../.commitrail/initiatives/WS-EXEC-001/WS-EXEC-001-02.md#deployment-and-public-journey-proof)
 adds hosted intake configuration and the isolated public API/durable-worker Smol
 drill. It preserves both review-policy branches, public recovery, exact immutable
 artifact lineage and contribution/award facts. This is self-hosted execution proof
