@@ -57,15 +57,7 @@ fn cgroups(cpu: u64, memory: u64) -> Result<()> {
     fs::create_dir(&group)?;
     fs::write(group.join("cpu.max"), format!("{} 100000", cpu * 100))?;
     fs::write(group.join("memory.max"), memory.to_string())?;
-    let swap_limit = group.join("memory.swap.max");
-    if swap_limit.exists() {
-        fs::write(swap_limit, "0")?;
-    } else if !fs::read_to_string("/proc/meminfo")?
-        .lines()
-        .any(|line| line.split_whitespace().collect::<Vec<_>>() == ["SwapTotal:", "0", "kB"])
-    {
-        return Err("unbounded guest swap".into());
-    }
+    disable_swap(&group, Path::new("/proc/meminfo"))?;
     fs::write(group.join("memory.oom.group"), "1")?;
     fs::write(
         group.join("pids.max"),
@@ -73,6 +65,37 @@ fn cgroups(cpu: u64, memory: u64) -> Result<()> {
     )?;
     Ok(())
 }
+// Some fixed guest kernels omit the swap controller. In that case only a
+// verified guest-wide absence of swap can replace the per-cgroup zero limit.
+fn disable_swap(group: &Path, meminfo: &Path) -> Result<()> {
+    let swap_limit = group.join("memory.swap.max");
+    match fs::symlink_metadata(&swap_limit) {
+        Ok(metadata) => {
+            if !metadata.is_file() || metadata.file_type().is_symlink() {
+                return Err("guest swap control invalid".into());
+            }
+            fs::write(&swap_limit, "0")?;
+            if fs::read_to_string(&swap_limit)?.trim() != "0" {
+                return Err("guest swap limit differs".into());
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let meminfo = fs::read_to_string(meminfo)?;
+            let totals = meminfo
+                .lines()
+                .filter(|line| line.starts_with("SwapTotal:"))
+                .collect::<Vec<_>>();
+            if totals.len() != 1
+                || totals[0].split_whitespace().collect::<Vec<_>>() != ["SwapTotal:", "0", "kB"]
+            {
+                return Err("unbounded guest swap".into());
+            }
+        }
+        Err(error) => return Err(error.into()),
+    }
+    Ok(())
+}
+
 fn material_path_is_relative(value: &str) -> bool {
     // ART owns Unicode normalization and project archive limits. Bootstrap only
     // enforces filesystem containment; finding-path presentation rules differ.

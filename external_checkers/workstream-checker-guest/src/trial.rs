@@ -1,13 +1,13 @@
 //! Trusted Smol sibling-trial supervisor.
 
-use super::{mount, StagedJob};
+use super::{disable_swap, mount, StagedJob};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::fd::AsRawFd;
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -52,8 +52,7 @@ struct BoundedFilesystem {
     loop_attached: bool,
     private_mounted: bool,
     exposed_mounted: bool,
-    initial_free_bytes: u64,
-    initial_free_inodes: u64,
+    maximum_bytes: u64,
 }
 
 struct BackingGuard {
@@ -178,20 +177,22 @@ impl BoundedFilesystem {
         if !status.success() {
             return Err("trusted ext4 formatter failed".into());
         }
+        ensure_device_node(Path::new("/dev/loop-control"), libc::S_IFCHR, 10, 237)?;
         let control = OpenOptions::new()
             .read(true)
             .write(true)
-            .custom_flags(libc::O_CLOEXEC)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
             .open("/dev/loop-control")?;
         let index = unsafe { libc::ioctl(control.as_raw_fd(), LOOP_CTL_GET_FREE) };
         if index < 0 {
             return Err(std::io::Error::last_os_error().into());
         }
         let loop_path = PathBuf::from(format!("/dev/loop{index}"));
+        ensure_device_node(&loop_path, libc::S_IFBLK, 7, index as u32)?;
         let loop_file = OpenOptions::new()
             .read(true)
             .write(true)
-            .custom_flags(libc::O_CLOEXEC)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
             .open(&loop_path)?;
         if unsafe { libc::ioctl(loop_file.as_raw_fd(), LOOP_SET_FD, file.as_raw_fd()) } != 0 {
             return Err(std::io::Error::last_os_error().into());
@@ -206,8 +207,7 @@ impl BoundedFilesystem {
             loop_attached: true,
             private_mounted: false,
             exposed_mounted: false,
-            initial_free_bytes: 0,
-            initial_free_inodes: 0,
+            maximum_bytes: limit.bytes,
         };
         backing_guard.armed = false;
         fs::create_dir(&filesystem.private_mount)?;
@@ -235,23 +235,32 @@ impl BoundedFilesystem {
             "",
         )?;
         filesystem.exposed_mounted = true;
-        let statistics = statfs(&filesystem.private_mount)?;
-        filesystem.initial_free_bytes = (statistics.f_bavail as u64)
-            .checked_mul(statistics.f_bsize as u64)
-            .ok_or("ext4 free space overflow")?;
-        filesystem.initial_free_inodes = statistics.f_ffree as u64;
         Ok(filesystem)
     }
 
-    fn usage(&self) -> Result<(u64, u64, bool)> {
+    fn usage(&self, include_logical: bool) -> Result<(u64, u64, bool)> {
         let statistics = statfs(&self.private_mount)?;
         let free_bytes = (statistics.f_bavail as u64)
             .checked_mul(statistics.f_bsize as u64)
             .ok_or("ext4 free space overflow")?;
+        // The backing length also covers superblocks, bitmaps and inode tables
+        // omitted by statfs.f_blocks. Never subtract the formatter's baseline:
+        // its metadata and the private inode-reservation tree consume custody.
+        let physical_bytes = self
+            .maximum_bytes
+            .checked_sub(free_bytes)
+            .ok_or("ext4 free space exceeds backing")?;
+        let physical_entries = (statistics.f_files as u64)
+            .checked_sub(statistics.f_ffree as u64)
+            .ok_or("ext4 free inode count invalid")?;
+        let (logical_bytes, logical_entries) = if include_logical {
+            logical_filesystem_usage(&self.exposed)?
+        } else {
+            (0, 0)
+        };
         Ok((
-            self.initial_free_bytes.saturating_sub(free_bytes),
-            self.initial_free_inodes
-                .saturating_sub(statistics.f_ffree as u64),
+            physical_bytes.max(logical_bytes),
+            physical_entries.max(logical_entries),
             statistics.f_bavail == 0 || statistics.f_ffree == 0,
         ))
     }
@@ -296,6 +305,33 @@ fn unmount(path: &Path) -> Result<()> {
     let path = std::ffi::CString::new(path.as_os_str().as_encoded_bytes())?;
     if unsafe { libc::umount2(path.as_ptr(), 0) } != 0 {
         return Err(std::io::Error::last_os_error().into());
+    }
+    Ok(())
+}
+
+// Smol's minimal /dev need not contain loop nodes. Only the trusted bootstrap
+// creates them, before any workload runs; existing image-owned paths must match
+// the exact kernel device rather than being followed or replaced.
+fn ensure_device_node(path: &Path, kind: libc::mode_t, major: u32, minor: u32) -> Result<()> {
+    let device = libc::makedev(major, minor);
+    match fs::symlink_metadata(path) {
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let name = std::ffi::CString::new(path.as_os_str().as_encoded_bytes())?;
+            if unsafe { libc::mknod(name.as_ptr(), kind | 0o600, device) } != 0 {
+                return Err(std::io::Error::last_os_error().into());
+            }
+        }
+        Err(error) => return Err(error.into()),
+    }
+    let metadata = fs::symlink_metadata(path)?;
+    let correct_kind = match kind {
+        libc::S_IFCHR => metadata.file_type().is_char_device(),
+        libc::S_IFBLK => metadata.file_type().is_block_device(),
+        _ => false,
+    };
+    if !correct_kind || metadata.rdev() != device {
+        return Err("trial loop device node differs".into());
     }
     Ok(())
 }
@@ -554,19 +590,10 @@ fn configure_cgroup(limits: TrialChildLimits) -> Result<()> {
         Path::new(CGROUP).join("memory.max"),
         limits.memory_bytes.to_string(),
     )?;
-    fs::write(Path::new(CGROUP).join("memory.swap.max"), "0")?;
+    disable_swap(Path::new(CGROUP), Path::new("/proc/meminfo"))?;
     fs::write(Path::new(CGROUP).join("memory.oom.group"), "1")?;
     fs::write(Path::new(CGROUP).join("pids.max"), limits.pids.to_string())?;
-    if !swap_is_disabled(&fs::read_to_string(
-        Path::new(CGROUP).join("memory.swap.max"),
-    )?) {
-        return Err("trial swap isolation unavailable".into());
-    }
     Ok(())
-}
-
-fn swap_is_disabled(value: &str) -> bool {
-    value.trim() == "0"
 }
 
 fn cgroup_value(path: &str) -> Result<u64> {
@@ -617,11 +644,14 @@ fn cleanup_cgroup() -> Result<()> {
     Err("trial cgroup cleanup unsettled".into())
 }
 
-fn filesystem_usage(filesystems: &[BoundedFilesystem]) -> Result<(u64, u64, bool)> {
+fn filesystem_usage(
+    filesystems: &[BoundedFilesystem],
+    include_logical: bool,
+) -> Result<(u64, u64, bool)> {
     filesystems
         .iter()
         .try_fold((0_u64, 0_u64, false), |total, filesystem| {
-            let usage = filesystem.usage()?;
+            let usage = filesystem.usage(include_logical)?;
             Ok((
                 total.0.checked_add(usage.0).ok_or("disk usage overflow")?,
                 total.1.checked_add(usage.1).ok_or("entry usage overflow")?,
@@ -985,7 +1015,7 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
         cpu_time_ms = cpu_time_ms.max(cgroup_cpu_ms()?);
         peak_memory_bytes = peak_memory_bytes.max(cgroup_value("memory.peak")?);
         peak_pids = peak_pids.max(cgroup_value("pids.current")?);
-        let usage = filesystem_usage(&filesystems)?;
+        let usage = filesystem_usage(&filesystems, false)?;
         written_bytes = written_bytes.max(usage.0);
         written_entries = written_entries.max(usage.1);
         let cause = if Instant::now() >= deadline {
@@ -1013,7 +1043,7 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
     cpu_time_ms = cpu_time_ms.max(cgroup_cpu_ms()?);
     peak_memory_bytes = peak_memory_bytes.max(cgroup_value("memory.peak")?);
     peak_pids = peak_pids.max(cgroup_value("pids.current")?);
-    let usage = filesystem_usage(&filesystems)?;
+    let usage = filesystem_usage(&filesystems, true)?;
     written_bytes = written_bytes.max(usage.0);
     written_entries = written_entries.max(usage.1);
     output_exceeded |= drain_outputs(
@@ -1158,11 +1188,12 @@ fn inventory(root: &Path) -> Result<(Vec<String>, Vec<MaterialFile>)> {
     Ok((directories, files))
 }
 
-fn tree_usage(root: &Path) -> Result<(u64, u64)> {
-    let metadata = fs::symlink_metadata(root)?;
-    if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
-        return Err("trial export root invalid".into());
-    }
+// Run after the child has stopped. Skip nested mounts: each bounded filesystem
+// is measured independently, and image/input bind mounts retain their own
+// existing custody charge. Sparse file lengths still consume logical allowance.
+fn logical_filesystem_usage(root: &Path) -> Result<(u64, u64)> {
+    let root_metadata = fs::symlink_metadata(root)?;
+    let device = root_metadata.dev();
     let mut bytes = 0_u64;
     let mut entries = 1_u64;
     let mut pending = vec![root.to_owned()];
@@ -1170,15 +1201,53 @@ fn tree_usage(root: &Path) -> Result<(u64, u64)> {
         for entry in fs::read_dir(directory)? {
             let entry = entry?;
             let metadata = fs::symlink_metadata(entry.path())?;
+            if metadata.dev() != device {
+                continue;
+            }
+            entries = entries
+                .checked_add(1)
+                .ok_or("logical entry count overflow")?;
+            if metadata.file_type().is_dir() {
+                pending.push(entry.path());
+            } else if metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+                bytes = bytes
+                    .checked_add(metadata.len())
+                    .ok_or("logical byte count overflow")?;
+            }
+        }
+    }
+    Ok((bytes, entries))
+}
+
+fn tree_usage(root: &Path) -> Result<(u64, u64)> {
+    let metadata = fs::symlink_metadata(root)?;
+    if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+        return Err("trial export root invalid".into());
+    }
+    let mut bytes = metadata
+        .blocks()
+        .checked_mul(512)
+        .ok_or("export byte count overflow")?;
+    let mut entries = 1_u64;
+    let mut pending = vec![root.to_owned()];
+    while let Some(directory) = pending.pop() {
+        for entry in fs::read_dir(directory)? {
+            let entry = entry?;
+            let metadata = fs::symlink_metadata(entry.path())?;
+            let allocated = metadata
+                .blocks()
+                .checked_mul(512)
+                .ok_or("export byte count overflow")?;
+            bytes = bytes
+                .checked_add(allocated.max(metadata.len()))
+                .ok_or("export byte count overflow")?;
             entries = entries
                 .checked_add(1)
                 .ok_or("export entry count overflow")?;
             if metadata.file_type().is_dir() {
                 pending.push(entry.path());
             } else if metadata.file_type().is_file() && !metadata.file_type().is_symlink() {
-                bytes = bytes
-                    .checked_add(metadata.len())
-                    .ok_or("export byte count overflow")?;
+                // Already charged the larger of logical and allocated bytes above.
             } else {
                 return Err("trial export contains unsupported entry".into());
             }
@@ -1190,6 +1259,80 @@ fn tree_usage(root: &Path) -> Result<(u64, u64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fixture(name: &str) -> PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("workstream-guest-{name}-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn swap_control_is_enforced_or_guest_wide_zero_swap_is_proved() {
+        let root = fixture("swap");
+        let meminfo = root.join("meminfo");
+        let group = root.join("group");
+        fs::create_dir(&group).unwrap();
+        let knob = group.join("memory.swap.max");
+        fs::write(&meminfo, "MemTotal: 1048576 kB\nSwapTotal: 0 kB\n").unwrap();
+        disable_swap(&group, &meminfo).unwrap();
+        assert!(
+            !knob.exists(),
+            "absent controller must never be synthesized"
+        );
+        for value in [
+            "SwapTotal: 1 kB\n",
+            "MemTotal: 1 kB\n",
+            "SwapTotal: 0 MB\n",
+            "SwapTotal: 0 kB\nSwapTotal: 1 kB\n",
+        ] {
+            fs::write(&meminfo, value).unwrap();
+            assert!(disable_swap(&group, &meminfo).is_err());
+        }
+        fs::write(&knob, "max\n").unwrap();
+        disable_swap(&group, &meminfo).unwrap();
+        assert_eq!(fs::read_to_string(&knob).unwrap(), "0");
+        fs::remove_file(&knob).unwrap();
+        std::os::unix::fs::symlink(&meminfo, &knob).unwrap();
+        assert!(disable_swap(&group, &meminfo).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn loop_nodes_reject_regular_files_symlinks_wrong_kind_and_device() {
+        let root = fixture("loop-node");
+        let path = root.join("node");
+        fs::write(&path, "untrusted").unwrap();
+        assert!(ensure_device_node(&path, libc::S_IFCHR, 10, 237).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "untrusted");
+        fs::remove_file(&path).unwrap();
+        std::os::unix::fs::symlink("/dev/null", &path).unwrap();
+        assert!(ensure_device_node(&path, libc::S_IFCHR, 1, 3).is_err());
+        ensure_device_node(Path::new("/dev/null"), libc::S_IFCHR, 1, 3).unwrap();
+        assert!(ensure_device_node(Path::new("/dev/null"), libc::S_IFCHR, 10, 237).is_err());
+        assert!(ensure_device_node(Path::new("/dev/null"), libc::S_IFBLK, 1, 3).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn export_usage_charges_directory_storage_and_sparse_logical_lengths() {
+        let root = fixture("usage");
+        let empty = tree_usage(&root).unwrap();
+        let file = File::create(root.join("sparse")).unwrap();
+        file.set_len(1024 * 1024).unwrap();
+        fs::create_dir(root.join("directory")).unwrap();
+        fs::write(root.join("directory/status.json"), "{}").unwrap();
+        let measured = tree_usage(&root).unwrap();
+        assert_eq!(empty.1, 1);
+        assert!(empty.0 >= fs::metadata(&root).unwrap().blocks() * 512);
+        assert_eq!(measured.1, 4);
+        assert!(measured.0 >= 1024 * 1024 + empty.0 + 2);
+        assert_eq!(
+            logical_filesystem_usage(&root).unwrap(),
+            (1024 * 1024 + 2, 4)
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 
     fn build_request() -> TrialRequest {
         serde_json::from_value(serde_json::json!({
@@ -1212,7 +1355,7 @@ mod tests {
     }
 
     #[test]
-    fn paths_environment_and_swap_contracts_are_closed() {
+    fn paths_and_environment_contracts_are_closed() {
         assert!(valid_relative("."));
         assert!(valid_relative("source/Containerfile"));
         for value in ["", "../escape", "/absolute", "a/../b", "a\\b"] {
@@ -1223,9 +1366,6 @@ mod tests {
         assert!(!valid_environment(&["A=1".into(), "A=2".into()]));
         assert!(!valid_environment(&["1BAD=value".into()]));
         assert!(!valid_environment(&["BAD=value\0hidden".into()]));
-        assert!(swap_is_disabled("0\n"));
-        assert!(!swap_is_disabled("max\n"));
-        assert!(!swap_is_disabled("1\n"));
     }
 
     #[test]
