@@ -228,7 +228,10 @@ admission or change production model, authorization or setup rules. Profile
 publication failure must stop before guide upload. Verify that boundary with a
 focused regression and repeat the full public journey. Architecture/reuse and
 QA/product reviewers assess the fixture reconciliation. Recorded inference is
-still a fixture and does not qualify live model execution inside Smol.
+still a fixture and does not qualify live model execution inside Smol. The opt-in
+execution observer must also forward the current typed port's `model_grant`
+argument unchanged, including `None`; observation cannot alter adapter admission
+or drop model custody. A focused forwarding regression protects that seam.
 
 ## Intake implementation and historical owner-level proof
 

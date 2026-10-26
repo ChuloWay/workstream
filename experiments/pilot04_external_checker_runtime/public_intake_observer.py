@@ -43,9 +43,9 @@ async def _observe_prepare(self, request):
     return session
 
 
-async def _observe_execute(self, request, grant):
+async def _observe_execute(self, request, grant, *, model_grant=None):
     _record('project_started', request.request_digest)
-    result = await _execute(self, request, grant)
+    result = await _execute(self, request, grant, model_grant=model_grant)
     _record('project_completed', request.request_digest)
     return result
 
