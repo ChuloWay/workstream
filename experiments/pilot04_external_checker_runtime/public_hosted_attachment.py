@@ -151,6 +151,7 @@ class HostedAttachment:
     values: dict = field(default_factory=dict)
     custody: dict = field(default_factory=dict)
     docker_environment: dict = field(default_factory=dict)
+    model_post: object | None = None
 
     @classmethod
     def read(cls, path):
@@ -179,6 +180,7 @@ class HostedAttachment:
     def inspect(self):
         """Reuse hosted validation; inspect exact running services, never replace them."""
         from experiments.hosted_drill_identity.fixture import ISSUER, AUDIENCE, read_private
+        from experiments.pilot04_external_checker_runtime.public_node_faults import runtime_control_root
 
         name = '_public_hosted_preflight'
         spec = importlib.util.spec_from_file_location(name, ROOT / 'deploy/hosted/preflight.py')
@@ -227,7 +229,7 @@ class HostedAttachment:
         binding = json.loads((self.node_root / 'node-binding.json').read_text())
         require(binding['source_tree'] == _command(['git', 'rev-parse', 'HEAD']).decode().strip(),
                 "native proof source differs")
-        wrapper = self.node_root / 'runtime-wrapper'
+        wrapper = runtime_control_root(self.node_root) / 'runtime-wrapper'
         original = json.loads(json.dumps(config))
         require(config['smol']['binary'] == str(wrapper)
                 and config['smol']['binary_sha256'] == binding['wrapper_sha256']
@@ -266,7 +268,7 @@ class HostedAttachment:
                         'scope_project_id': str(project_id) if project_id else None,
                         'reason': 'Assign authority for this isolated hosted runtime fixture.'})
 
-    async def prepare_actors(self, client, factory):
+    async def admit_actors(self, client, factory):
         from sqlalchemy import select
         from app.modules.actors.models import ActorIdentityLink
         from app.modules.authorization.api import ActorIdentityFacts, ActorKind
@@ -280,6 +282,9 @@ class HostedAttachment:
                     ActorIdentityLink.actor_profile_id == admitted['actor_profile_id'],
                     ActorIdentityLink.issuer == ISSUER, ActorIdentityLink.status == 'active'))).one()
             self.actors[label] = ActorIdentityFacts(UUID(admitted['actor_profile_id']), UUID(link.id), ActorKind.HUMAN)
+
+    async def prepare_actors(self, client, factory):
+        await self.admit_actors(client, factory)
         # Deployment setup uses the established local trust-root operation. Every
         # subsequent grant, guide, task and submission uses the running public API.
         await asyncio.to_thread(self.setup_command, 'bootstrap_access_administrator.py',
@@ -367,7 +372,18 @@ def manager_rules(original, capabilities, count):
                        'setup_notes': []}, sort_keys=True, separators=(',', ':')).encode()
 
 
-async def run(attachment, database_url, broker_url):
+async def run(attachment, database_url, broker_url, model_post_path=None):
+    from experiments.pilot04_external_checker_runtime.public_hosted_model_post import ModelPostQualification
+
+    qualification = ModelPostQualification.read_and_claim(model_post_path, attachment.node_root) if model_post_path else None
+    try:
+        return await _run(attachment, database_url, broker_url, qualification)
+    finally:
+        if qualification:
+            qualification.close()
+
+
+async def _run(attachment, database_url, broker_url, qualification):
     import httpx
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from api_contract_e2e import assert_isolated_database_url
@@ -390,6 +406,18 @@ async def run(attachment, database_url, broker_url):
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with httpx.AsyncClient(base_url=attachment.origin, timeout=180, trust_env=False) as client:
+            if qualification:
+                from experiments.pilot04_external_checker_runtime.public_hosted_model_post import run_model_post
+                attachment.model_post = qualification
+                await attachment.admit_actors(client, factory)
+                model_result = await run_model_post(attachment, client, factory, qualification)
+                from experiments.pilot04_external_checker_runtime.public_node_faults import node_command
+                cleanup = await node_command(attachment.node_root, 'drained')
+                require(cleanup['foreign_preserved'] and not any(cleanup['resources'].values()),
+                        'hosted model proof retained runtime resources or changed foreign custody')
+                attachment.inspect()
+                return {'scope': 'public hosted model POST engineering fixture', 'custody': custody,
+                        'provider_calls_by_driver': 0, 'model_post': model_result, 'cleanup': cleanup}
             await attachment.prepare_actors(client, factory)
             scans_before = await _scan_audit_count(factory)
             deadline = time.monotonic() + 300
@@ -417,5 +445,17 @@ async def run(attachment, database_url, broker_url):
                 'provider_calls_by_driver': 0, 'compensation_policy': 'unpaid',
                 'intake_trials': intake, 'runtime_trials': runtime, 'human': human,
                 'automatic': automatic, 'cleanup': cleanup}
+    except BaseException as error:
+        if qualification:
+            fields = {'phase': 'stopped', 'stopped_after': qualification.state['phase'],
+                      'error_type': type(error).__name__, 'automatic_paid_retry': False}
+            if 'project_id' in qualification.state:
+                from experiments.pilot04_external_checker_runtime.public_hosted_model_post import account_snapshot
+                try:
+                    fields['ledger'] = await account_snapshot(factory, qualification.state['project_id'])
+                except Exception:
+                    fields['ledger_observation_unavailable'] = True
+            qualification.checkpoint(**fields)
+        raise
     finally:
         await engine.dispose()

@@ -175,7 +175,10 @@ async def _source_evidence(factory, guide, setup, package, original):
 
 async def public_guide_setup(client, factory, human_review_required, call, token_for, *,
                              pre_requirements=1, attachment=None):
-    original = guide_bytes(pre_requirements)
+    model_post = attachment.model_post if attachment else None
+    if model_post and 'project_id' in model_post.state:
+        raise RuntimeError('this model qualification already owns one project')
+    original = model_post.guide_bytes() if model_post else guide_bytes(pre_requirements)
     if attachment:
         manager = attachment.actors['manager']
     else:
@@ -184,6 +187,8 @@ async def public_guide_setup(client, factory, human_review_required, call, token
     project = await call(client, "POST", "/api/v1/projects", token, 201,
                          headers={"Idempotency-Key": str(uuid4())},
                          json={"name": "Connected guide journey", "slug": "journey-" + uuid4().hex})
+    if model_post:
+        await model_post.bind_project(client, project['id'], attachment)
     if attachment:
         await attachment.grant(client, 'manager', 'project_manager', project['id'])
     else:
@@ -215,7 +220,8 @@ async def public_guide_setup(client, factory, human_review_required, call, token
         from experiments.pilot04_external_checker_runtime.public_hosted_attachment import manager_rules
         await call(client, 'POST', root + f"/documents/{guide['documents'][1]['document_id']}/content",
                    token, 202, headers={'Idempotency-Key': str(uuid4()), 'Content-Type': 'text/markdown'},
-                   content=manager_rules(original, attachment.capabilities, pre_requirements))
+                   content=(model_post.rules(original, attachment.capabilities, pre_requirements) if model_post else
+                            manager_rules(original, attachment.capabilities, pre_requirements)))
     setup = await wait_for_guide_read(client, root + "/setup-runs/latest", token,
                              lambda v: v["status"] == "policy_draft_ready", call)
     compilation_root = root + f"/compilations/{setup['finalized_compilation_id']}"

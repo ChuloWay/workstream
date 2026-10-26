@@ -412,7 +412,7 @@ async def _wait_outbox_due(factory, event_id: UUID) -> None:
 
 async def _ready_admission(client, factory, task_id: str, assignment_id: str,
                            contributor_token: str, archive: bytes, summary: str,
-                           attestation: str, predecessor_id: str | None = None) -> str:
+                           attestation: str, predecessor_id: str | None = None, *, hosted=False) -> str:
     from app.workers.artifacts import verify_object
 
     expected_input = _fixture_hashes(archive)
@@ -467,7 +467,7 @@ async def _ready_admission(client, factory, task_id: str, assignment_id: str,
         if now - status_since >= 60:
             puts, jobs = await _artifact_task_state(factory, task_id)
             pending = [identifier for identifier, state, _ in jobs if state == "pending"]
-            if status == "object_confirmed" and len(pending) == 1:
+            if not hosted and status == "object_confirmed" and len(pending) == 1:
                 verification = await asyncio.to_thread(
                     verify_object.apply_async, args=(pending[0],),
                     ignore_result=False,
@@ -497,10 +497,10 @@ async def _ready_admission(client, factory, task_id: str, assignment_id: str,
 
 async def _submit(client, factory, *, task_id: str, assignment_id: str,
                   contributor_token: str, archive: bytes, summary: str,
-                  attestation: str, predecessor_id: str | None, before_create=None) -> dict:
+                  attestation: str, predecessor_id: str | None, before_create=None, hosted=False) -> dict:
     admission_id = await _ready_admission(
         client, factory, task_id, assignment_id, contributor_token,
-        archive, summary, attestation, predecessor_id,
+        archive, summary, attestation, predecessor_id, hosted=hosted,
     )
     if before_create is not None:
         await before_create()
@@ -881,6 +881,7 @@ async def _one_mode(client, factory, env, *,
         contributor_token=contributor_token, archive=first_archive,
         summary=summary, attestation=attestation, predecessor_id=None,
         before_create=fail_post_launch if not human_review_required and fault_root else None,
+        hosted=attachment is not None,
     )
     submission_path = f"/api/v1/tasks/{task_id}/submissions"
     history = await _json(client, "GET", submission_path, contributor_token, 200)
@@ -914,6 +915,7 @@ async def _one_mode(client, factory, env, *,
             contributor_token=contributor_token,
             archive=replacement_archive, summary=summary,
             attestation=attestation, predecessor_id=first_submission_id,
+            hosted=attachment is not None,
         )
         expected_inputs[saved["submission_id"]] = _fixture_hashes(replacement_archive)
         _require(saved["submission_version"] == 2,
@@ -1266,15 +1268,21 @@ def main() -> int:
                         help="Unique private directory retaining API and worker diagnostics")
     parser.add_argument('--hosted-attachment', type=Path,
                         help='Private attachment manifest for an existing hosted API/worker/Beat')
+    parser.add_argument('--hosted-model-post', type=Path,
+                        help='Private model qualification input; requires hosted attachment and completed actor bootstrap')
     args = parser.parse_args()
     if not args.database_url:
         parser.error("isolated --database-url or WORKSTREAM_TEST_DATABASE_URL is required")
+    if args.hosted_model_post and not args.hosted_attachment:
+        parser.error('model POST qualification requires explicit hosted attachment')
     if args.hosted_attachment:
         if (not args.broker_url or args.image_reference or args.node_config
                 or args.work_dir or args.expected_custody):
             parser.error('hosted attachment requires broker URL and excludes local launch arguments')
         from experiments.pilot04_external_checker_runtime.public_hosted_attachment import HostedAttachment, run as attach
-        value = asyncio.run(attach(HostedAttachment.read(args.hosted_attachment), args.database_url, args.broker_url))
+        attachment = HostedAttachment.read(args.hosted_attachment)
+        value = asyncio.run(attach(attachment, args.database_url, args.broker_url, args.hosted_model_post)
+                            if args.hosted_model_post else attach(attachment, args.database_url, args.broker_url))
         print(json.dumps(value, sort_keys=True, separators=(',', ':')))
         return 0
     if not args.image_reference or not args.node_config or not args.broker_url or not args.expected_custody:
