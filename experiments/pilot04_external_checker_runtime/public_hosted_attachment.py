@@ -7,9 +7,9 @@ rules prove runtime wiring, not a setup-agent rehearsal or a real pilot project.
 Invoke the existing run_public_journey_probe module with --hosted-attachment,
 --database-url and --broker-url. The private JSON attachment names origin,
 release_env, identity_directory, node_root, fixture_ca_sha256 and capabilities
-({pre_submit,post_submit}, each with capability_id/capability_version). Provision
-those immutable capabilities through the public Operator registry before this
-run. The fixture-only derived release images must already contain the public CA
+({pre_submit,post_submit}, each with capability_id/capability_version). Baseline
+setup registers those exact immutable capabilities through the public Operator
+registry after its initial Operator grant. The fixture-only derived release images must already contain the public CA
 appended to their ordinary certifi bundle and pass the canonical image verifier.
 
 The driver environment supplies the same isolated database/broker settings for
@@ -151,6 +151,7 @@ class HostedAttachment:
     values: dict = field(default_factory=dict)
     custody: dict = field(default_factory=dict)
     docker_environment: dict = field(default_factory=dict)
+    native_binding: dict = field(default_factory=dict)
     model_post: object | None = None
 
     @classmethod
@@ -238,6 +239,7 @@ class HostedAttachment:
         original['smol']['binary_sha256'] = binding['node_config']['smol']['binary_sha256']
         require(original == binding['node_config'], "native proof configuration differs")
         self.values, self.custody, self.docker_environment = values, observed, environment
+        self.native_binding = binding
         return {'containers': observed, 'native': binding,
                 'fixture_ca_sha256': self.fixture_ca_sha256,
                 'identity_scope': 'simulated RS256 issuer; fixture-only derived image trust'}
@@ -291,8 +293,39 @@ class HostedAttachment:
                                 '--actor-profile-id', str(self.actors['access-admin'].actor_profile_id), '--execute')
         await self.provision_services(client)
         await self.grant(client, 'operator', 'operator')
+        await self.register_baseline_capabilities(client)
         await self.grant(client, 'manager', 'project_manager')
         await self.transition('shadow')
+
+    async def register_baseline_capabilities(self, client):
+        """Register only the two requested fixture identities under public Operator authority."""
+        from app.modules.checkers.api.external import ExternalCheckerRegistryEntry
+        from experiments.pilot04_external_checker_runtime.public_probe_support import _json
+        from experiments.pilot04_external_checker_runtime.run_selected_end_to_end_probe import _locked_spec
+
+        images = [item for item in self.native_binding.get('node_config', {}).get('cache', [])
+                  if item['repository'] == 'workstream-test/public-journey']
+        require(len(images) == 1, 'validated generic public image is absent or ambiguous')
+        specs = []
+        for phase in ('pre_submit', 'post_submit'):
+            base = _locked_spec(phase, images[0])
+            values = base.model_dump(mode='json') | self.capabilities[phase]
+            values['image_digest'] = images[0]['platform_manifest_digest']
+            spec = type(base).model_validate(values)
+            require(spec.phase == phase, 'baseline fixture registry phase differs')
+            specs.append(spec)
+        require(len({(spec.capability_id, spec.capability_version) for spec in specs}) == 2,
+                'baseline PRE and POST capability identities must be distinct')
+        for spec in specs:
+            operation_id = str(uuid4())
+            value = await _json(client, 'POST', '/api/v1/operations/external-checker-registry',
+                self.token_for_label('operator'), 201, headers={'Idempotency-Key': operation_id},
+                json=spec.model_dump(mode='json'))
+            registered = ExternalCheckerRegistryEntry.model_validate_json(json.dumps(value))
+            require(registered.entry_digest == spec.spec_digest
+                    and str(registered.registration_operation_id) == operation_id
+                    and registered.registered_by_actor_profile_id == self.actors['operator'].actor_profile_id,
+                    'public baseline registration substituted specification or authority')
 
     async def provision_services(self, client):
         from provision_local_service_actors import JOURNEY_SERVICE_IDENTITIES, idempotency_key, subject_for

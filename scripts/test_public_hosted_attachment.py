@@ -176,6 +176,114 @@ class NativePreparationObservation(unittest.TestCase):
 
 
 class HostedFixtureContracts(unittest.TestCase):
+    def test_fresh_setup_grants_operator_then_registers_exact_supplied_baseline_capabilities(self):
+        import httpx
+        from datetime import UTC, datetime
+        from app.core.identifiers import new_record_id
+        from app.modules.checkers.api.external import ExternalCheckerRegistrySpec
+        from experiments.pilot04_external_checker_runtime.run_selected_end_to_end_probe import _locked_spec
+
+        capabilities = {'pre_submit': {'capability_id': 'probe.hosted_pre', 'capability_version': 'v1'},
+                        'post_submit': {'capability_id': 'probe.hosted_post', 'capability_version': 'v1'}}
+        attachment = HostedAttachment('http://127.0.0.1:8000', Path('/release'), Path('/issuer'),
+                                      Path('/node'), capabilities, 'sha256:fixture')
+        attachment.actors = {label: SimpleNamespace(actor_profile_id=new_record_id())
+                             for label in ('access-admin', 'operator', 'manager')}
+        image = {'repository': 'workstream-test/public-journey', 'platform_manifest_digest': 'sha256:' + 'a' * 64}
+        attachment.native_binding = {'node_config': {'cache': [image]}}
+        operations, registered_specs = [], []
+
+        async def respond(request):
+            body = json.loads(request.content)
+            if request.url.path == '/api/v1/admin-role-grants':
+                operations.append('grant:' + body['role'])
+                return httpx.Response(201, json={'granted': True})
+            self.assertIn('grant:operator', operations)
+            self.assertEqual(request.url.path, '/api/v1/operations/external-checker-registry')
+            self.assertEqual(request.headers['Authorization'], 'Bearer token:operator')
+            spec = ExternalCheckerRegistrySpec.model_validate_json(request.content)
+            operations.append('registry:' + spec.phase)
+            registered_specs.append(spec)
+            receipt = body | {'registry_entry_id': str(new_record_id()), 'entry_digest': spec.spec_digest,
+                'registration_operation_id': request.headers['Idempotency-Key'],
+                'registered_by_actor_profile_id': str(attachment.actors['operator'].actor_profile_id),
+                'authorization_decision_event_id': str(new_record_id()), 'created_at': datetime.now(UTC).isoformat()}
+            return httpx.Response(201, json=receipt)
+
+        async def services(client):
+            operations.append('services')
+
+        async def transition(phase):
+            operations.append(phase)
+
+        async def exercise():
+            async with httpx.AsyncClient(base_url=attachment.origin, transport=httpx.MockTransport(respond)) as client:
+                await attachment.prepare_actors(client, None)
+
+        with patch.object(attachment, 'admit_actors', new=AsyncMock()), \
+                patch.object(attachment, 'setup_command', side_effect=lambda *args: operations.append('bootstrap')), \
+                patch.object(attachment, 'provision_services', side_effect=services), \
+                patch.object(attachment, 'transition', side_effect=transition), \
+                patch.object(attachment, 'token_for_label', side_effect=lambda label: 'token:' + label):
+            asyncio.run(exercise())
+        self.assertEqual(operations, ['bootstrap', 'services', 'grant:operator', 'registry:pre_submit',
+                                      'registry:post_submit', 'grant:project_manager', 'shadow'])
+        self.assertEqual(len(registered_specs), 2)
+        for spec in registered_specs:
+            expected = _locked_spec(spec.phase, image).model_dump(mode='json') | capabilities[spec.phase]
+            self.assertEqual(spec.model_dump(mode='json'), expected)
+
+    def test_baseline_registration_refuses_unvalidated_cache_and_substituted_receipts(self):
+        import httpx
+        from datetime import UTC, datetime
+        from app.core.identifiers import new_record_id
+        from app.modules.checkers.api.external import ExternalCheckerRegistrySpec
+
+        capabilities = {phase: {'capability_id': 'probe.' + phase, 'capability_version': 'v1'}
+                        for phase in ('pre_submit', 'post_submit')}
+        attachment = HostedAttachment('http://127.0.0.1:8000', Path('/release'), Path('/issuer'),
+                                      Path('/node'), capabilities, 'sha256:fixture')
+        operator_id = new_record_id()
+        attachment.actors['operator'] = SimpleNamespace(actor_profile_id=operator_id)
+        image = {'repository': 'workstream-test/public-journey', 'platform_manifest_digest': 'sha256:' + 'a' * 64}
+        requested = []
+
+        async def refuse(request):
+            requested.append(request.url.path)
+            raise AssertionError('invalid cache must refuse before registration')
+
+        async def empty_or_ambiguous():
+            async with httpx.AsyncClient(base_url=attachment.origin, transport=httpx.MockTransport(refuse)) as client:
+                for images in ([], [image, image], [dict(image, repository='workstream/terminal-systems-post')]):
+                    attachment.native_binding = {'node_config': {'cache': images}}
+                    with self.assertRaisesRegex(RuntimeError, 'absent or ambiguous'):
+                        await attachment.register_baseline_capabilities(client)
+
+        asyncio.run(empty_or_ambiguous())
+        self.assertEqual(requested, [])
+        attachment.native_binding = {'node_config': {'cache': [image]}}
+
+        async def exercise(fault):
+            async def respond(request):
+                body = json.loads(request.content)
+                if fault == 'image':
+                    body['image_digest'] = 'sha256:' + 'f' * 64
+                spec = ExternalCheckerRegistrySpec.model_validate(body)
+                receipt = body | {'registry_entry_id': str(new_record_id()), 'entry_digest': spec.spec_digest,
+                    'registration_operation_id': request.headers['Idempotency-Key'],
+                    'registered_by_actor_profile_id': str(operator_id if fault != 'actor' else new_record_id()),
+                    'authorization_decision_event_id': str(new_record_id()), 'created_at': datetime.now(UTC).isoformat()}
+                if fault == 'operation':
+                    receipt['registration_operation_id'] = str(uuid4())
+                return httpx.Response(201, json=receipt)
+            async with httpx.AsyncClient(base_url=attachment.origin, transport=httpx.MockTransport(respond)) as client:
+                with self.assertRaisesRegex(RuntimeError, 'substituted specification or authority'):
+                    await attachment.register_baseline_capabilities(client)
+
+        with patch.object(attachment, 'token_for_label', return_value='token:operator'):
+            for fault in ('image', 'actor', 'operation'):
+                asyncio.run(exercise(fault))
+
     def test_service_setup_uses_public_owner_endpoint_and_stable_exact_replay_keys(self):
         import httpx
         from provision_local_service_actors import JOURNEY_SERVICE_IDENTITIES
