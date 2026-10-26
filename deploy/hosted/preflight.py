@@ -25,6 +25,9 @@ MODEL_OPENROUTER_COMPOSE_PATH = Path(__file__).with_name("compose.model-openrout
 SCRATCH_ROOT = Path("/var/lib/workstream/scratch")
 SOCKET_ROOT = Path("/var/lib/workstream/checker-runtime")
 SOCKET_PATH = SOCKET_ROOT / "checker.sock"
+INTAKE_SOCKET_ROOT = Path("/var/lib/workstream/intake-runtime")
+INTAKE_SOCKET_PATH = INTAKE_SOCKET_ROOT / "checker.sock"
+INTAKE_DIGEST_KEYS = ("WORKSTREAM_ARTIFACT_INTAKE_IMAGE_DIGEST", "WORKSTREAM_ARTIFACT_INTAKE_CONFIG_DIGEST")
 GUIDE_SOCKET_ROOT = Path("/var/lib/workstream/guide-runtime")
 GUIDE_SOCKET_PATH = GUIDE_SOCKET_ROOT / "guide.sock"
 MODEL_SOCKET_ROOT = Path("/var/lib/workstream/model-runtime")
@@ -234,6 +237,7 @@ REQUIRED_RELEASE_KEYS = (
     "WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD",
     "WORKSTREAM_CHECKER_CONFIG_FILE",
     *PROJECT_AGENT_CONFIGURATION_KEYS,
+    *INTAKE_DIGEST_KEYS,
     *ROLES_ANYWHERE_HOST_FILE_KEYS,
     *AWS_S3_EVIDENCE_KEYS,
     *TIMEOUT_KEYS,
@@ -329,6 +333,9 @@ def validate_environment(values: dict[str, str]) -> None:
         "WORKSTREAM_DOCKER_SOCKET_GID",
     ):
         _positive_id(values, key)
+    for key in INTAKE_DIGEST_KEYS:
+        if not DIGEST.fullmatch(values[key]):
+            raise PreflightError(f"trusted intake requires a pinned digest: {key}")
     for key in FORBIDDEN_RELEASE_KEYS:
         if values.get(key):
             raise PreflightError(
@@ -550,6 +557,15 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
     gid = _positive_id(values, "WORKSTREAM_RUNTIME_GID")
     _private_metadata(SCRATCH_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700)
     _private_metadata(SOCKET_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700)
+    _private_metadata(INTAKE_SOCKET_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700)
+    try:
+        intake_socket = INTAKE_SOCKET_PATH.lstat()
+    except OSError as exc:
+        raise PreflightError("trusted intake socket is unavailable") from exc
+    if (not stat.S_ISSOCK(intake_socket.st_mode)
+            or intake_socket.st_uid != uid or intake_socket.st_gid != gid
+            or stat.S_IMODE(intake_socket.st_mode) != 0o600 or intake_socket.st_nlink != 1):
+        raise PreflightError("trusted intake socket identity is unsafe")
     model_proxy_enabled = values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true"
     if model_proxy_enabled:
         _private_metadata(
@@ -607,6 +623,7 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
         shared_roots = [
             SCRATCH_ROOT.resolve(strict=True),
             SOCKET_ROOT.resolve(strict=True),
+            INTAKE_SOCKET_ROOT.resolve(strict=True),
             GUIDE_SOCKET_ROOT.resolve(strict=True),
         ]
         if model_proxy_enabled:
@@ -987,6 +1004,7 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
     shared_backend_mounts = {
         str(SCRATCH_ROOT): (str(SCRATCH_ROOT), False),
         str(SOCKET_ROOT): (str(SOCKET_ROOT), True),
+        str(INTAKE_SOCKET_ROOT): (str(INTAKE_SOCKET_ROOT), True),
     }
     expected_mounts = {
         "checker-service": {
@@ -1323,6 +1341,8 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         "WORKSTREAM_ARTIFACT_SCRATCH_ROOT": str(SCRATCH_ROOT),
         "WORKSTREAM_EXTERNAL_CHECKER_MATERIAL_ROOT": str(SCRATCH_ROOT),
         "WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET": str(SOCKET_PATH),
+        "WORKSTREAM_ARTIFACT_INTAKE_SERVICE_SOCKET": str(INTAKE_SOCKET_PATH),
+        **{key: values[key] for key in INTAKE_DIGEST_KEYS},
     }
     for key, value in exact.items():
         if str(environment.get(key, "")).lower() != value:
@@ -1449,6 +1469,36 @@ def validate_docker_runtime(config: dict[str, Any], values: dict[str, str]) -> N
             )
 
 
+
+def validate_trusted_intake(values: dict[str, str]) -> None:
+    """Use the release image's typed ART adapter without mounting credentials."""
+    script = (
+        "import asyncio,json; from dataclasses import asdict; from pathlib import Path; "
+        "from app.core.config import Settings; "
+        "from app.adapters.artifacts import trusted_submission_intake; "
+        "s=Settings(artifact_intake_service_socket=Path("
+        + repr(str(INTAKE_SOCKET_PATH)) + "),artifact_intake_image_digest="
+        + repr(values[INTAKE_DIGEST_KEYS[0]]) + ",artifact_intake_config_digest="
+        + repr(values[INTAKE_DIGEST_KEYS[1]]) + "); "
+        "print(json.dumps(asdict(asyncio.run(trusted_submission_intake(s).health()))))"
+    )
+    health = _run_json(
+        ["docker", "run", "--rm", "--pull=never", "--network", "none", "--read-only",
+         "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=64",
+         "--memory=512m", "--cpus=1", "--user",
+         values["WORKSTREAM_RUNTIME_UID"] + ":" + values["WORKSTREAM_RUNTIME_GID"],
+         "--mount", f"type=bind,src={INTAKE_SOCKET_ROOT},dst={INTAKE_SOCKET_ROOT},readonly",
+         "--entrypoint", "python", values["WORKSTREAM_BACKEND_IMAGE"], "-c", script],
+        failure="trusted Smol intake readiness failed",
+        environment=compose_environment(values),
+    )
+    if (not isinstance(health, dict)
+            or (health.get("runtime"), health.get("isolation_mode")) != ("smolvm", "smol-microvm")
+            or health.get("image_digest") != values[INTAKE_DIGEST_KEYS[0]]
+            or health.get("config_digest") != values[INTAKE_DIGEST_KEYS[1]]):
+        raise PreflightError("trusted intake readiness identity differs")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-file", required=True, type=Path)
@@ -1477,6 +1527,7 @@ def main() -> int:
             return 0
         validate_private_host_inputs(values)
         validate_docker_runtime(checker_config, values)
+        validate_trusted_intake(values)
     except PreflightError as exc:
         print(f"hosted release preflight failed: {exc}", file=sys.stderr)
         return 1

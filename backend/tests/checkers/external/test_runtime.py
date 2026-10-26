@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import hashlib
 import io
 import json
@@ -13,6 +14,8 @@ from uuid import uuid4
 import zipfile
 
 import pytest
+
+from tests.trusted_intake_fixtures import assert_sealed_export
 from pydantic import ValidationError
 
 from app.adapters.checkers import (
@@ -44,10 +47,12 @@ from app.modules.artifacts.preparation import (
     ExternalMaterialGrantRequest,
     PostExternalMaterialGrantRequest,
 )
-from app.modules.artifacts.submission_archive import (
-    SubmissionArchiveInspector,
+from app.modules.artifacts.api.submission_archive import (
     SubmissionArchiveLimits,
     SubmissionArchiveEntryType,
+)
+from app.modules.artifacts.submission_archive import (
+    SubmissionArchiveInspector,
 )
 from app.modules.artifacts.submission_manifest import build_submission_manifest
 from app.modules.artifacts.submission_manifest import SUBMISSION_MANIFEST_SCHEMA_VERSION
@@ -640,9 +645,7 @@ def test_post_external_grant_preserves_submitted_reserved_names(
                 ExternalMaterialFile(
                     normalized_path=".external-checker-grant.json",
                     byte_count=len(submitted_manifest),
-                    sha256=(
-                        f"sha256:{hashlib.sha256(submitted_manifest).hexdigest()}"
-                    ),
+                    sha256=f"sha256:{hashlib.sha256(submitted_manifest).hexdigest()}",
                     executable=False,
                 ),
                 ExternalMaterialFile(
@@ -714,30 +717,62 @@ def test_post_external_grant_preserves_submitted_reserved_names(
         submitted_workspace = extraction / "workspace"
         submitted_workspace.mkdir()
         (submitted_workspace / "program.py").write_bytes(payload)
-        with manager._external_material_grant(extraction, request) as grant:
-            grant_root = tmp_path / "scratch" / "workspaces" / grant.grant_id
-            assert (grant_root / "workspace/workspace/program.py").read_bytes() == payload
-            assert (grant_root / "workspace/runtime").is_dir()
-            assert (
-                grant_root / "workspace/.external-checker-grant.json"
-            ).read_bytes() == submitted_manifest
-            assert json.loads((grant_root / ".external-checker-grant.json").read_text())[
-                "grant_id"
-            ] == grant.grant_id
-            manifest = json.loads(
-                (grant_root / ".external-checker-grant.json").read_text()
-            )
-            assert "runtime_scratch" not in manifest
-            assert not (grant_root / "runtime").exists()
-            [reservation] = json.loads(
-                (tmp_path / "scratch" / ".ledger.json").read_text()
-            )["workspaces"]
-            assert reservation["reserved_bytes"] == len(payload) + len(submitted_manifest)
-            assert reservation["maximum_entries"] == 5
-            assert not any(
-                item.name.startswith(".external-material-")
-                for item in grant_root.iterdir()
-            )
+        for digest in (SHA, "sha256:" + "9" * 64):
+            with manager._external_material_grant(extraction, replace(request, request_digest=digest)) as grant:
+                grant_root = tmp_path / "scratch" / "workspaces" / grant.grant_id
+                assert (grant_root / "workspace/workspace/program.py").read_bytes() == payload
+                assert (grant_root / "workspace/runtime").is_dir()
+                assert (
+                    grant_root / "workspace/.external-checker-grant.json"
+                ).read_bytes() == submitted_manifest
+                manifest = json.loads(
+                    (grant_root / ".external-checker-grant.json").read_text()
+                )
+                assert manifest["grant_id"] == grant.grant_id and manifest["request_digest"] == digest
+                assert "runtime_scratch" not in manifest
+                assert not (grant_root / "runtime").exists()
+                [reservation] = json.loads(
+                    (tmp_path / "scratch" / ".ledger.json").read_text()
+                )["workspaces"]
+                assert reservation["reserved_bytes"] == len(payload) + len(submitted_manifest)
+                assert reservation["maximum_entries"] == 5
+                assert not any(
+                    item.name.startswith(".external-material-")
+                    for item in grant_root.iterdir()
+                )
+            assert_sealed_export(extraction)
 
     assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
     manager.close()
+
+
+@pytest.mark.parametrize("with_model_grant", [False, True])
+async def test_public_trace_preserves_execution_arguments(monkeypatch, tmp_path, with_model_grant):
+    """The opt-in observer must remain transparent to the current adapter port."""
+    import runpy
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from app.adapters.artifacts.trusted_intake import UnixSocketTrustedIntakeAdapter
+    from app.adapters.checkers.external_service import UnixSocketExternalCheckerAdapter
+
+    trace = tmp_path / "trace.jsonl"
+    monkeypatch.setenv("WORKSTREAM_PROBE_INTAKE_TRACE", str(trace))
+    original_prepare = UnixSocketTrustedIntakeAdapter.prepare
+    monkeypatch.setattr(UnixSocketTrustedIntakeAdapter, "prepare", original_prepare)
+    expected = object()
+    execute = AsyncMock(return_value=expected)
+    monkeypatch.setattr(UnixSocketExternalCheckerAdapter, "execute", execute)
+    probe = Path(__file__).resolve().parents[4] / "experiments/pilot04_external_checker_runtime/public_intake_observer.py"
+    runpy.run_path(str(probe))
+    adapter, grant = object(), object()
+    model_grant = object() if with_model_grant else None
+    request = SimpleNamespace(request_digest="sha256:" + "a" * 64)
+    actual = await UnixSocketExternalCheckerAdapter.execute(
+        adapter, request, grant, model_grant=model_grant,
+    )
+    assert actual is expected
+    execute.assert_awaited_once_with(adapter, request, grant, model_grant=model_grant)
+    assert [json.loads(line)["event"] for line in trace.read_text().splitlines()] == [
+        "project_started", "project_completed",
+    ]

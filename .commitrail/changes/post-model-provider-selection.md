@@ -159,8 +159,13 @@ code or CI selection changes are required for this repair.
 
 ## Reconciliation
 
-Base: current main `a3c98c3571c6de4a6f4ce5ca6f3560b5cb32f7f6`, including merged #676
-and AWS proof fix. Coordinate shared hosted files with active #677 without
+Base: current main `ae788e6a8af71075059b784a9be5ec512fde91de`, including merged #675,
+#676 and AWS proof fix. Preserve #675's separate Smol trusted-intake factory,
+hosted socket/image checks and public-drill scope together with profile-selected
+model providers and optional credential overlays. The combined architecture
+inventory has two ART factory/construction sites and three CHECKERS concrete
+constructors; ownership and lane fingerprints cover both sets of additions.
+Coordinate shared hosted files with active #677 without
 editing its worktree. No database migration: existing profile/SQL model identities already allow slash-qualified names through 160 characters. Response IDs stay slash-free through 256 characters.
 Next usable boundary: deploy the configured provider repair with project POST
 implementations and run the approved real-project drill.

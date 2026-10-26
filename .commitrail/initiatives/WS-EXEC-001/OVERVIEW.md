@@ -1,26 +1,30 @@
 # WS-EXEC-001 — Managed lifecycle for self-hosted checker microVMs
 
-- Disposition: Planned
+- Disposition: Complete
 - Intent: finish the real upload -> isolated intake -> pre-check -> immutable Submission -> durable post-check -> governed outcome path through Workstream's typed adapters. Preparation begins after authorization while the same request uploads its ZIP. Success, rejection, disconnect, deadline, runtime failure and controller restart must release exactly owned resources. User explicitly authorized continuing through all implementation boundaries and live EC2 proof; the standalone qualification is not completion.
 
 ## Observed owners and concrete gaps
 
-`PreparedSubmissionBundlePreparationCommand.prepare` authorizes/relocks TASK and
-PROJECT before and after byte receipt. It currently starts checking only after
-host-side `SubmissionArchiveInspector.inspect`. Selected PRE uses the canonical
-ART projected tree, default checker and exact callback grants; POST already has
-durable execution/lease/outbox custody. `ExternalCheckerExecutionAdapter` and its
-explicit factory compose a Rust Unix-socket service. That service now supports bounded concurrent Smol microVM execution alongside
-its Docker/runsc and Docker development engines, with exact-owner cleanup and
-independent Smol guardians. The remaining missing capability is typed ART
-preparation and trusted guest intake during upload.
+`PreparedSubmissionBundlePreparationCommand.prepare` authorizes TASK/PROJECT,
+starts trusted intake preparation while the same request uploads, then relocks
+the policy before inspection. ART consumes canonical ZIP/default processing
+through its typed intake capability, independently verifies raw exports and
+closes intake before ordered project PRE execution. POST uses the same intake
+under its durable execution/lease/outbox custody. `ExternalCheckerExecutionAdapter`
+and its explicit factory compose the Rust node's project execution capability.
+The node supports bounded Smol execution, exact-owner cleanup and independent
+guardians. Both capabilities have owner/adapter proof and a combined public API/Celery
+journey on an isolated one-slot Smol node. Hosted composition requires pinned
+intake configuration; the intended production Flow/AWS deployment remains separate.
 
 The Smol 1.31.4 qualification (PR #672) proves fresh VM overlap, real Python checker
 execution, cancellation/deadlines and request-process recovery, but not production
 resource parity, host/controller restart recovery, ART integration or deployment.
-The existing model-runtime worktree is independently owned and uncommitted; do
-not replace its gateway/budget ownership with arbitrary network access or secrets
-in a VM. Integrate its stable capability when available, preserving private grants.
+The merged model-runtime capability owns gateway, budget and private-grant
+custody. Its host Unix-socket relay currently supports Docker/runsc project
+execution; Smol rejects model-entitled project execution until that transport is
+qualified inside the guest. Trusted Smol intake remains independently available.
+Do not replace that ownership with arbitrary network access or secrets in a VM.
 
 ## Design
 
@@ -82,7 +86,9 @@ and default-deny networking. Runtime insufficiency is an infrastructure failure.
    POST, invalid work vs infrastructure failure, retry, cancellation, timeout,
    controller restart, foreign-resource survival and final contribution evidence.
 
-These are reviewable PR boundaries, not stopping points for the authorized task.
+Boundary 1 has its own runtime change record. Boundaries 2 and 3 form the
+combined intake/deployment change record WS-EXEC-001-02 and its public proof.
+These remain distinct implementation responsibilities within that delivery.
 Do not merge any PR without specific user approval. Use isolated EC2 directories,
 services, ports and databases; preserve the other integration work and data.
 
@@ -95,6 +101,12 @@ results and governed outcome. Test CPU/memory/PID/output enforcement rather than
 inferring limits from vCPU count. Resource exhaustion, cancellation and unknown
 execution outcomes must not become failed-work verdicts or unsafe execution retries.
 
-Next usable boundary: WS-EXEC-001-02, upload-overlapped trusted ART intake.
-Boundary 1 supplies the production node lifecycle and existing execution adapter;
-its synthetic-grant proof does not complete the public contributor journey.
+All three implementation boundaries are complete for the self-hosted lifecycle.
+The public drill proves cancellation, ordered PRE, bounded launch retries,
+controller recovery, durable POST recovery through the public Operator route,
+true-policy review routing and false-policy acceptance with exact contribution
+and conditional award facts. It uses a local Flow verifier fixture, recorded guide
+inference and MinIO; it does not certify production Flow, native AWS S3, live model
+invocation or the intended hosted deployment. Next usable boundary: provision the
+pinned intake and approved checker images in that deployment and repeat its
+provider/identity-specific proof. This does not authorize merge or a new initiative.

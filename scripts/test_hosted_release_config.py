@@ -551,6 +551,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
             ),
             patch.object(preflight, "validate_private_host_inputs"),
             patch.object(preflight, "validate_docker_runtime"),
+            patch.object(preflight, "validate_trusted_intake"),
             redirect_stdout(io.StringIO()),
         ):
             self.assertEqual(preflight.main(), 0)
@@ -572,7 +573,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 run.assert_not_called()
 
     def test_launch_checks_host_and_runtime_before_starting(self) -> None:
-        for failure in (None, "private", "runtime"):
+        for failure in (None, "private", "runtime", "intake"):
             with self.subTest(failure=failure):
                 order = []
 
@@ -588,6 +589,12 @@ class HostedReleaseConfigTests(unittest.TestCase):
                     order.append("runtime")
                     if failure == "runtime":
                         raise preflight.PreflightError("Docker runtime rejected")
+
+                def intake_check(values):
+                    self.assertEqual(values, self.environment)
+                    order.append("intake")
+                    if failure == "intake":
+                        raise preflight.PreflightError("trusted intake rejected")
 
                 def launch(path, values, arguments):
                     self.assertEqual(path, self.environment_path)
@@ -605,19 +612,21 @@ class HostedReleaseConfigTests(unittest.TestCase):
                     patch.object(
                         compose, "validate_docker_runtime", side_effect=runtime_check
                     ),
+                    patch.object(compose, "validate_trusted_intake", side_effect=intake_check),
                     patch.object(compose, "run_compose", side_effect=launch) as run,
                 ):
                     result, error = self._compose_main("up")
                 if failure is None:
                     self.assertEqual((result, error), (0, ""))
-                    self.assertEqual(order, ["private", "runtime", "launch"])
+                    self.assertEqual(order, ["private", "runtime", "intake", "launch"])
                     run.assert_called_once()
                 else:
                     self.assertEqual(result, 1)
                     self.assertIn("rejected", error)
                     self.assertEqual(
                         order,
-                        ["private"] if failure == "private" else ["private", "runtime"],
+                        {"private": ["private"], "runtime": ["private", "runtime"],
+                         "intake": ["private", "runtime", "intake"]}[failure],
                     )
                     run.assert_not_called()
 
@@ -713,6 +722,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
             patch.object(compose, "load_checker_config", return_value=self.checker),
             patch.object(compose, "validate_private_host_inputs"),
             patch.object(compose, "validate_docker_runtime"),
+            patch.object(compose, "validate_trusted_intake"),
             patch.object(compose, "run_proof_group", return_value=0) as proof_group,
         ):
             self.assertEqual(compose.main(), 0)
@@ -1487,6 +1497,17 @@ class HostedReleaseConfigTests(unittest.TestCase):
         model_socket_root = self.root / "model-socket"
         model_relay_root = self.root / "model-relays"
         guide_socket_root = self.root / "guide-socket"
+        intake_root = self.root / "intake"
+        intake_root.mkdir(mode=0o700)
+        intake_path = intake_root / "checker.sock"
+        intake_listener = socket.socket(socket.AF_UNIX)
+        intake_listener.bind(str(intake_path))
+        intake_path.chmod(0o600)
+        self.addCleanup(intake_listener.close)
+        for field, value in (("INTAKE_SOCKET_ROOT", intake_root), ("INTAKE_SOCKET_PATH", intake_path)):
+            owned_patch = patch.object(preflight, field, value)
+            owned_patch.start()
+            self.addCleanup(owned_patch.stop)
         scratch.mkdir(mode=0o700)
         socket_root.mkdir(mode=0o700)
         model_socket_root.mkdir(mode=0o700)
@@ -1735,6 +1756,45 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 preflight.validate_private_host_inputs(environment)
         finally:
             listener.close()
+
+
+    def test_trusted_intake_requires_pinned_settings_and_readonly_mounts(self) -> None:
+        for key in preflight.INTAKE_DIGEST_KEYS:
+            for value in (None, "latest"):
+                changed = dict(self.environment)
+                if value is None:
+                    del changed[key]
+                else:
+                    changed[key] = value
+                with self.subTest(key=key, value=value), self.assertRaises(preflight.PreflightError):
+                    preflight.validate_environment(changed)
+        rendered = preflight.render_compose(self.environment_path, self.environment)
+        for role in ("api", "worker"):
+            changed = copy.deepcopy(rendered)
+            for mount in changed["services"][role]["volumes"]:
+                if mount["target"] == str(preflight.INTAKE_SOCKET_ROOT):
+                    mount["read_only"] = False
+            with self.subTest(role=role), self.assertRaises(preflight.PreflightError):
+                preflight.validate_compose(changed, self.environment)
+
+    def test_trusted_intake_health_uses_typed_factory_without_credentials(self) -> None:
+        health = {"runtime": "smolvm", "isolation_mode": "smol-microvm",
+                  "image_digest": self.environment[preflight.INTAKE_DIGEST_KEYS[0]],
+                  "config_digest": self.environment[preflight.INTAKE_DIGEST_KEYS[1]]}
+        with patch.object(preflight, "_run_json", return_value=health) as run:
+            preflight.validate_trusted_intake(self.environment)
+        command = run.call_args.args[0]
+        self.assertIn("--pull=never", command)
+        self.assertIn("trusted_submission_intake(s).health()", command[-1])
+        self.assertEqual(command[command.index("--network") + 1], "none")
+        self.assertEqual(command.count("--mount"), 1)
+        self.assertIn("readonly", command[command.index("--mount") + 1])
+        self.assertNotIn("--env-file", command)
+        self.assertNotIn("--env", command)
+        for mutation in ({"runtime": "runsc"}, {"image_digest": "sha256:" + "f" * 64}):
+            with patch.object(preflight, "_run_json", return_value=health | mutation):
+                with self.assertRaises(preflight.PreflightError):
+                    preflight.validate_trusted_intake(self.environment)
 
 
 class ReleaseSecretLoaderTests(unittest.TestCase):
@@ -2083,6 +2143,8 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
                     self.assertEqual(completed.stdout, "")
                     self.assertIn("WORKSTREAM_DATABASE_URL", completed.stderr)
                     self.assertNotIn("do-not-print", completed.stderr)
+
+
 
 
 if __name__ == "__main__":
