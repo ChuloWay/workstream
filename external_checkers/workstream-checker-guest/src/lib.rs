@@ -11,6 +11,9 @@ pub const GUEST_IO_PROTOCOL: &str = "workstream.smol_guest_io.v1";
 pub const MODEL_FRAME_MAXIMUM: usize = 1024 * 1024;
 pub const EXECUTION_FRAME_MAXIMUM: usize = 4 * 1024 * 1024;
 pub const TRIAL_CHILD_PROTOCOL: &str = "workstream.smol_trial_child.v1";
+/// Minimum independently bounded ext4 partition accepted by the trusted guest.
+pub const MINIMUM_TRIAL_FILESYSTEM_BYTES: u64 = 4 * 1024 * 1024;
+pub const MINIMUM_TRIAL_FILESYSTEM_ENTRIES: u64 = 32;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]

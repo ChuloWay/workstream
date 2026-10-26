@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use workstream_checker_guest::{
     GuestJob, GuestPurpose, MaterialFile, TrialChildLimits, TrialChildOutcome, TrialChildResult,
     TrialExport, TrialExportOutcome, TrialFilesystemLimit, TrialRequest, TrialTermination,
-    TRIAL_CHILD_PROTOCOL,
+    MINIMUM_TRIAL_FILESYSTEM_BYTES, MINIMUM_TRIAL_FILESYSTEM_ENTRIES, TRIAL_CHILD_PROTOCOL,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -128,7 +128,9 @@ impl BoundedFilesystem {
         exposed: &Path,
         mode: u32,
     ) -> Result<Self> {
-        if limit.bytes < 4 * 1024 * 1024 || limit.entries < 32 {
+        if limit.bytes < MINIMUM_TRIAL_FILESYSTEM_BYTES
+            || limit.entries < MINIMUM_TRIAL_FILESYSTEM_ENTRIES
+        {
             return Err("trial filesystem limit cannot hold ext4 metadata".into());
         }
         let base = Path::new(FILESYSTEMS).join(format!("{operation}-{name}"));
@@ -406,7 +408,8 @@ fn valid_environment(values: &[String]) -> bool {
 }
 
 fn valid_limit(limit: TrialFilesystemLimit) -> bool {
-    limit.bytes >= 4 * 1024 * 1024 && limit.entries >= 32
+    limit.bytes >= MINIMUM_TRIAL_FILESYSTEM_BYTES
+        && limit.entries >= MINIMUM_TRIAL_FILESYSTEM_ENTRIES
 }
 
 fn valid_child_limits(limits: TrialChildLimits) -> bool {

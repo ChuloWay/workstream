@@ -14,6 +14,7 @@ use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsE
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use workstream_checker_guest::{MINIMUM_TRIAL_FILESYSTEM_BYTES, MINIMUM_TRIAL_FILESYSTEM_ENTRIES};
 use workstream_checker_sdk::canonical_hash;
 
 #[path = "trial_engine/image_archive.rs"]
@@ -771,7 +772,6 @@ const LAUNCHER_BOOTSTRAP_BYTES: u64 = 64 * 1024;
 // The trusted bootstrap has a fixed mount skeleton; submitted code never sees
 // it. Charge every launcher-created top-level entry conservatively.
 const LAUNCHER_BOOTSTRAP_ENTRIES: u64 = 8;
-const MINIMUM_TMPFS_BYTES: u64 = 4096;
 
 struct BuildAllowances {
     root_bytes: u64,
@@ -833,11 +833,13 @@ impl ProjectionBudget {
     fn build_allowances(&self) -> Result<BuildAllowances, TrialEngineFailure> {
         let remaining_bytes = self
             .bytes_left
-            .checked_sub(LAUNCHER_BOOTSTRAP_BYTES + MINIMUM_TMPFS_BYTES)
-            .and_then(|value| value.checked_sub(MINIMUM_TMPFS_BYTES))
+            .checked_sub(LAUNCHER_BOOTSTRAP_BYTES + MINIMUM_TRIAL_FILESYSTEM_BYTES)
+            .and_then(|value| value.checked_sub(MINIMUM_TRIAL_FILESYSTEM_BYTES))
             .ok_or_else(capacity_failure)?;
-        let temporary_bytes = (remaining_bytes / 8).clamp(MINIMUM_TMPFS_BYTES, 16 * 1024 * 1024);
-        let shared_memory_bytes = (remaining_bytes / 16).clamp(MINIMUM_TMPFS_BYTES, 1024 * 1024);
+        let temporary_bytes =
+            (remaining_bytes / 8).clamp(MINIMUM_TRIAL_FILESYSTEM_BYTES, 16 * 1024 * 1024);
+        let shared_memory_bytes =
+            (remaining_bytes / 16).clamp(MINIMUM_TRIAL_FILESYSTEM_BYTES, 4 * 1024 * 1024);
         let root_and_candidate = self
             .bytes_left
             .checked_sub(LAUNCHER_BOOTSTRAP_BYTES)
@@ -848,7 +850,10 @@ impl ProjectionBudget {
         let root_bytes = root_and_candidate
             .checked_sub(candidate_bytes)
             .ok_or_else(capacity_failure)?;
-        if candidate_bytes == 0 || root_bytes < candidate_bytes {
+        if candidate_bytes == 0
+            || root_bytes < candidate_bytes
+            || root_bytes < MINIMUM_TRIAL_FILESYSTEM_BYTES
+        {
             return Err(capacity_failure());
         }
 
@@ -857,13 +862,15 @@ impl ProjectionBudget {
             .checked_sub(LAUNCHER_BOOTSTRAP_ENTRIES)
             .and_then(|value| value.checked_sub(1))
             .ok_or_else(capacity_failure)?;
-        let temporary_entries = (entries_after_bootstrap / 8).clamp(4, 256);
-        let shared_memory_entries = (entries_after_bootstrap / 16).clamp(4, 64);
+        let temporary_entries =
+            (entries_after_bootstrap / 8).clamp(MINIMUM_TRIAL_FILESYSTEM_ENTRIES, 256);
+        let shared_memory_entries =
+            (entries_after_bootstrap / 16).clamp(MINIMUM_TRIAL_FILESYSTEM_ENTRIES, 64);
         let root_entries = entries_after_bootstrap
             .checked_sub(temporary_entries)
             .and_then(|value| value.checked_sub(shared_memory_entries))
             .ok_or_else(capacity_failure)?;
-        if root_entries < 32 {
+        if root_entries < MINIMUM_TRIAL_FILESYSTEM_ENTRIES {
             return Err(capacity_failure());
         }
         Ok(BuildAllowances {
@@ -888,19 +895,21 @@ impl ProjectionBudget {
         let root_entries = self
             .retained_entries
             .checked_add(16)
-            .map(|value| value.max(32))
+            .map(|value| value.max(MINIMUM_TRIAL_FILESYSTEM_ENTRIES))
             .ok_or_else(capacity_failure)?;
         let root_bytes = root_entries
             .checked_mul(4096)
-            .map(|value| value.max(64 * 1024))
+            .map(|value| value.max(MINIMUM_TRIAL_FILESYSTEM_BYTES))
             .ok_or_else(capacity_failure)?;
         let bytes_after_fixed = self
             .bytes_left
             .checked_sub(LAUNCHER_BOOTSTRAP_BYTES)
             .and_then(|value| value.checked_sub(root_bytes))
             .ok_or_else(capacity_failure)?;
-        let temporary_bytes = (bytes_after_fixed / 8).clamp(MINIMUM_TMPFS_BYTES, 16 * 1024 * 1024);
-        let shared_memory_bytes = (bytes_after_fixed / 16).clamp(MINIMUM_TMPFS_BYTES, 1024 * 1024);
+        let temporary_bytes =
+            (bytes_after_fixed / 8).clamp(MINIMUM_TRIAL_FILESYSTEM_BYTES, 16 * 1024 * 1024);
+        let shared_memory_bytes =
+            (bytes_after_fixed / 16).clamp(MINIMUM_TRIAL_FILESYSTEM_BYTES, 4 * 1024 * 1024);
         let workspace_bytes = self
             .bytes_left
             .checked_sub(LAUNCHER_BOOTSTRAP_BYTES)
@@ -915,15 +924,19 @@ impl ProjectionBudget {
             .checked_sub(bootstrap_entries)
             .and_then(|value| value.checked_sub(root_entries))
             .ok_or_else(capacity_failure)?;
-        let temporary_entries = (entries_after_fixed / 8).clamp(4, 256);
-        let shared_memory_entries = (entries_after_fixed / 16).clamp(4, 64);
+        let temporary_entries =
+            (entries_after_fixed / 8).clamp(MINIMUM_TRIAL_FILESYSTEM_ENTRIES, 256);
+        let shared_memory_entries =
+            (entries_after_fixed / 16).clamp(MINIMUM_TRIAL_FILESYSTEM_ENTRIES, 64);
         let workspace_entries = entries_after_fixed
             .checked_sub(temporary_entries)
             .and_then(|value| value.checked_sub(shared_memory_entries))
             .ok_or_else(capacity_failure)?
             / 2;
         let (existing_bytes, existing_entries) = owned_tree_usage(workspace)?;
-        if workspace_bytes < existing_bytes || workspace_entries < existing_entries {
+        if workspace_bytes < existing_bytes.max(MINIMUM_TRIAL_FILESYSTEM_BYTES)
+            || workspace_entries < existing_entries.max(MINIMUM_TRIAL_FILESYSTEM_ENTRIES)
+        {
             return Err(capacity_failure());
         }
         Ok(StepAllowances {

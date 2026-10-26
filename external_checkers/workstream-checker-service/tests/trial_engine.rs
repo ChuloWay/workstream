@@ -17,6 +17,14 @@ mod trial_relay;
 use trial_engine::*;
 use trial_relay::*;
 
+fn assert_guest_filesystem_supported(bytes: u64, entries: u64) {
+    assert!(
+        bytes >= workstream_checker_guest::MINIMUM_TRIAL_FILESYSTEM_BYTES,
+        "host allocation must fit the actual guest filesystem"
+    );
+    assert!(entries >= workstream_checker_guest::MINIMUM_TRIAL_FILESYSTEM_ENTRIES);
+}
+
 static SEQUENCE: AtomicUsize = AtomicUsize::new(0);
 
 struct Root(PathBuf);
@@ -98,6 +106,19 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
         _invocation_cancelled: &AtomicBool,
         _relay_cancelled: &AtomicBool,
     ) -> Result<SandboxBuildResult, SandboxFailure> {
+        for (bytes, entries) in [
+            (request.launcher_root_bytes, request.launcher_root_entries),
+            (
+                request.launcher_temporary_bytes,
+                request.launcher_temporary_entries,
+            ),
+            (
+                request.launcher_shared_memory_bytes,
+                request.launcher_shared_memory_entries,
+            ),
+        ] {
+            assert_guest_filesystem_supported(bytes, entries);
+        }
         self.builds.fetch_add(1, Ordering::Relaxed);
         assert!(request.context_root.join("source/main.txt").is_file());
         assert!(!request.context_root.join("protected/canary.txt").exists());
@@ -124,6 +145,23 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
         _invocation_cancelled: &AtomicBool,
         _relay_cancelled: &AtomicBool,
     ) -> Result<SandboxStepResult, SandboxFailure> {
+        for (bytes, entries) in [
+            (request.launcher_root_bytes, request.launcher_root_entries),
+            (
+                request.launcher_workspace_bytes,
+                request.launcher_workspace_entries,
+            ),
+            (
+                request.launcher_temporary_bytes,
+                request.launcher_temporary_entries,
+            ),
+            (
+                request.launcher_shared_memory_bytes,
+                request.launcher_shared_memory_entries,
+            ),
+        ] {
+            assert_guest_filesystem_supported(bytes, entries);
+        }
         self.steps.fetch_add(1, Ordering::Relaxed);
         assert_eq!(request.visible_roles.len(), 1);
         assert_eq!(request.visible_roles[0].role, "protected");
@@ -295,9 +333,9 @@ fn profile() -> TrialProfile {
         maximum_cpu_time_overrun_ms: 100,
         maximum_memory_bytes: 64 * 1024 * 1024,
         maximum_memory_overrun_bytes: 1024,
-        maximum_disk_bytes: 1024 * 1024,
+        maximum_disk_bytes: 128 * 1024 * 1024,
         maximum_disk_overrun_bytes: 1024,
-        maximum_entries: 100,
+        maximum_entries: 1024,
         maximum_entries_overrun: 1,
         maximum_pids: 16,
         maximum_pids_overrun: 1,
@@ -309,8 +347,8 @@ fn resources() -> TrialResources {
         cpu_quota_millis: 500,
         cpu_time_ms: 2_000,
         memory_bytes: 32 * 1024 * 1024,
-        disk_bytes: 512 * 1024,
-        maximum_entries: 100,
+        disk_bytes: 64 * 1024 * 1024,
+        maximum_entries: 1024,
         pids: 8,
     }
 }
@@ -657,9 +695,9 @@ fn retained_image_expansion_consumes_the_shared_invocation_budget() {
 fn retained_workspace_copies_remain_charged_to_the_invocation() {
     let root = Root::new();
     let (context, mut plan) = continuation_context_and_plan(&root);
-    plan.resources.maximum_entries = 100;
+    plan.resources.maximum_entries = 512;
     let backend = Arc::new(FakeBackend::default());
-    backend.step_extra_files.store(10, Ordering::Relaxed);
+    backend.step_extra_files.store(180, Ordering::Relaxed);
     backend
         .outcomes
         .lock()
@@ -684,7 +722,7 @@ fn child_workspace_writes_cannot_exceed_the_global_remaining_budget() {
     let root = Root::new();
     let context = context(&root);
     let backend = Arc::new(FakeBackend::default());
-    backend.step_extra_files.store(128, Ordering::Relaxed);
+    backend.step_extra_files.store(2048, Ordering::Relaxed);
     let failure = GenericTrialEngine::new(backend.clone())
         .execute(
             &context,
