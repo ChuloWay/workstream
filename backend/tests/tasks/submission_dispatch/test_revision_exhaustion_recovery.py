@@ -40,7 +40,7 @@ from tests.tasks.test_public_submission_intake import _client
 from tests.test_alembic import (
     _alembic_config,
     _execute,
-    _historical_artifact_model_usage_projection,
+    _historical_artifact_lineage_projection,
 )
 
 
@@ -92,7 +92,7 @@ async def _retained_cap_source(tmp_path, database_url, monkeypatch):
         monkeypatch,
         "0047_revision_source_cap_one",
     ) as h:
-        async with _historical_artifact_model_usage_projection(database_url):
+        async with _historical_artifact_lineage_projection(database_url):
             await assert_historical_revision_guards(h.factory, "0047_revision_recovery")
             h.envelope = await invoked_completion(h)
             await assert_historical_revision_guards(h.factory, "0047_revision_recovery")
@@ -247,7 +247,7 @@ async def test_upgrade_backfills_assignments_around_a_retained_exhausted_assignm
         monkeypatch,
         "0048_revision_source_cap_zero",
     ) as h:
-        async with _historical_artifact_model_usage_projection(database_url):
+        async with _historical_artifact_lineage_projection(database_url):
             await assert_historical_revision_guards(h.factory, "0048_revision_exhaustion")
             h.envelope = await invoked_completion(h)
             await assert_historical_revision_guards(h.factory, "0048_revision_exhaustion")

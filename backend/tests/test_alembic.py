@@ -76,12 +76,14 @@ async def _execute(database_url: str, statement: str, *arguments: object) -> Non
 
 
 @asynccontextmanager
-async def _historical_artifact_model_usage_projection(database_url: str):
-    """Expose nullable 0061 ORM columns while arranging older ART rows."""
+async def _historical_artifact_lineage_projection(database_url: str):
+    """Expose null-only current ART lineage after restoring exact historical rows."""
     connection = await asyncpg.connect(database_url.replace("+asyncpg", ""))
     columns = (
         ("artifact_put_attempts", "model_call_attempt_id"),
+        ("artifact_put_attempts", "checker_trial_evidence_id"),
         ("artifact_operation_receipts", "model_call_attempt_id"),
+        ("artifact_operation_receipts", "checker_trial_evidence_id"),
     )
     installed: list[tuple[str, str]] = []
     try:
