@@ -13,6 +13,20 @@ const HOST_OVERHEAD: u64 = 512 * 1024 * 1024;
 const GUEST_OVERHEAD_MIB: u64 = 128;
 const VERSION: &str = "1.31.4";
 
+// Pinned Smol creates HOME/.cache/smolvm/vms/<16hex>/control.sock.
+// Linux sockaddr_un reserves one of its 108 bytes for the trailing NUL.
+pub(super) fn validate_home_socket_path(home: &Path) -> Result<(), String> {
+    use std::os::unix::ffi::OsStrExt;
+    if home.as_os_str().as_bytes().len() > 107 - 48 {
+        return Err("Smol HOME exceeds Unix socket path limit".into());
+    }
+    Ok(())
+}
+
+pub(super) fn validate_child_home_root(root: &Path) -> Result<(), String> {
+    validate_home_socket_path(&root.join(format!("ws-{}.home", "0".repeat(32))))
+}
+
 mod admission;
 pub(crate) use admission::{Admission, Capacity, Reservation};
 mod intake;
@@ -37,6 +51,14 @@ impl From<&ValidatedRequest> for Resources {
             storage_gib: 1,
             pids: (value.memory_bytes / (16 * 1024 * 1024)).clamp(16, 256),
         }
+    }
+}
+
+impl Resources {
+    fn host_pids(self) -> u64 {
+        // The VMM needs host threads independently of the guest workload's
+        // process ceiling. The pinned runtime reaches 57 during cold startup.
+        self.pids.max(128)
     }
 }
 
@@ -249,6 +271,7 @@ fn settings(config: &ServiceConfig) -> Result<&SmolConfig, String> {
 }
 pub(super) fn validate(config: &ServiceConfig) -> Result<(), String> {
     let s = settings(config)?;
+    validate_home_socket_path(&s.home)?;
     if config.operating_system != "linux"
         || config.architecture != "amd64"
         || s.maximum_parallel == 0
@@ -815,7 +838,7 @@ impl Machine {
             ),
             ("memory.swap.max", "0".into()),
             ("memory.oom.group", "1".into()),
-            ("pids.max", resources.pids.to_string()),
+            ("pids.max", resources.host_pids().to_string()),
         ] {
             fs::write(group.join(file), value).map_err(|_| "cgroup enforcement failed")?;
         }

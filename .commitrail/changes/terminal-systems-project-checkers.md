@@ -694,3 +694,27 @@ on the root filesystem. The Smol trial validator therefore preserves that exact
 config metadata and removes the Docker-only refusal. Writable storage still
 belongs to the trusted launcher's bounded filesystems. The regression checks
 unchanged layer accounting and distinct exact config identity.
+
+### Native socket path admission
+
+Pinned Smol 1.31.4 qualification rejected long private HOME paths before VM
+execution. Its longest control socket suffix consumes 48 bytes, and the existing
+full-entropy child HOME name consumes another 41 bytes. Node startup now checks
+the Linux 107-byte pathname bound: global HOME at most 59 bytes and child HOME
+root at most 18 bytes. The guard uses filesystem bytes, preserves canonical path
+and private-owner checks, and changes no execution authority or nonce format.
+The composed probe retains a fresh operator-provisioned short child root rather
+than replacing it with a long evidence-directory path. Its final cleanup check
+still verifies the exact root marker, owner, inode and absence of child VMs.
+Boundary and multibyte regressions protect admission; real KVM qualification
+remains required and is not inferred from these local tests.
+
+The same qualification isolated a separate VMM startup abort. With the exact
+POST image, a 640-MiB VM and 1-GiB host memory envelope, a 32-task host cgroup
+hit its PID limit and the pinned VMM aborted on thread creation. A fresh control
+with 128 host tasks started successfully, peaked at 57 tasks and recorded no PID
+or OOM event. The host cgroup now reserves a bounded floor of 128 tasks for VMM
+threads. Guest workload PID ceilings, memory, CPU and policy limits are unchanged;
+guest processes are controlled by their own guest cgroups. Both diagnostic VMs,
+their private HOMEs and host cgroups were removed. This startup control is not
+the full composed model/trial qualification.

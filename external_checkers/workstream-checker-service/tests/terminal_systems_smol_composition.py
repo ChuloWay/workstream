@@ -268,17 +268,16 @@ def _directory_children(path: Path) -> set[str]:
     return {item.name for item in path.iterdir()}
 
 
-def _assert_idle_trial_roots(root: Path, service_root: Path) -> None:
+def _assert_idle_trial_roots(root: Path, service_root: Path, child_home_root: Path) -> None:
     owner = (service_root / ".workstream-checker-owner").read_text()
     assert len(owner) == 64 and all(
         character in "0123456789abcdef" for character in owner
     )
-    for directory, role in (
-        ("trial-relay", "relay"),
-        ("trial-scratch", "scratch"),
-        ("trial-child-home", "child_home"),
+    for path, role in (
+        (root / "trial-relay", "relay"),
+        (root / "trial-scratch", "scratch"),
+        (child_home_root, "child_home"),
     ):
-        path = root / directory
         identity = path.lstat()
         assert path.resolve() == path and stat.S_ISDIR(identity.st_mode)
         assert (identity.st_uid, identity.st_gid) == (os.geteuid(), os.getegid())
@@ -752,6 +751,14 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
     root = configured_root.resolve(strict=True)
     assert root == configured_root and root.stat().st_mode & 0o077 == 0
     node, checker_image, builder_image, intake_image = _node_configuration(env)
+    child_home_root = Path(node["trial_runtime"]["child_home_root"])
+    assert child_home_root.is_absolute() and child_home_root.resolve(strict=True) == child_home_root
+    assert len(os.fsencode(child_home_root)) <= 18
+    child_root_stat = child_home_root.lstat()
+    assert stat.S_ISDIR(child_root_stat.st_mode)
+    assert stat.S_IMODE(child_root_stat.st_mode) == 0o700
+    assert (child_root_stat.st_uid, child_root_stat.st_gid) == (os.geteuid(), os.getegid())
+    assert not _directory_children(child_home_root), "qualification requires a fresh owned child HOME root"
     service_binary = Path(env["WORKSTREAM_TS_SMOL_SERVICE"])
     assert service_binary.is_absolute() and service_binary.is_file()
     assert not service_binary.is_symlink() and os.access(service_binary, os.X_OK)
@@ -996,7 +1003,6 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
             root / "model-relay",
             root / "trial-relay",
             root / "trial-scratch",
-            root / "trial-child-home",
         ):
             directory.mkdir(mode=0o700, exist_ok=True)
         proxy_path = proxy_root / "proxy.sock"
@@ -1016,7 +1022,6 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
         service_config["trial_runtime"].update(
             relay_root=str(root / "trial-relay"),
             scratch_root=str(root / "trial-scratch"),
-            child_home_root=str(root / "trial-child-home"),
             deployment_owner="terminal-systems-smol-qualification",
         )
         runtime_configuration_digest = _runtime_configuration_digest(service_config)
@@ -1209,7 +1214,7 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
                     }
                     for item in sorted(effects, key=lambda item: item.id)
                 ]
-            _assert_idle_trial_roots(root, service_root)
+            _assert_idle_trial_roots(root, service_root, child_home_root)
             assert _directory_children(service_root / "smol-leases") == set()
             assert _directory_children(vms_root) == before_vms
             assert _directory_children(cgroup_root) == before_cgroups

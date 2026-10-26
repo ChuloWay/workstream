@@ -1,6 +1,34 @@
 use super::*;
 
 #[test]
+fn small_guest_process_limits_leave_room_for_native_vmm_threads() {
+    let request = parse_request(include_bytes!("../../../fixtures/request.json")).unwrap();
+    let mut resources = Resources::from(&request);
+    resources.memory_bytes = 512 * 1024 * 1024;
+    resources.pids = 32;
+    assert_eq!(resources.host_pids(), 128);
+    assert_eq!(resources.pids, 32);
+    resources.pids = 3;
+    assert_eq!(resources.host_pids(), 128);
+    assert_eq!(resources.pids, 3);
+    resources.pids = 256;
+    assert_eq!(resources.host_pids(), 256);
+}
+
+#[test]
+fn smol_socket_paths_reserve_the_full_runtime_suffix_in_bytes() {
+    let home = format!("/{}", "a".repeat(58));
+    assert!(validate_home_socket_path(Path::new(&home)).is_ok());
+    assert!(validate_home_socket_path(Path::new(&(home + "b"))).is_err());
+    let child = format!("/{}", "a".repeat(17));
+    assert!(validate_child_home_root(Path::new(&child)).is_ok());
+    assert!(validate_child_home_root(Path::new(&(child + "b"))).is_err());
+    // Character counts would admit this 60-byte path and fail at VM launch.
+    let multibyte = format!("/a{}", "é".repeat(29));
+    assert!(validate_home_socket_path(Path::new(&multibyte)).is_err());
+}
+
+#[test]
 fn trial_peak_reservation_admits_maximum_memory_and_overrun_atomically() {
     let maximum_memory = 32 * 1024 * 1024;
     let overrun = 1024 * 1024;

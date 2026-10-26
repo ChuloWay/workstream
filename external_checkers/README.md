@@ -272,6 +272,14 @@ Unix identity and a separate private socket directory, Smol HOME and image cache
 for each node. The sample unit's CPU, memory and task ceilings are deployment
 capacity; individual registered checker limits remain unchanged.
 
+Keep the canonical Smol HOME path at most 59 filesystem bytes. Trial-enabled
+nodes also need a separately owned `trial_runtime.child_home_root` at most 18
+bytes (for example, an operator-created private `/var/lib/wschild`). Smol appends
+its VM directory and socket names; each child additionally receives its full
+random private HOME name. Startup rejects longer paths before accepting work.
+These bounds count encoded bytes, not characters. Do not use symlink aliases or
+shorten invocation identities to fit the Linux Unix-socket limit.
+
 For this engine omit `docker_binary`, and configure `smol` with absolute `binary`,
 `home`, `guest_binary`, `cgroup_root` paths; `binary_sha256` and `guest_sha256`;
 and required positive `maximum_parallel` and `maximum_storage_bytes`. Install the verified Smol release bundle together and

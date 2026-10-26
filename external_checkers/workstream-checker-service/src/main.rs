@@ -522,6 +522,7 @@ fn load_trial_runtime(config: &mut ServiceConfig) -> Result<(), String> {
     match (&config.trial_profiles, &config.trial_runtime) {
         (None, None) => Ok(()),
         (Some(_), Some(runtime)) => {
+            smol::validate_child_home_root(&runtime.child_home_root)?;
             if runtime.maximum_candidate_archive_bytes == 0
                 || !valid_digest(&runtime.outer_runtime_config_digest)
                 || !valid_digest(&runtime.trusted_launcher_digest)
@@ -3170,6 +3171,10 @@ mod tests {
     #[test]
     fn trial_runtime_refuses_stale_configuration_pin_before_execution() {
         let (root, mut config) = test_config();
+        // Child HOME must leave room for Smol's fixed socket suffix.
+        let child_root = PathBuf::from(format!("/tmp/wst{}", std::process::id()));
+        fs::create_dir(&child_root).unwrap();
+        fs::set_permissions(&child_root, fs::Permissions::from_mode(0o700)).unwrap();
         config.runtime = "smolvm".into();
         config.isolation_mode = "smol-microvm".into();
         config.smol = Some(smol::SmolConfig {
@@ -3187,7 +3192,7 @@ mod tests {
         let mut runtime = TrialRuntimeConfiguration {
             relay_root: root.join("relay"),
             scratch_root: root.join("scratch"),
-            child_home_root: root.join("children"),
+            child_home_root: child_root.clone(),
             offline_cache_root: root.join("cache"),
             outer_runtime_config_digest: String::new(),
             deployment_owner: "test".into(),
@@ -3198,11 +3203,7 @@ mod tests {
             filesystem_tool_digest: format!("sha256:{}", "e".repeat(64)),
             maximum_candidate_archive_bytes: 64 * 1024 * 1024,
         };
-        for path in [
-            &runtime.relay_root,
-            &runtime.scratch_root,
-            &runtime.child_home_root,
-        ] {
+        for path in [&runtime.relay_root, &runtime.scratch_root] {
             fs::create_dir(path).unwrap();
             fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
         }
@@ -3211,6 +3212,12 @@ mod tests {
         config.trial_runtime = Some(runtime);
         assert!(load_trial_runtime(&mut config).is_ok());
         let original = config.clone();
+        config.trial_runtime.as_mut().unwrap().child_home_root = root.join("children");
+        assert_eq!(
+            load_trial_runtime(&mut config).unwrap_err(),
+            "Smol HOME exceeds Unix socket path limit"
+        );
+        config = original.clone();
         config
             .trial_runtime
             .as_mut()
@@ -3224,6 +3231,7 @@ mod tests {
         config.sandbox_uid += 1;
         assert!(load_trial_runtime(&mut config).is_err());
         fs::remove_dir_all(root).unwrap();
+        fs::remove_dir(child_root).unwrap();
     }
 
     #[test]
