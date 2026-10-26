@@ -8,6 +8,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::process::CommandExt;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -241,8 +242,7 @@ impl Drop for TrialEnvelope {
 #[serde(deny_unknown_fields)]
 struct LauncherStatus {
     schema: String,
-    child_exit_code: Option<i32>,
-    child_signal: Option<i32>,
+    child: TrialChildOutcome,
     candidate_exported: bool,
     workspace_exported: bool,
     export_failure: Option<String>,
@@ -430,8 +430,8 @@ impl BoundedFilesystem {
                 .to_str()
                 .ok_or("mount path invalid")?,
             "ext4",
-            libc::MS_NOSUID | libc::MS_NODEV,
-            "noatime,nodiratime",
+            libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOATIME | libc::MS_NODIRATIME,
+            "",
         )?;
         filesystem.private_mounted = true;
         let child = filesystem.private_mount.join("child");
@@ -1057,10 +1057,7 @@ fn classify_status(
     {
         return Err("launcher status invalid".into());
     }
-    let child = TrialChildOutcome {
-        exit_code: status.child_exit_code,
-        signal: status.child_signal,
-    };
+    let child = status.child;
     if !child.is_executed() {
         return Err("launcher child outcome invalid".into());
     }
@@ -1285,6 +1282,28 @@ pub(crate) fn run(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // Keep launcher-created binds, proc and device mounts out of the supervisor's
+    // namespace. Once descendants are drained, those mounts disappear and the
+    // supervisor can normally unmount its exact owned filesystems.
+    // Only async-signal-safe syscalls run between fork and exec.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::unshare(libc::CLONE_NEWNS) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            if libc::mount(
+                std::ptr::null(),
+                c"/".as_ptr(),
+                std::ptr::null(),
+                libc::MS_REC | libc::MS_PRIVATE,
+                std::ptr::null(),
+            ) != 0
+            {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
     let mut child = command.spawn()?;
     let mut stdout = child.stdout.take().ok_or("trial stdout unavailable")?;
     let mut stderr = child.stderr.take().ok_or("trial stderr unavailable")?;
@@ -1948,12 +1967,43 @@ mod tests {
     }
 
     #[test]
+    fn launcher_wire_status_accepts_nested_child_and_rejects_substituted_shapes() {
+        // The trusted launcher emits this nested status.json contract. A real
+        // nonzero child exit is work evidence, not an infrastructure error.
+        let document = serde_json::json!({
+            "schema": "workstream.trial_launcher_status.v1",
+            "child": { "exit_code": 2, "signal": null },
+            "candidate_exported": false,
+            "workspace_exported": false,
+            "export_failure": null
+        });
+        let status: LauncherStatus = serde_json::from_value(document.clone()).unwrap();
+        let (child, outcome) = classify_status(&build_request(), &status).unwrap();
+        assert_eq!(child.exit_code, Some(2));
+        assert_eq!(outcome, TrialExportOutcome::NotStarted);
+        let mut flattened = document.clone();
+        flattened.as_object_mut().unwrap().remove("child");
+        flattened["child_exit_code"] = 2.into();
+        flattened["child_signal"] = serde_json::Value::Null;
+        assert!(serde_json::from_value::<LauncherStatus>(flattened).is_err());
+        let mut unknown = document.clone();
+        unknown["child"]["extra"] = true.into();
+        assert!(serde_json::from_value::<LauncherStatus>(unknown).is_err());
+        let mut contradictory = document;
+        contradictory["child"]["signal"] = 9.into();
+        let status = serde_json::from_value(contradictory).unwrap();
+        assert!(classify_status(&build_request(), &status).is_err());
+    }
+
+    #[test]
     fn launcher_status_cannot_cross_phase_or_mix_export_failure_with_output() {
         let request = build_request();
         let valid_nonzero = LauncherStatus {
             schema: "workstream.trial_launcher_status.v1".into(),
-            child_exit_code: Some(2),
-            child_signal: None,
+            child: TrialChildOutcome {
+                exit_code: Some(2),
+                signal: None,
+            },
             candidate_exported: false,
             workspace_exported: false,
             export_failure: None,
@@ -1968,7 +2018,10 @@ mod tests {
         };
         assert!(classify_status(&request, &wrong_phase).is_err());
         let contradictory = LauncherStatus {
-            child_exit_code: Some(0),
+            child: TrialChildOutcome {
+                exit_code: Some(0),
+                signal: None,
+            },
             workspace_exported: false,
             candidate_exported: true,
             export_failure: Some("capacity_exceeded".into()),

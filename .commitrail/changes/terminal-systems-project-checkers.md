@@ -736,3 +736,18 @@ The fixtures retain their original denial, transaction, immutable-history and
 cleanup assertions. The historical placeholder is removed before upgrading the
 genuine predecessor schema. Real PostgreSQL/MinIO replay and required CI remain
 necessary; corrected fixtures alone are not a runtime pass.
+
+### Native trial initialization and cleanup repair
+
+A direct KVM build isolated three runtime faults before repeating the composed
+journey. Generic `noatime`/`nodiratime` flags belong in the ext4 mount syscall
+flags, not its filesystem-specific data. The guest now consumes the launcher's
+existing nested `child` status contract; unknown fields, contradictory outcomes
+and cross-phase exports remain rejected. Before exec, the trusted launcher child
+receives a private mount namespace, preserving inherited bounded filesystems
+while preventing its subordinate mounts from obstructing supervisor cleanup.
+Normal unmount, loop detach, cgroup drain and terminal receipt requirements stay
+unchanged; there is no lazy-unmount fallback. The focused wire regression covers
+the reproduced shape mismatch and malformed variants. A private diagnostic
+control built and exported the exact candidate and confirmed guest/host cleanup;
+canonical source qualification must repeat that proof before claiming readiness.
