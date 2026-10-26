@@ -46,11 +46,14 @@ atomic retry evidence. The CLI consumes all nine existing routes through
 hosted S3 operation remains a separate proof boundary.
 The [CLI distribution path](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-44.md)
 prepares native four-platform GitHub Releases proof and a protected manual
-publisher. No approved release tag or public binary has been published yet.
+publisher. Publication and public-installation verification are tracked in
+[#562](https://github.com/Flow-Research/workstream/issues/562); a tag or passing
+build alone is not public distribution.
 The opt-in [contributor terminal workbench](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-48.md)
 adds local read-only project/task/Submission navigation through existing typed
-public reads. Detailed findings and contribution evidence remain explicit CLI
-handoffs; TUI mutations and management are separate work. Neither this interface
+public reads. WS-CLI-001-49 adds paged detailed findings and explicit verified
+locked-guide downloads. Contribution evidence remains an explicit CLI
+handoff; TUI product mutations and management are separate work. Neither this interface
 nor release automation establishes hosted operation or a published binary.
 
 ## Product Goal
@@ -439,8 +442,10 @@ projects, Ready tasks, active own assignments and own Submissions, with fresh
 task/attempt details and explicit Mine context/intake reads. It uses the existing
 API client, one page per deliberate continuation and no local authority rules.
 Denial removes affected content; late responses cannot replace the current
-view. Detailed findings/Evidence are inert CLI handoffs, not automatic export.
-All writes, downloads, polling, management forms and operation-specific recovery
+view. WS-CLI-001-49 adds Guide selection and confirmed single-document downloads
+through shared private staging and no-overwrite publication, plus exact-Submission
+paged Findings. Evidence remains an inert CLI handoff, not automatic export.
+Product writes, polling, management forms and operation-specific recovery
 remain outside this bounded workbench. Explicit text/JSON commands stay usable
 without a terminal.
 The [Operator checker CLI](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-29.md)

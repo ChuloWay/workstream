@@ -18,9 +18,12 @@ func (m *Model) heading() string {
 		return m.tab.String()
 	}
 	if m.tab == submissions {
+		if m.section == 1 {
+			return "FINDINGS"
+		}
 		return "SUBMISSION"
 	}
-	return [...]string{"TASK", "CONTEXT", "INTAKE"}[m.section]
+	return [...]string{"TASK", "CONTEXT", "INTAKE", "GUIDE"}[m.section]
 }
 
 // fitText bounds a display label, never an exact identity or request selector.
@@ -42,13 +45,39 @@ func (m *Model) headerText() string {
 }
 
 func (m *Model) footerText() string {
+	if m.guideMode == guideDestination {
+		return "enter confirm | esc cancel | ctrl+c quit"
+	}
+	if m.guideMode == guideConfirm {
+		return "y download | esc cancel | q quit"
+	}
 	if m.height < 16 {
 		return "? keys | q quit"
+	}
+	if m.detail && m.tab == mine && m.section == 3 {
+		return "arrows select | d download | tab section | esc back\nr refresh | c CLI | ? help | q quit"
+	}
+	if m.detail && m.tab == submissions && m.section == 1 {
+		return "arrows scroll | n next | tab overview | esc back\nr refresh | c CLI | ? help | q quit"
 	}
 	return "arrows select/scroll | enter inspect | tab section | esc back\ng project | n next | r refresh | / local filter | c CLI | ? help | q quit"
 }
 
 func (m *Model) statusText() string {
+	if m.detail && m.tab == submissions && m.section == 1 {
+		count := 0
+		if m.findings != nil {
+			count = len(m.findings.Items)
+		}
+		status := fmt.Sprintf("page %d | fetched %d runs", m.findingsPage, count)
+		if m.findingsCursor != "" {
+			status += " | more available"
+		}
+		if !m.observed.IsZero() {
+			status += " observed " + m.observed.Format("15:04:05")
+		}
+		return fitText(status, m.width)
+	}
 	status := fmt.Sprintf("page %d | fetched %d", m.page, len(m.rows))
 	if m.width < 70 {
 		status = fmt.Sprintf("page %d rows %d", m.page, len(m.rows))
@@ -107,7 +136,7 @@ func (m *Model) reflow() {
 
 func (m *Model) body() string {
 	if m.help {
-		return "KEYBOARD HELP\nArrows select a row or scroll detail. Enter inspects one exact resource.\nTab: Ready/Mine/Submissions in lists; Overview/Context/Intake in active Mine detail.\nEsc returns without a write. g fetches a fresh project picker.\nn fetches exactly one next page. r resets the current read; no polling.\n/ filters the fetched page only; enter finishes, esc cancels.\nc shows inert CLI arguments. q or Ctrl+C quits.\nNo actions, downloads or exports run in this workbench.\nEvidence and detailed findings are manual CLI handoffs.\nA read is not a reservation or authority.\n? or Esc closes help."
+		return "KEYBOARD HELP\nArrows select a row/document or scroll detail. Enter inspects one exact resource.\nTab: Ready/Mine/Submissions in lists; Overview/Context/Intake/Guide in active Mine detail; Overview/Findings in Submission detail.\nEsc returns or cancels destination/confirmation without a download. g fetches a fresh project picker.\nn fetches exactly one next findings/list page. r resets the current read; no polling.\n/ filters the fetched list page only; enter finishes, esc cancels.\nd enters a destination for one selected guide original; y confirms.\nc shows inert CLI arguments. q or Ctrl+C quits.\nChecker evidence is not acceptance. A read is not a reservation or authority.\n? or Esc closes help."
 	}
 	if m.handoff {
 		return m.handoffText()
@@ -184,6 +213,9 @@ func (m *Model) detailText() string {
 			line(label, *value)
 		}
 	}
+	if m.tab == submissions && m.section == 1 && m.findings != nil {
+		return m.findingsText()
+	}
 	if m.submission != nil {
 		v := m.submission
 		line("Submission", v.ID)
@@ -204,8 +236,11 @@ func (m *Model) detailText() string {
 			line("Type", e.Type)
 			line("Size", number(e.Size))
 		}
-		out.WriteString("Detailed findings: manual CLI handoff only (c).\nStored observations do not predict acceptance or fulfillment.")
+		out.WriteString("Tab opens contributor-visible checker findings.\nStored observations do not predict acceptance or fulfillment.")
 		return out.String()
+	}
+	if m.section == 3 && m.context != nil {
+		return m.guideText()
 	}
 	if m.section == 1 && m.context != nil {
 		v := m.context
@@ -315,5 +350,91 @@ func (m *Model) detailText() string {
 		}
 		out.WriteString("Terms are potential earned terms, not acceptance or fulfillment.\nNo action can be sent from this workbench.")
 	}
+	return out.String()
+}
+
+func (m *Model) guideText() string {
+	var out strings.Builder
+	v := m.context
+	line := func(label, value string) { out.WriteString(label + ": " + m.clean(value) + "\n") }
+	line("Task", v.Task.TaskID)
+	line("Guide", v.Guide.ID)
+	line("Locked guide version", v.Guide.Version)
+	if len(v.GuideDocuments) == 0 {
+		out.WriteString("No assigned guide documents.\n")
+	}
+	for index, d := range v.GuideDocuments {
+		mark := "  "
+		if index == m.guideSelected {
+			mark = "> "
+		}
+		out.WriteString(mark + "Document " + fmt.Sprint(index+1) + "\n")
+		line("Label", d.Label)
+		line("Document ID", d.DocumentID)
+		line("Order", fmt.Sprint(d.Order))
+		line("Media type", d.MediaType)
+		line("Bytes (server metadata; bytes not downloaded)", fmt.Sprint(d.ByteCount))
+		line("SHA-256 (server metadata; bytes not downloaded)", d.SHA256)
+	}
+	if m.guideMode == guideDestination {
+		line("Download directory", m.guideDirectory)
+		out.WriteString("Enter confirms this existing directory; no directory is created.\n")
+	} else if m.guideMode == guideConfirm && len(v.GuideDocuments) > 0 {
+		d := v.GuideDocuments[m.guideSelected]
+		out.WriteString("Confirm download\n")
+		line("Task", v.Task.TaskID)
+		line("Document", d.DocumentID)
+		line("Download directory", m.guideDirectory)
+		line("Filename", d.Filename())
+		out.WriteString("y downloads verified bytes | esc cancels\n")
+	} else if m.guideNotice != "" {
+		out.WriteString(m.guideNotice + "\n")
+	}
+	out.WriteString("Guide metadata is not verified downloaded bytes.")
+	return out.String()
+}
+
+func (m *Model) findingsText() string {
+	var out strings.Builder
+	line := func(label, value string) { out.WriteString(label + ": " + m.clean(value) + "\n") }
+	optional := func(label string, value *string) {
+		if value == nil {
+			line(label, "not supplied")
+		} else {
+			line(label, *value)
+		}
+	}
+	if len(m.findings.Items) == 0 {
+		out.WriteString("No checker runs on this fetched page.\n")
+	}
+	for _, run := range m.findings.Items {
+		line("Run", run.ID)
+		line("Submission", run.Submission)
+		line("Task", run.Task)
+		line("Submission version", number(run.Version))
+		line("Run status", run.Status)
+		line("Attempt", number(run.Attempt))
+		line("Current", fmt.Sprint(run.Current))
+		optional("Predecessor run", run.Predecessor)
+		line("Created", run.CreatedAt)
+		optional("Completed", run.CompletedAt)
+		for _, finding := range run.Results {
+			line("Finding", finding.ID)
+			line("Checker", finding.Checker)
+			optional("Check ID", finding.CheckID)
+			line("Finding status", finding.Status)
+			line("Severity", finding.Severity)
+			optional("Path", finding.Path)
+			if finding.Line == nil {
+				line("Line", "not supplied")
+			} else {
+				line("Line", fmt.Sprint(*finding.Line))
+			}
+			optional("Message", finding.Message)
+			optional("Suggested fix", finding.Fix)
+		}
+		out.WriteString("\n")
+	}
+	out.WriteString("Checker findings are evidence, not acceptance.")
 	return out.String()
 }

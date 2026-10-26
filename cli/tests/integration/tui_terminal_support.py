@@ -836,13 +836,19 @@ def socket_peer(respond):
             request = (self.command, self.path, self.headers.get("Authorization"))
             requests.append(request)
             try:
-                status, body = respond(*request)
+                result = respond(*request)
+                status, body = result[:2]
+                media_type = result[2] if len(result) == 3 else "application/json"
             except Exception as error:  # fixture errors must reach the test thread
                 failures.append(error)
-                status, body = 500, {"unexpected": True}
-            encoded = json.dumps(body, ensure_ascii=False).encode()
+                status, body, media_type = 500, {"unexpected": True}, "application/json"
+            encoded = (
+                body
+                if isinstance(body, bytes)
+                else json.dumps(body, ensure_ascii=False).encode()
+            )
             self.send_response(status)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", media_type)
             self.send_header("Content-Length", str(len(encoded)))
             self.end_headers()
             try:

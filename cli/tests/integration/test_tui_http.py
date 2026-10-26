@@ -1,6 +1,7 @@
 """Built TUI -> native PTY/ConPTY -> adversarial socket; no runtime substitute."""
 
 from copy import deepcopy
+import hashlib
 import os
 import re
 import subprocess
@@ -12,7 +13,8 @@ import pytest
 from test_contributor_reads_http import ASSIGNMENT_ROW, PROJECT_ROW, SUBMISSION_ROW
 from test_contributor_task_http import CONTRIBUTOR, READY
 from test_http_boundary import ACTOR, PROFILE, PROJECT, TOKEN
-from test_submission_http import HISTORY, SUBMISSION
+from test_submission_http import CHECKER as SUBMISSION_CHECKER
+from test_submission_http import HISTORY, RUN, SUBMISSION
 from test_task_context_http import CONTEXT, REQUIREMENTS
 from test_task_http_boundary import TASK
 from tui_terminal_support import Terminal, environment, executable, socket_peer
@@ -20,6 +22,18 @@ from tui_terminal_support import Terminal, environment, executable, socket_peer
 OTHER_PROJECT = "018f0ebc-7966-7e8d-bc4d-1cae1e000099"
 OTHER_TASK = "018f0ebc-7966-7e8d-bc4d-1cae1e000098"
 CURSOR = "opaque+/=&?#next"
+CHECKER = deepcopy(SUBMISSION_CHECKER)
+CHECKER["task_id"] = TASK
+GUIDE_BYTES = b"# Locked guide\nDeliver the requested evidence.\n"
+GUIDE_DOCUMENT = {
+    "document_id": ACTOR,
+    "order": 0,
+    "label": "Locked instructions",
+    "media_type": "text/markdown",
+    "byte_count": len(GUIDE_BYTES),
+    "sha256": "sha256:" + hashlib.sha256(GUIDE_BYTES).hexdigest(),
+    "read_reference": f"/api/v1/tasks/{TASK}/guide/documents/{ACTOR}/content",
+}
 READY_PATH = f"/api/v1/projects/{PROJECT}/tasks/ready"
 TASK_PATH = f"/api/v1/tasks/{TASK}"
 SECRET = "EXACT_PRIVATE_INSTRUCTIONS"
@@ -115,6 +129,263 @@ def denial(status=404):
             "retryable": False,
         }
     }
+
+
+def open_guide(terminal):
+    open_ready(terminal)
+    terminal.send("\t")
+    terminal.wait("Assigned terminal task")
+    terminal.send("\r")
+    terminal.wait(SECRET)
+    terminal.send("\t")
+    terminal.wait("CONTEXT")
+    terminal.send("\t")
+    terminal.wait("INTAKE")
+    terminal.send("\t")
+    terminal.wait("GUIDE")
+    terminal.wait("Locked instructions")
+
+
+def guide_reads():
+    reads = Reads()
+    reads.context["lifecycle"]["assigned_to_current_actor"] = True
+    reads.context["guide_documents"] = [deepcopy(GUIDE_DOCUMENT)]
+    reads.overrides[GUIDE_DOCUMENT["read_reference"]] = lambda _: (
+        200,
+        GUIDE_BYTES,
+        "text/markdown",
+    )
+    return reads
+
+
+def confirm_download(terminal, directory):
+    terminal.send("d")
+    terminal.wait("Download directory")
+    terminal.send(str(directory))
+    terminal.send("\r")
+    terminal.wait("Confirm download")
+    terminal.send("y")
+
+
+def open_findings(terminal):
+    open_ready(terminal)
+    terminal.send("\t")
+    terminal.wait("Assigned terminal task")
+    terminal.send("\t")
+    terminal.wait("Owned terminal attempt")
+    terminal.send("\r")
+    terminal.wait("Exact owned submission summary")
+    terminal.send("\t")
+
+
+def test_guide_download_requires_confirmation_and_verifies_bytes(tmp_path):
+    reads = guide_reads()
+    with (
+        socket_peer(reads) as (origin, requests),
+        Terminal(origin, TOKEN, "--plain") as terminal,
+    ):
+        open_guide(terminal)
+        assert not list(tmp_path.iterdir())
+        assert not any(
+            target == GUIDE_DOCUMENT["read_reference"] for _, target, _ in requests
+        )
+        terminal.send("d")
+        terminal.wait("Download directory")
+        terminal.send(str(tmp_path))
+        terminal.send("\r")
+        terminal.wait("Confirm download")
+        assert not list(tmp_path.iterdir())
+        assert not any(
+            target == GUIDE_DOCUMENT["read_reference"] for _, target, _ in requests
+        )
+        terminal.send("y")
+        terminal.wait("Downloaded")
+        saved = tmp_path / f"{ACTOR}.md"
+        assert saved.read_bytes() == GUIDE_BYTES
+        assert (
+            "sha256:" + hashlib.sha256(saved.read_bytes()).hexdigest()
+            == GUIDE_DOCUMENT["sha256"]
+        )
+        assert list(tmp_path.iterdir()) == [saved]
+        terminal.quit()
+
+
+@pytest.mark.parametrize("corrupt", [b"x" * len(GUIDE_BYTES), GUIDE_BYTES[:-1]])
+def test_guide_integrity_failure_never_publishes(tmp_path, corrupt):
+    reads = guide_reads()
+    reads.overrides[GUIDE_DOCUMENT["read_reference"]] = lambda _: (
+        200,
+        corrupt,
+        "text/markdown",
+    )
+    with (
+        socket_peer(reads) as (origin, _),
+        Terminal(origin, TOKEN, "--plain") as terminal,
+    ):
+        open_guide(terminal)
+        confirm_download(terminal, tmp_path)
+        terminal.wait("guide_document_integrity_mismatch")
+        assert not list(tmp_path.iterdir())
+        assert "Downloaded" not in terminal.screen
+        terminal.quit()
+
+
+def test_guide_download_never_overwrites_existing_file(tmp_path):
+    reads = guide_reads()
+    saved = tmp_path / f"{ACTOR}.md"
+    saved.write_bytes(b"existing private content")
+    with (
+        socket_peer(reads) as (origin, requests),
+        Terminal(origin, TOKEN, "--plain") as terminal,
+    ):
+        open_guide(terminal)
+        confirm_download(terminal, tmp_path)
+        terminal.wait("Unavailable")
+        assert saved.read_bytes() == b"existing private content"
+        assert list(tmp_path.iterdir()) == [saved]
+        assert not any(
+            target == GUIDE_DOCUMENT["read_reference"] for _, target, _ in requests
+        )
+        terminal.quit()
+
+
+def test_guide_refusal_clears_locked_metadata_and_publishes_nothing(tmp_path):
+    reads = guide_reads()
+    reads.overrides[GUIDE_DOCUMENT["read_reference"]] = lambda _: denial()
+    with (
+        socket_peer(reads) as (origin, _),
+        Terminal(origin, TOKEN, "--plain") as terminal,
+    ):
+        open_guide(terminal)
+        confirm_download(terminal, tmp_path)
+        terminal.wait("Denied")
+        assert "Locked instructions" not in terminal.screen
+        assert not list(tmp_path.iterdir())
+        assert TOKEN.encode() not in terminal.raw
+        terminal.quit()
+
+
+@pytest.mark.parametrize("cancel", ["\x1b", "q"])
+def test_cancel_delayed_guide_never_publishes(tmp_path, cancel):
+    reads = guide_reads()
+    started, release, returned = Event(), Event(), Event()
+
+    def delayed(_):
+        started.set()
+        assert release.wait(10), "test failed to release delayed download"
+        returned.set()
+        return 200, GUIDE_BYTES, "text/markdown"
+
+    reads.overrides[GUIDE_DOCUMENT["read_reference"]] = delayed
+    with (
+        socket_peer(reads) as (origin, _),
+        Terminal(origin, TOKEN, "--plain") as terminal,
+    ):
+        try:
+            open_guide(terminal)
+            confirm_download(terminal, tmp_path)
+            assert started.wait(5)
+            terminal.send(cancel)
+            if cancel == "q":
+                terminal.wait_exit()
+            else:
+                terminal.pump(0.3)
+            release.set()
+            assert returned.wait(5)
+            terminal.pump(0.3)
+            assert not list(tmp_path.iterdir())
+            if cancel != "q":
+                assert "Downloaded" not in terminal.screen
+                terminal.quit()
+        finally:
+            release.set()
+
+
+def test_findings_explicit_pagination_preserves_run_identity():
+    reads = Reads()
+    calls = []
+    second = deepcopy(CHECKER)
+    second["id"] = OTHER_TASK
+    second["is_current_for_submission"] = False
+    second["results"][0]["status"] = "coverage_incomplete"
+    second["results"][0]["worker_message"] = "Coverage gap on historical run"
+
+    def findings(query):
+        calls.append(query)
+        if "cursor" not in query:
+            assert query == {"limit": ["50"]}
+            return 200, page(CHECKER, CURSOR)
+        assert query == {"limit": ["50"], "cursor": [CURSOR]}
+        return 200, page(second)
+
+    reads.overrides[f"/api/v1/submissions/{SUBMISSION}/checker-runs"] = findings
+    with (
+        socket_peer(reads) as (origin, _),
+        Terminal(origin, TOKEN, "--plain", rows=60) as terminal,
+    ):
+        open_findings(terminal)
+        terminal.wait(RUN)
+        terminal.wait("quality.output")
+        assert len(calls) == 1
+        assert "src/out.txt" in terminal.screen
+        terminal.send("n")
+        terminal.wait("Coverage gap on historical run")
+        assert len(calls) == 2
+        assert (
+            OTHER_TASK in terminal.screen and "coverage_incomplete" in terminal.screen
+        )
+        assert RUN not in terminal.screen
+        assert TOKEN.encode() not in terminal.raw
+        assert b"\x1b]52;" not in terminal.raw
+        terminal.quit()
+
+
+@pytest.mark.parametrize("field", ["task_id", "submission_id"])
+def test_findings_refuse_wrong_task_or_submission(field):
+    reads = Reads()
+    run = deepcopy(CHECKER)
+    run[field] = OTHER_TASK
+    run["results"][0]["worker_message"] = "FOREIGN_FINDING_MUST_NOT_RENDER"
+    reads.overrides[f"/api/v1/submissions/{SUBMISSION}/checker-runs"] = lambda _: (
+        200,
+        page(run),
+    )
+    with (
+        socket_peer(reads) as (origin, _),
+        Terminal(origin, TOKEN, "--plain") as terminal,
+    ):
+        open_findings(terminal)
+        terminal.wait("invalid_api_response")
+        assert "FOREIGN_FINDING_MUST_NOT_RENDER" not in terminal.screen
+        assert "Exact owned submission summary" not in terminal.screen
+        terminal.quit()
+
+
+@pytest.mark.parametrize(
+    "status", ["passed", "warning", "failed", "coverage_incomplete"]
+)
+def test_findings_preserve_status_and_sanitize_details(status):
+    reads = Reads()
+    run = deepcopy(CHECKER)
+    run["results"][0].update(status=status, worker_message="Finding " + HOSTILE)
+    reads.overrides[f"/api/v1/submissions/{SUBMISSION}/checker-runs"] = lambda _: (
+        200,
+        page(run),
+    )
+    with (
+        socket_peer(reads) as (origin, _),
+        Terminal(origin, TOKEN, "--plain", rows=60) as terminal,
+    ):
+        open_findings(terminal)
+        terminal.wait("Finding status: " + status)
+        assert "Severity: error" in terminal.screen
+        assert "Check ID: quality.output" in terminal.screen
+        assert "Path: src/out.txt" in terminal.screen
+        assert "Line: 4" in terminal.screen
+        assert TOKEN.encode() not in terminal.raw
+        assert b"\x1b]52;" not in terminal.raw and b"\x1b]8;" not in terminal.raw
+        assert "\u202e".encode() not in terminal.raw
+        terminal.quit()
 
 
 def test_keyboard_journey_uses_only_nine_fresh_public_reads():

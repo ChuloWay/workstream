@@ -18,6 +18,9 @@ func (m *Model) handoffText() string {
 				if m.section == 2 {
 					verb = "requirements"
 				}
+				if m.section == 3 {
+					verb = "guide"
+				}
 				args = append(args, "task", verb, selected.task)
 			}
 		}
@@ -54,7 +57,7 @@ func (m *Model) handoffText() string {
 			out.WriteString("  argument: " + m.clean(arg) + "\n")
 		}
 	}
-	if m.detail && m.tab == submissions {
+	if m.detail && m.tab == submissions && m.section == 0 {
 		if selected, ok := m.selectedRow(); ok {
 			out.WriteString("\nDetailed findings: external manual read only.\n")
 			for _, arg := range []string{"workstream", "submission", "findings", selected.id} {

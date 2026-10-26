@@ -60,8 +60,10 @@ It does not claim a tag, published binary or signed/notarized artifact.
 
 [WS-CLI-001-48](WS-CLI-001-48.md) adds the opt-in read-only contributor
 workbench: exact-grant projects, one-page Ready/active Mine/own Submissions,
-fresh details and explicit Mine context/intake reads. Detailed findings and
-contribution evidence remain inert CLI handoffs. All mutations, management
+fresh details and explicit Mine context/intake reads.
+[WS-CLI-001-49](WS-CLI-001-49.md) adds exact-Submission findings pages and
+ordered locked-guide selection with explicit verified single-document download.
+Contribution evidence remains an inert CLI handoff. Product mutations, management
 screens and operation-specific recovery remain separate TUI boundaries; this
 interface does not depend on first binary publication or system-wide discovery.
 
@@ -422,8 +424,9 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
    journey through contribution export, with negative intake and authority checks.
    Hosted and human-review journey proof remain separate.
    Unfinished human review/revision is not current CLI implementation scope.
-26. **Optional TUI:** -48 supplies read-only contributor navigation through
-   existing typed reads. In-TUI findings/Evidence, writes and management remain
+26. **Optional TUI:** -48 supplies contributor navigation through existing typed
+   reads; -49 adds findings pages and confirmed verified guide downloads.
+   In-TUI Evidence, product writes and management remain
    separate boundaries; Evidence first needs a shared typed single-page client
    port without changing complete CLI exports. Never require a TUI for agents
    or scripts.

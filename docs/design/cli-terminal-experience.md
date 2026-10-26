@@ -1,6 +1,7 @@
 # Workstream terminal experience — implemented first slice and proposed extensions
 
-Status: WS-CLI-001-48 implements the bounded read-only contributor slice below;
+Status: WS-CLI-001-48 implements the bounded contributor read slice;
+WS-CLI-001-49 extends it with findings and verified guide downloads below;
 the broader workspace and mutation experience remains proposed. This is not a
 new product/API contract. The opt-in `workstream tui` shares the existing Go
 binary and public client. Explicit commands in [the CLI reference](../../cli/README.md)
@@ -383,7 +384,7 @@ Tea 2.0.10, Bubbles 2.2.1 and Lip Gloss 2.0.6, with resolved modules in the CLI
 lockfiles. Native terminal verification remains required on all four supported
 targets; accessibility certification is not implied.
 
-### Implemented first slice
+### Original first slice (WS-CLI-001-48)
 
 The opt-in **read-only contributor workbench** in the existing Go binary provides:
 launch/terminal guard → actor binding → `me projects` page → selected project's
@@ -433,11 +434,36 @@ Proof must include a built TUI/public-API journey and unchanged explicit CLI
 text/JSON/non-TTY behavior; render snapshots alone are not runtime proof.
 This proposal is not authorization to begin that next change automatically.
 
+### Guide and findings extension (WS-CLI-001-49)
+
+[The bounded extension](../../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-49.md)
+adds Guide after Overview/Context/Intake in Mine detail. Opening Guide fetches
+fresh assignment-sensitive WorkContext. Arrows select a document in server
+order; `d` enters an existing destination directory, Enter shows exact target
+confirmation, and `y` starts the verified download. Metadata is not a verified
+byte claim. Private staged bytes become a final UUID-named file only after
+verification and receipt by the still-current screen; abort/quit cleanup does
+not rely on a late response being rendered. Existing files are never replaced.
+No automatic viewer, markdown execution or task examples are added.
+
+Submission detail Tab opens Findings using the existing validated checker-run
+read. One page is loaded; `n` requests its explicit continuation and `r` resets
+the findings read. Every run retains its identity/current flag and every finding
+its status, severity, check ID, path/line, message and suggested fix when supplied.
+Successful checks are not acceptance. Contribution Evidence remains a CLI
+handoff. There are still no product writes, polling or operation journals.
+
+The shared API now returns the already-validated findings page/exact-run shape
+alongside Raw; existing CLI output keeps Raw unchanged. The shared download
+owner serves both explicit commands and TUI, preserving directory binding,
+private staging, verified bytes and atomic no-overwrite publication.
+
 ### Dependency map to the end-to-end experience
 
 | Boundary | Dependency and next usable result |
 |---|---|
 | Contributor read-only workbench | Nine existing typed reads and merged backend guards → project/Ready/active Mine/Submissions browse/inspect with explicit pagination; detailed findings and Evidence are manual CLI handoffs; no API-client edit or catalogue dependency |
+| Guide/findings extension | Existing WorkContext and verified document reader plus typed existing checker-run result → ordered guide selection, confirmed download and findings pagination; no backend changes or product writes |
 | Later in-TUI contribution Evidence | Narrow shared typed single-page contribution port and preserved complete-export regressions → explicit per-page evidence browsing; not a first-slice prerequisite |
 | Claim/start | Read workbench + reviewed per-operation private receipt and exact-key recovery → separate claim and start confirmations |
 | Prepare/submit | Claim/start + ZIP source integrity + distinct preparation/admission replay receipts → separate intake and immutable Submission, then stored evaluation/outcome/contribution evidence |
