@@ -222,10 +222,12 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertEqual(services["guide-document-parser"]["stop_grace_period"], "30s")
         self.assertEqual(services["api"]["ports"][0]["host_ip"], "127.0.0.1")
         expected_secrets = {
-            target[0] for target in preflight.SECRET_FILE_TARGETS.values()
+            preflight.SECRET_FILE_TARGETS[key][0]
+            for key in preflight._secret_file_keys(self.environment)
         }
         self.assertEqual(set(rendered["secrets"]), expected_secrets)
-        for key, (secret_name, _target) in preflight.SECRET_FILE_TARGETS.items():
+        for key in preflight._secret_file_keys(self.environment):
+            secret_name, _target = preflight.SECRET_FILE_TARGETS[key]
             self.assertEqual(
                 rendered["secrets"][secret_name]["file"],
                 self.environment[key],
@@ -1042,6 +1044,11 @@ class HostedReleaseConfigTests(unittest.TestCase):
             ),
         }.items():
             manager_text = manager_text.replace(old, new)
+        manager_text = manager_text.replace(
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE=\n",
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE="
+            "/etc/workstream/secrets/model_proxy_openai_api_key\n",
+        )
         manager_path = self.root / "manager-with-post-proxy.env"
         manager_path.write_text(manager_text, encoding="utf-8")
         manager = preflight.parse_environment(manager_path)
@@ -1063,7 +1070,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
         for key in preflight.MODEL_PROXY_SECRET_FILE_KEYS:
             self.assertNotIn(key, worker_environment)
 
-    def test_openrouter_setup_keeps_independent_openai_post_credential(self) -> None:
+    def test_openrouter_only_render_omits_openai_credential(self) -> None:
         self.assertEqual(
             self.environment["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"], "openrouter"
         )
@@ -1077,13 +1084,67 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 for item in proxy["secrets"]
                 if item["source"] != "database_url"
             },
-            {
-                "model_proxy_openai_api_key",
-                "model_proxy_openrouter_api_key",
-            },
+            {"model_proxy_openrouter_api_key"},
+        )
+        self.assertNotIn(
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE", proxy["environment"]
         )
         for key in preflight.MODEL_PROXY_SECRET_FILE_KEYS:
             self.assertNotIn(key, rendered["services"]["worker"]["environment"])
+
+    def test_openai_only_render_omits_openrouter_credential(self) -> None:
+        environment_text = self.environment_path.read_text(encoding="utf-8")
+        environment_text = environment_text.replace(
+            "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER=openrouter",
+            "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER=openai",
+        ).replace(
+            "WORKSTREAM_PROJECT_AGENT_MODEL_API=chat_completions",
+            "WORKSTREAM_PROJECT_AGENT_MODEL_API=responses",
+        )
+        environment_text = environment_text.replace(
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE=\n",
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE="
+            "/etc/workstream/secrets/model_proxy_openai_api_key\n",
+        ).replace(
+            "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE="
+            "/etc/workstream/secrets/model_proxy_openrouter_api_key",
+            "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE=",
+        )
+        environment_path = self.root / "openai-only.env"
+        environment_path.write_text(environment_text, encoding="utf-8")
+        environment = preflight.parse_environment(environment_path)
+
+        preflight.validate_environment(environment)
+        rendered = preflight.render_compose(environment_path, environment)
+        preflight.validate_compose(rendered, environment)
+
+        proxy = rendered["services"]["model-proxy"]
+        self.assertEqual(
+            {
+                item["source"]
+                for item in proxy["secrets"]
+                if item["source"] != "database_url"
+            },
+            {"model_proxy_openai_api_key"},
+        )
+        self.assertNotIn(
+            "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE", proxy["environment"]
+        )
+
+    def test_enabled_setup_rejects_missing_selected_provider_credential(self) -> None:
+        missing_openrouter = dict(self.environment)
+        missing_openrouter["WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE"] = ""
+        with self.assertRaisesRegex(preflight.PreflightError, "selected provider"):
+            preflight.validate_environment(missing_openrouter)
+
+        manager = missing_openrouter | {
+            "WORKSTREAM_PROJECT_AGENT_RUNTIME": "manager_authored",
+            "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER": "none",
+            "WORKSTREAM_PROJECT_AGENT_MODEL_API": "none",
+            "WORKSTREAM_PROJECT_AGENT_MODEL": "none",
+        }
+        with self.assertRaisesRegex(preflight.PreflightError, "at least one"):
+            preflight.validate_environment(manager)
 
     def test_checker_config_rejects_non_hosted_or_substituted_identity(self) -> None:
         cases = {
@@ -1700,11 +1761,7 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             "WORKSTREAM_DATABASE_URL_FILE",
             "WORKSTREAM_CELERY_BROKER_URL_FILE",
         ),
-        "model-proxy": (
-            "WORKSTREAM_DATABASE_URL_FILE",
-            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE",
-            "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE",
-        ),
+        "model-proxy": ("WORKSTREAM_DATABASE_URL_FILE",),
         "beat": (
             "WORKSTREAM_DATABASE_URL_FILE",
             "WORKSTREAM_CELERY_BROKER_URL_FILE",
@@ -1725,6 +1782,7 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         runtime: str = "openai_agents_sdk",
         sdk_environment: str = "agents",
         include_runtime_configuration: bool = True,
+        provider_files: tuple[str, ...] = ("openrouter",),
     ) -> subprocess.CompletedProcess[str]:
         environment = os.environ.copy()
         file_names = {
@@ -1737,7 +1795,17 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
                 "model-proxy-openrouter"
             ),
         }
+        configured_provider_variables = {
+            f"WORKSTREAM_MODEL_PROXY_{name.upper()}_API_KEY_FILE"
+            for name in provider_files
+        }
         for variable, name in file_names.items():
+            if (
+                variable in preflight.MODEL_PROXY_SECRET_FILE_KEYS
+                and variable not in configured_provider_variables
+            ):
+                environment.pop(variable, None)
+                continue
             path = root / name
             if path.exists():
                 path.chmod(0o600)
@@ -1784,7 +1852,10 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             "/run/private/private-key.pem"
         )
         environment["EXPECT_PARSER_SELECTOR_SCRUB"] = "1" if role == "parser" else "0"
-        expected = {self.FILE_TO_SECRET[key] for key in self.ROLE_FILES.get(role, ())}
+        role_files = self.ROLE_FILES.get(role, ())
+        if role == "model-proxy":
+            role_files = (*role_files, *sorted(configured_provider_variables))
+        expected = {self.FILE_TO_SECRET[key] for key in role_files}
         environment["EXPECTED_SECRET_NAMES"] = ",".join(sorted(expected))
         environment["EXPECTED_SECRET_SHA256"] = hashlib.sha256(
             content.encode()
@@ -1862,26 +1933,47 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
                     self.assertEqual(completed.returncode, 0, completed.stderr)
                     self.assertEqual(completed.stdout, "loader-ok\n")
                     self.assertEqual(completed.stderr, "")
-                    if self.ROLE_FILES[role]:
+                    required_files = self.ROLE_FILES[role]
+                    if role == "model-proxy":
+                        required_files = (
+                            *required_files,
+                            "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE",
+                        )
+                    if required_files:
                         missing = self._run_loader(
                             root,
                             role=role,
-                            unset_selector=self.ROLE_FILES[role][0],
+                            unset_selector=required_files[0],
                         )
                         self.assertNotEqual(missing.returncode, 0)
                         self.assertIn(
                             "required secret file is unavailable", missing.stderr
                         )
-            openai = self._run_loader(root, role="model-proxy", provider="openai")
+            openai = self._run_loader(
+                root,
+                role="model-proxy",
+                provider="openai",
+                provider_files=("openai",),
+            )
             self.assertEqual(openai.returncode, 0, openai.stderr)
-            setup_provider_independent = self._run_loader(
-                root, role="model-proxy", provider="unknown"
+            both = self._run_loader(
+                root,
+                role="model-proxy",
+                provider="openrouter",
+                provider_files=("openai", "openrouter"),
             )
-            self.assertEqual(
-                setup_provider_independent.returncode,
-                0,
-                setup_provider_independent.stderr,
+            self.assertEqual(both.returncode, 0, both.stderr)
+            missing_selected = self._run_loader(
+                root,
+                role="model-proxy",
+                provider="openrouter",
+                provider_files=("openai",),
             )
+            self.assertNotEqual(missing_selected.returncode, 0)
+            self.assertIn("selected provider credential", missing_selected.stderr)
+            unsupported = self._run_loader(root, role="model-proxy", provider="unknown")
+            self.assertNotEqual(unsupported.returncode, 0)
+            self.assertIn("provider is unsupported", unsupported.stderr)
             unknown = self._run_loader(root, role="unknown")
             self.assertNotEqual(unknown.returncode, 0)
             self.assertEqual(unknown.stdout, "")
@@ -1911,6 +2003,18 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
                 sdk_environment="agents",
             )
             self.assertEqual(manager_proxy.returncode, 0, manager_proxy.stderr)
+            manager_without_provider = self._run_loader(
+                root,
+                role="model-proxy",
+                runtime="manager_authored",
+                provider="none",
+                sdk_environment="agents",
+                provider_files=(),
+            )
+            self.assertNotEqual(manager_without_provider.returncode, 0)
+            self.assertIn(
+                "at least one provider credential", manager_without_provider.stderr
+            )
             for sdk_environment in ("agents", "omnicore"):
                 with self.subTest(
                     runtime="manager_authored", sdk_environment=sdk_environment

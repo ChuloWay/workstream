@@ -144,12 +144,16 @@ not secret values. Select real Flow issuer, audience, JWKS and algorithm values.
 The release profile uses `WORKSTREAM_AUTH_PROVIDER=flow`; local Flow-HMAC and
 development authentication are absent.
 
-Create each secret selected by the configured runtime as a one-value regular file at the configured path. Make it
-owned by the runtime UID/GID with mode `0400`. The explicit role loader gives the
+Create each secret named by a nonempty configured path as a one-value regular
+file. Make it owned by the runtime UID/GID with mode `0400`. The explicit role loader gives the
 API only the database, broker, rate-limit and pagination secrets; the worker
 gets the database and broker. `WORKSTREAM_MODEL_PROXY_ENABLED=true` starts one
 trusted model-proxy process independently of the setup runtime. Only that process
-gets the database, the two closed provider credentials and the runtime ART identity.
+gets the database, each configured provider credential and the runtime ART identity.
+For non-manager setup, the selected setup provider path is required and the other
+provider is optional. Manager-authored setup requires at least one provider path
+when the proxy is enabled. Nonempty provider paths select provider-specific Compose
+overlays; the common inference overlay contains only the socket topology.
 The setup worker receives a read-only
 mount of `/var/lib/workstream/model-runtime` and the fixed socket selector; it
 receives no provider credential or endpoint override. A proxy-disabled
@@ -169,10 +173,11 @@ The service waits for the proxy to become healthy and mounts only the current
 invocation's relay into a project image. Project images receive neither the
 global socket nor provider credentials. API, Beat and proof jobs receive
 neither model directory.
-The two provider selectors are trusted release configuration. The proxy loads
-only its dedicated files as `OPENROUTER_API_KEY` and `OPENAI_API_KEY`; this is
+The two provider file paths are trusted release configuration. The proxy loads
+only configured dedicated files as `OPENROUTER_API_KEY` or `OPENAI_API_KEY`; this is
 independent of the setup provider because approved POST and setup profiles may
-use different providers. It clears both native variables before loading them
+use different providers. An absent provider is not mounted or exported. The
+proxy clears both native variables before loading configured files
 and never exports a neutral key variable. The endpoints are
 fixed by the registered adapter and cannot be supplied in the release file.
 The parser receives no database, broker, S3, Flow, model or provider credential.

@@ -2644,6 +2644,38 @@ def test_partition_allows_only_exact_guide_compilation_draft_target():
         )
 
 
+def test_openrouter_provider_ownership_replaces_the_superseded_policy_module():
+    removed = "backend/app/adapters/project_agents/openrouter_policy.py"
+    additions = {
+        "backend/app/adapters/checkers/openrouter_model_provider.py",
+        "backend/app/adapters/model_usage/openrouter.py",
+    }
+    retained = "backend/app/core/config.py"
+    assert removed in ownership.NEUTRAL_GUIDE_RUNTIME_REMOVED_TARGETS
+    assert removed not in ownership.NEUTRAL_GUIDE_RUNTIME_TARGETS
+    assert additions <= ownership.CHECKER_MODEL_RUNTIME_TARGETS
+    assert {ownership.group_for_target(target) for target in additions} == {
+        "artifacts",
+        "shared",
+    }
+    trusted = _partition(sorted({removed, retained}))
+    current = _partition(sorted({retained, *additions}))
+    ownership._validate_additive_partition_transition(current, trusted)
+
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(_partition([retained]), trusted)
+    for missing in additions:
+        incomplete = additions - {missing}
+        with pytest.raises(
+            ownership.BehaviorOwnershipError,
+            match="untrusted_partition_change",
+        ):
+            ownership._validate_additive_partition_transition(
+                _partition(sorted({retained, *incomplete})),
+                trusted,
+            )
+
+
 def test_revision_ownership_does_not_allow_a_parallel_exhaustion_writer():
     retained = "backend/app/core/config.py"
     trusted = _partition([retained])

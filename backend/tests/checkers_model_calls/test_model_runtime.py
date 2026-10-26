@@ -49,29 +49,94 @@ def test_proxy_requires_absolute_socket_and_enabled_storage(tmp_path):
     assert settings.checker_model_proxy_socket == tmp_path / "sockets/proxy.sock"
 
 
-async def test_provider_uses_profile_bounds_and_closes_owned_client(monkeypatch):
+@pytest.mark.parametrize(
+    ("provider_name", "api", "model", "credential", "other_credential"),
+    [
+        ("openai_responses", "responses.v1", "gpt-5.6-terra", "OPENAI_API_KEY", "OPENROUTER_API_KEY"),
+        ("openrouter", "chat_completions", "openai/gpt-5.6-terra", "OPENROUTER_API_KEY", "OPENAI_API_KEY"),
+    ],
+)
+async def test_provider_uses_exact_profile_and_only_selected_key(
+    monkeypatch, provider_name, api, model, credential, other_credential
+):
     profile = Harness().profile
+    profile = profile.model_copy(update={"spec": profile.spec.model_copy(update={
+        "provider": provider_name, "api": api, "model_snapshot": model,
+    })})
     captured = []
     closed = []
 
     async def close():
         closed.append(True)
 
-    def construct(settings):
-        captured.append(settings)
+    def construct(received_profile, *, api_key):
+        captured.append((received_profile, api_key))
         return SimpleNamespace(aclose=close)
 
-    monkeypatch.setenv("OPENAI_API_KEY", "private-test-key")
+    monkeypatch.delenv(other_credential, raising=False)
+    monkeypatch.setenv(credential, "private-test-key")
     monkeypatch.setattr(model_runtime, "create_checker_model_provider", construct)
     async with model_runtime.configured_model_provider(profile):
-        assert len(captured) == 1
-        settings = captured[0]
-        assert settings.model == profile.spec.model_snapshot
-        assert settings.maximum_input_tokens == profile.spec.maximum_input_tokens
-        assert settings.maximum_output_tokens == profile.spec.maximum_output_tokens
-        assert settings.reasoning_effort == profile.spec.settings.reasoning_effort
-        assert "private-test-key" not in repr(settings)
+        assert captured == [(profile, "private-test-key")]
     assert closed == [True]
+
+
+@pytest.mark.parametrize("provider_name,api", [
+    ("unknown", "chat_completions"), ("openrouter", "responses.v1"),
+    ("openai_responses", "chat_completions"),
+])
+async def test_unsupported_pair_denies_before_credential_or_client_access(
+    monkeypatch, provider_name, api
+):
+    profile = Harness().profile
+    profile = profile.model_copy(update={"spec": profile.spec.model_copy(update={
+        "provider": provider_name, "api": api,
+    })})
+
+    class NoCredentials:
+        def get(self, *_args):
+            raise AssertionError("unsupported profile accessed credentials")
+
+    monkeypatch.setattr(model_runtime, "os", SimpleNamespace(environ=NoCredentials()))
+    with pytest.raises(ModelCallUnavailable, match="model_profile_provider_unavailable"):
+        async with model_runtime.configured_model_provider(profile):
+            pass
+
+
+async def test_openrouter_factory_needs_no_openai_client(monkeypatch):
+    import httpx
+    import openai
+    from app.adapters.checkers import create_checker_model_provider
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("OpenRouter constructed an OpenAI client")
+
+    profile = Harness().profile
+    profile = profile.model_copy(update={"spec": profile.spec.model_copy(update={
+        "provider": "openrouter", "api": "chat_completions",
+        "model_snapshot": "openai/gpt-5.6-terra",
+    })})
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(openai, "AsyncOpenAI", forbidden)
+    captured = []
+    original = httpx.AsyncClient
+
+    class CapturingClient(original):
+        def __init__(self, **kwargs):
+            captured.append(kwargs)
+            super().__init__(**kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", CapturingClient)
+    provider = create_checker_model_provider(profile, api_key="private-openrouter-key")
+    try:
+        assert provider.identity.provider_key == "openrouter"
+        assert len(captured) == 1
+        assert captured[0]["trust_env"] is False
+        assert captured[0]["follow_redirects"] is False
+        assert captured[0]["timeout"] == profile.spec.deadline_ms / 1000
+        assert captured[0]["headers"]["Authorization"] == "Bearer private-openrouter-key"
+    finally:
+        await provider.aclose()
 
 
 async def test_missing_provider_key_stops_before_reserving_budget(monkeypatch):
@@ -84,6 +149,43 @@ async def test_missing_provider_key_stops_before_reserving_budget(monkeypatch):
     with pytest.raises(ModelCallUnavailable):
         async with model_runtime.configured_model_provider(h.profile):
             pass
+
+
+async def test_missing_openrouter_key_cannot_use_openai_key(monkeypatch):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "other-provider-key")
+    h = Harness()
+    h.profile = h.profile.model_copy(update={"spec": h.profile.spec.model_copy(update={
+        "provider": "openrouter", "api": "chat_completions",
+        "model_snapshot": "openai/model",
+    })})
+    h.provider = model_runtime.configured_model_provider
+    assert (await h.invoke()).outcome == "unavailable"
+    assert h.state == "prepared"
+    assert "dispatch_committed" not in h.events
+
+
+async def test_ordinary_post_needs_no_model_credentials_or_budget(monkeypatch):
+    from app.adapters.checkers.model_execution import ModelAwareExternalExecution
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    request = SimpleNamespace(configuration={}, identity=SimpleNamespace(phase="post_submit"))
+    grant, result = object(), object()
+    calls = []
+
+    async def execute(received_request, received_grant):
+        calls.append((received_request, received_grant))
+        return result
+
+    def forbidden():
+        raise AssertionError("ordinary POST opened model authorization/budget storage")
+
+    adapter = ModelAwareExternalExecution(
+        execution=SimpleNamespace(execute=execute), sessions=forbidden,
+    )
+    assert await adapter.execute(request, grant) is result
+    assert calls == [(request, grant)]
 
 
 async def test_singleton_worker_drains_before_engine_disposal(monkeypatch):

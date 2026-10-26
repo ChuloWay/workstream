@@ -8,10 +8,17 @@ import os
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
-from decimal import ROUND_CEILING, Decimal, InvalidOperation
 from typing import Protocol
 
-from app.adapters.project_agents.openrouter_policy import openrouter_request_options
+from app.adapters.model_usage.openrouter import (
+    OPENROUTER_CHAT_COMPLETIONS_URL,
+    bounded_response_bytes,
+    openrouter_generated_output_bytes,
+    openrouter_model_metadata_url,
+    openrouter_request_options,
+    openrouter_usage,
+    preflight_openrouter_profile,
+)
 from app.core.hashing import canonical_json_hash
 from app.interfaces.setup_model_proxy import (
     SetupModelProxyReply,
@@ -34,11 +41,6 @@ from app.modules.model_usage.api import (
 )
 
 _OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-_OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
-_OPENROUTER_MODEL_URL = "https://openrouter.ai/api/v1/model/{author}/{slug}"
-_OPENROUTER_REQUIRED_PARAMETERS = frozenset(
-    {"max_tokens", "reasoning_effort", "tool_choice", "tools", "verbosity"}
-)
 _OPENAI_RESPONSE_FIELDS = frozenset(
     {
         "background",
@@ -168,7 +170,7 @@ class OpenAISetupProvider:
             async with self._client.stream(
                 "POST", _OPENAI_RESPONSES_URL, content=body_json
             ) as response:
-                raw = await _bounded_response_bytes(
+                raw = await bounded_response_bytes(
                     response, self._profile.spec.maximum_response_bytes
                 )
         except BaseException as exc:
@@ -220,11 +222,11 @@ class OpenRouterSetupProvider:
         """Bind one no-retry client to an exact direct OpenRouter model."""
         import httpx
 
-        model_parts = profile.spec.model_snapshot.split("/")
-        if len(model_parts) != 2 or not all(model_parts):
+        try:
+            openrouter_model_metadata_url(profile.spec.model_snapshot)
+        except ValueError:
             raise ModelCallUnavailable("model_profile_provider_unavailable")
         self._profile = profile
-        self._model_url = _OPENROUTER_MODEL_URL.format(author=model_parts[0], slug=model_parts[1])
         self._client = httpx.AsyncClient(
             trust_env=False,
             follow_redirects=False,
@@ -238,27 +240,16 @@ class OpenRouterSetupProvider:
 
     async def count_input(self, _body: dict[str, object]) -> int:
         """Refresh exact model metadata, then reserve the full approved context."""
-        try:
-            async with self._client.stream("GET", self._model_url) as response:
-                raw = await _bounded_response_bytes(response, 1_048_576)
-            if not 200 <= response.status_code < 300 or not raw:
-                raise ValueError("provider metadata unavailable")
-            value = json.loads(raw, parse_constant=_reject_constant)
-            _validate_openrouter_metadata(self._profile, value)
-        except ModelCallUnavailable:
-            raise
-        except BaseException as exc:
-            raise ModelCallUnavailable("model_profile_provider_unavailable") from exc
-        return self._profile.spec.maximum_input_tokens
+        return await preflight_openrouter_profile(self._client, self._profile)
 
     async def dispatch(self, body_json: str) -> SetupProviderResponse:
         """Send one bounded Chat Completions request and classify uncertainty."""
         raw = b""
         try:
             async with self._client.stream(
-                "POST", _OPENROUTER_CHAT_URL, content=body_json
+                "POST", OPENROUTER_CHAT_COMPLETIONS_URL, content=body_json
             ) as response:
-                raw = await _bounded_response_bytes(
+                raw = await bounded_response_bytes(
                     response, self._profile.spec.maximum_response_bytes
                 )
         except BaseException as exc:
@@ -686,100 +677,6 @@ def _safe_chat_response_format(value: object) -> bool:
     )
 
 
-def _validate_openrouter_metadata(profile: ProjectModelProfile, value: object) -> None:
-    """Fail before spend unless current provider metadata fits the pinned profile."""
-    if not isinstance(value, dict) or set(value) != {"data"}:
-        raise ModelCallUnavailable("model_profile_provider_unavailable")
-    data = value["data"]
-    if not isinstance(data, dict):
-        raise ModelCallUnavailable("model_profile_provider_unavailable")
-    top_provider = data.get("top_provider")
-    supported = data.get("supported_parameters")
-    context_length = data.get("context_length")
-    if (
-        data.get("id") != profile.spec.model_snapshot
-        or not isinstance(data.get("canonical_slug"), str)
-        or not data["canonical_slug"]
-        or type(context_length) is not int
-        or context_length < 1
-        or context_length > profile.spec.maximum_input_tokens
-        or not isinstance(top_provider, dict)
-        or type(top_provider.get("context_length")) is not int
-        or top_provider["context_length"] != context_length
-        or type(top_provider.get("max_completion_tokens")) is not int
-        or not 1 <= profile.spec.maximum_output_tokens <= top_provider["max_completion_tokens"]
-        or not isinstance(supported, list)
-        or any(type(item) is not str for item in supported)
-        or not _OPENROUTER_REQUIRED_PARAMETERS.issubset(supported)
-    ):
-        raise ModelCallUnavailable("model_profile_provider_unavailable")
-    _validate_openrouter_pricing(profile, data.get("pricing"))
-
-
-def _validate_openrouter_pricing(profile: ProjectModelProfile, value: object) -> None:
-    """Require pinned rates to cover every advertised tier and cache class."""
-    if not isinstance(value, dict):
-        raise ModelCallUnavailable("model_profile_provider_unavailable")
-    pricing_rows = [value]
-    overrides = value.get("overrides", [])
-    if not isinstance(overrides, list) or any(not isinstance(row, dict) for row in overrides):
-        raise ModelCallUnavailable("model_profile_provider_unavailable")
-    pricing_rows.extend(overrides)
-    input_ceiling = 0
-    cached_ceiling = 0
-    output_ceiling = 0
-    for row in pricing_rows:
-        _require_zero_unsupported_fees(row)
-        input_ceiling = max(
-            input_ceiling,
-            _nanodollars(row.get("prompt")),
-            _nanodollars(row.get("input_cache_write", row.get("prompt"))),
-        )
-        cached_ceiling = max(
-            cached_ceiling,
-            _nanodollars(row.get("input_cache_read", row.get("prompt"))),
-        )
-        output_ceiling = max(output_ceiling, _nanodollars(row.get("completion")))
-    pinned = profile.spec.pricing
-    if (
-        input_ceiling > pinned.uncached_input_nanodollars_per_token
-        or cached_ceiling > pinned.cached_input_nanodollars_per_token
-        or output_ceiling > pinned.output_nanodollars_per_token
-    ):
-        raise ModelCallUnavailable("model_profile_provider_unavailable")
-
-
-def _require_zero_unsupported_fees(row: dict) -> None:
-    """Reject advertised charges the token-only ledger cannot reserve."""
-    supported = {
-        "prompt",
-        "completion",
-        "input_cache_read",
-        "input_cache_write",
-        "overrides",
-        "min_prompt_tokens",
-    }
-    for key, value in row.items():
-        if key not in supported and _nanodollars(value) != 0:
-            raise ModelCallUnavailable("model_profile_provider_unavailable")
-
-
-def _nanodollars(value: object) -> int:
-    """Round one nonnegative per-token USD string up to nanodollars."""
-    if type(value) is not str:
-        raise ModelCallUnavailable("model_profile_provider_unavailable")
-    try:
-        amount = Decimal(value)
-    except InvalidOperation:
-        raise ModelCallUnavailable("model_profile_provider_unavailable") from None
-    if not amount.is_finite() or amount < 0:
-        raise ModelCallUnavailable("model_profile_provider_unavailable")
-    converted = (amount * Decimal(1_000_000_000)).to_integral_value(rounding=ROUND_CEILING)
-    if converted > 9_000_000_000_000_000_000:
-        raise ModelCallUnavailable("model_profile_provider_unavailable")
-    return int(converted)
-
-
 def _openai_response(
     profile: ProjectModelProfile, status_code: int, value: dict[str, object]
 ) -> SetupProviderResponse:
@@ -814,13 +711,25 @@ def _openrouter_response(
         or provider_model != profile.spec.model_snapshot
     ):
         raise ValueError("provider response identity is invalid")
+    usage = openrouter_usage(value.get("usage"))
+    choices = value.get("choices")
+    if not isinstance(choices, list):
+        raise TypeError("provider output is invalid")
     return SetupProviderResponse(
         status_code=status_code,
         response_json=_canonical_bytes(value).decode("utf-8"),
         provider_response_id=provider_id,
         provider_model=provider_model,
-        usage=_chat_usage(value.get("usage")),
-        usable=_chat_output_bytes(value) <= profile.spec.maximum_output_bytes,
+        usage=ModelCallUsage(
+            input_tokens=usage.input_tokens,
+            cached_input_tokens=usage.cached_input_tokens,
+            output_tokens=usage.output_tokens,
+            reasoning_tokens=usage.reasoning_tokens,
+        ),
+        usable=(
+            openrouter_generated_output_bytes(choices)
+            <= profile.spec.maximum_output_bytes
+        ),
     )
 
 
@@ -854,20 +763,6 @@ def _usage(value: object) -> ModelCallUsage:
     )
 
 
-def _chat_usage(value: object) -> ModelCallUsage:
-    """Decode complete Chat Completions usage into the shared ledger shape."""
-    if not isinstance(value, dict):
-        raise TypeError("provider usage is unavailable")
-    input_details = value.get("prompt_tokens_details") or {}
-    output_details = value.get("completion_tokens_details") or {}
-    return ModelCallUsage(
-        input_tokens=value.get("prompt_tokens"),
-        cached_input_tokens=input_details.get("cached_tokens", 0),
-        output_tokens=value.get("completion_tokens"),
-        reasoning_tokens=output_details.get("reasoning_tokens", 0),
-    )
-
-
 def _model_output_bytes(value: dict[str, object]) -> int:
     """Count UTF-8 model-authored text and tool arguments without response metadata."""
     output = value.get("output")
@@ -888,31 +783,6 @@ def _model_output_bytes(value: dict[str, object]) -> int:
     return total
 
 
-def _chat_output_bytes(value: dict[str, object]) -> int:
-    """Count model-authored UTF-8 bytes across all completion choices."""
-    choices = value.get("choices")
-    if not isinstance(choices, list):
-        raise TypeError("provider output is invalid")
-    return _generated_string_bytes(choices)
-
-
-def _generated_string_bytes(root: object) -> int:
-    """Count bounded content, refusal and tool-argument strings recursively."""
-    total = 0
-    stack = [root]
-    while stack:
-        current = stack.pop()
-        if isinstance(current, list):
-            stack.extend(current)
-        elif isinstance(current, dict):
-            for key, item in current.items():
-                if key in {"content", "refusal", "arguments"} and isinstance(item, str):
-                    total += len(item.encode("utf-8"))
-                elif isinstance(item, (dict, list)):
-                    stack.append(item)
-    return total
-
-
 def _canonical_bytes(value: object) -> bytes:
     """Serialize provider evidence to the canonical retained JSON form."""
     return json.dumps(
@@ -922,18 +792,6 @@ def _canonical_bytes(value: object) -> bytes:
         allow_nan=False,
         separators=(",", ":"),
     ).encode("utf-8")
-
-
-async def _bounded_response_bytes(response, maximum_bytes: int) -> bytes:
-    """Read a provider body without ever accumulating beyond its locked cap."""
-    body = bytearray()
-    async for chunk in response.aiter_bytes():
-        if not chunk:
-            continue
-        if len(chunk) > maximum_bytes - len(body):
-            raise ValueError("provider response exceeds profile")
-        body.extend(chunk)
-    return bytes(body)
 
 
 def _sha(data: bytes) -> str:

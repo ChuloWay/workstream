@@ -23,6 +23,10 @@ from app.adapters.project_agents.result_validation import (
     validate_project_guide_runtime_result,
 )
 from app.adapters.project_agents.setup_model_proxy import create_setup_httpx_client
+from app.adapters.model_usage.openrouter import (
+    openrouter_request_options,
+    require_direct_openrouter_model,
+)
 from app.interfaces.external_services import ExternalServiceAdapterIdentity
 from app.interfaces.project_agents import (
     ProjectAgentRuntimeConfigurationError,
@@ -35,8 +39,6 @@ from app.interfaces.project_agents import (
 )
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.projects.api.guide_documents import GuideRuntimeCapabilities
-
-from .openrouter_policy import openrouter_request_options, require_direct_openrouter_model
 
 _INVALID_SCHEMA_OUTPUT = object()
 _PROXY_BASE_URL = "https://model-proxy.invalid/v1"
@@ -427,7 +429,12 @@ def _require_supported_provider(
         configuration.model_provider == "openrouter"
         and configuration.model_api == "chat_completions"
     ):
-        require_direct_openrouter_model(configuration.model)
+        try:
+            require_direct_openrouter_model(configuration.model)
+        except ValueError:
+            raise ProjectAgentRuntimeConfigurationError(
+                "project guide OpenRouter model routing is unsupported"
+            ) from None
         return
     elif configuration.model_provider == "openai" and configuration.model_api in {
         "responses",

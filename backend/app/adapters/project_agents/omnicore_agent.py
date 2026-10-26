@@ -28,7 +28,8 @@ from app.adapters.project_agents.omnicore_profile import (
     OmniCoreAgentProfile,
     require_omnicore_agent_adapter_profile,
 )
-from app.adapters.project_agents.openrouter_policy import (
+from app.adapters.model_usage.openrouter import (
+    OPENROUTER_CHAT_COMPLETIONS_URL as _OPENROUTER_CHAT_COMPLETIONS_URL,
     openrouter_request_options,
     require_direct_openrouter_model,
 )
@@ -48,7 +49,6 @@ from app.interfaces.project_agents import (
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.projects.api.guide_documents import GuideRuntimeCapabilities
 
-_OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
 _READ_DESCRIPTION = "Read bounded text from an assigned original using its exact opaque handle."
 _SEARCH_DESCRIPTION = "Search bounded text in an assigned original using its exact opaque handle."
 _READ_SCHEMA = {
@@ -180,7 +180,12 @@ class OmniCoreAgentProjectGuideRuntime:
             or not configuration.uses_inference
         ):
             raise ProjectAgentRuntimeConfigurationError("project guide runtime is unsupported")
-        require_direct_openrouter_model(configuration.model)
+        try:
+            require_direct_openrouter_model(configuration.model)
+        except ValueError:
+            raise ProjectAgentRuntimeConfigurationError(
+                "project guide OpenRouter model routing is unsupported"
+            ) from None
         if configuration.maximum_turns < 2:
             raise ProjectAgentRuntimeConfigurationError(
                 "project guide runtime requires draft and review turns"

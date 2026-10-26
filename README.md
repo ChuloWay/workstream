@@ -295,10 +295,19 @@ no shell or model-selected storage paths. Rebuild the local image after changing
 parser code. Committed original-document readiness runs one compilation and
 stops at findings and proposals; manager review and approval remain separate.
 
+Model-backed POST checkers select OpenAI Responses or OpenRouter Chat Completions
+from their locked project model profile through the shared budgeted proxy.
+Ordinary POST checkers need no model. An OpenRouter-only deployment needs only
+its OpenRouter credential; setup runtime selection does not force POST to use
+OpenAI. See [model runtime operations](docs/operations_checker_models.md) for
+provider bounds, evidence custody and recovery limits.
+
 To compile guides without any model provider, select the manager-authored
 runtime instead. It makes no inference request and allocates no provider
-resources. It uses the same isolated document tools. The hosted release omits
-the provider credential for this exact `none/none/none` configuration:
+resources. It uses the same isolated document tools. With the model proxy
+disabled, the hosted release omits provider credentials for this exact
+`none/none/none` configuration; model-backed POST can independently enable the
+proxy with its selected provider credential:
 
 ```bash
 WORKSTREAM_PROJECT_AGENT_RUNTIME=manager_authored

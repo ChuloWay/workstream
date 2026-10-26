@@ -7,13 +7,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.adapters.project_agents.openrouter_policy import openrouter_request_options
+from app.adapters.model_usage.openrouter import (
+    bounded_response_bytes,
+    openrouter_request_options,
+)
 from app.adapters.project_agents.setup_model_handler import (
     OpenAISetupProvider,
     OpenRouterSetupProvider,
     SetupModelProxyHandler,
     SetupProviderResponse,
-    _bounded_response_bytes,
     _completed_reply,
     _validate_request,
 )
@@ -140,7 +142,7 @@ async def test_provider_body_reader_stops_before_accumulating_over_profile():
             yield b"b"
 
     with pytest.raises(ValueError, match="exceeds profile"):
-        await _bounded_response_bytes(Response(), 8)
+        await bounded_response_bytes(Response(), 8)
 
 
 async def test_openai_count_includes_every_semantic_input_field():
