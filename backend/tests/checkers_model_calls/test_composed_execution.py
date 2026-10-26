@@ -393,6 +393,7 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                         "finish_reason": "stop",
                         "message": {
                             "role": "assistant",
+                            "tool_calls": [],
                             "content": '{"verdict":"passed"}',
                         },
                     }

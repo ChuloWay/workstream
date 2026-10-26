@@ -128,6 +128,14 @@ replay, credential-free hosted rendering/entrypoint tests, existing affected set
 and OpenAI regressions, static boundaries/catalogues, links, stale wording and full
 hosted CI. Live provider and full project journey remain separately qualified.
 
+## Review corrections
+
+The response parser accepts an absent, null or empty tool-call list as no tool
+calls, while rejecting nonempty or malformed values. Every completion choice
+must carry integer index zero; missing, null and boolean indices are invalid.
+Focused HTTP regressions cover both boundaries, and the retained-ART replay
+case uses a valid empty tool-call list through real PostgreSQL custody.
+
 ## Reconciliation
 
 Base: current main `a3c98c3571c6de4a6f4ce5ca6f3560b5cb32f7f6`, including merged #676

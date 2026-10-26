@@ -185,13 +185,13 @@ class OpenRouterCheckerModelProvider:
         if not isinstance(choice, dict):
             raise ValueError("provider output is invalid")
         index = choice.get("index")
-        if index is not None and (type(index) is not int or index != 0):
+        if type(index) is not int or index != 0:
             raise ValueError("provider output is invalid")
         message = choice.get("message")
         if not isinstance(message, dict) or message.get("role") != "assistant":
             raise ValueError("provider output is invalid")
         if (
-            message.get("tool_calls") is not None
+            message.get("tool_calls") not in (None, [])
             or message.get("function_call") is not None
             or message.get("audio") is not None
         ):

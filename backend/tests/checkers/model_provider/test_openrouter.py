@@ -168,14 +168,20 @@ async def test_shared_usage_and_body_reader_enforce_complete_bounded_values() ->
         await bounded_response_bytes(Response(), 8)
 
 
-async def test_create_preflights_then_dispatches_one_fixed_nonstreaming_request() -> None:
+@pytest.mark.parametrize("empty_tool_calls", [False, True])
+async def test_create_preflights_then_dispatches_one_fixed_nonstreaming_request(
+    empty_tool_calls: bool,
+) -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
         if request.method == "GET":
             return httpx.Response(200, json=metadata())
-        return httpx.Response(200, json=completion())
+        response = completion()
+        if empty_tool_calls:
+            response["choices"][0]["message"]["tool_calls"] = []
+        return httpx.Response(200, json=response)
 
     provider = adapter(handler)
     result = await provider.create(CheckerModelRequest("inspect this package"))
@@ -383,6 +389,21 @@ async def test_identity_choice_and_usage_substitution_cannot_settle(body: dict) 
             "finish_reason": "stop",
         },
         {
+            "message": {"role": "assistant", "content": "bounded"},
+            "finish_reason": "stop",
+        },
+        {
+            "index": None,
+            "message": {"role": "assistant", "content": "bounded"},
+            "finish_reason": "stop",
+        },
+        {
+            "index": 0,
+            "message": {"role": "assistant", "content": "bounded", "tool_calls": {}},
+            "finish_reason": "stop",
+        },
+
+        {
             "index": 0,
             "message": {
                 "role": "assistant",
@@ -401,7 +422,7 @@ async def test_identity_choice_and_usage_substitution_cannot_settle(body: dict) 
             "finish_reason": "stop",
         },
     ],
-    ids=["boolean-index", "tool-call", "function-call"],
+    ids=["boolean-index", "missing-index", "null-index", "malformed-tool-calls", "tool-call", "function-call"],
 )
 async def test_non_text_choice_payload_cannot_settle(choice: dict) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
