@@ -23,7 +23,7 @@ The optional model execution wrapper already passes ordinary checks through.
 ### Allowed
 
 - `backend/app/adapters/checkers/{__init__,model_runtime,model_provider,openrouter_model_provider}.py`: profile-driven typed provider composition and bounded OpenRouter POST adapter.
-- `backend/app/adapters/model_providers/**`, affected OpenRouter imports in `backend/app/adapters/project_agents/**`: share existing provider HTTP/metadata/pricing/request controls without duplicating setup behavior.
+- `backend/app/adapters/model_usage/openrouter.py`, affected OpenRouter imports in `backend/app/adapters/project_agents/**`: share existing provider HTTP/metadata/pricing/request controls without duplicating setup behavior.
 - `backend/app/interfaces/checker_model_provider.py`: distinguish bounded response IDs from slash-qualified model identities.
 - `backend/tests/checkers/model_provider/**`, `backend/tests/checkers_model_calls/**`, affected setup-provider tests: discriminating provider, custody and non-model regressions.
 - `deploy/hosted/{compose.inference.yml,compose.model-openai.yml,compose.model-openrouter.yml,preflight.py,release.env.example,README.md}`, `docker/backend/release-entrypoint.sh`, `scripts/test_hosted_release_config.py`, affected `scripts/test_hosted_release_images.py`: mount/load only configured provider credentials, preserving role separation and cached-image proof.
