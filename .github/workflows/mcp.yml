@@ -141,6 +141,7 @@ jobs:
           set -euo pipefail
           export WORKSTREAM_MCP_OPENAPI_COMMAND="uv run --frozen python -c 'import json; from app.main import app; print(json.dumps(app.openapi()))'"
           uv run --frozen pytest -q tests/test_contract_drift.py \
+            tests/test_checker_artifact_contract_drift.py \
             tests/test_task_execution_contract_drift.py
 
       - name: Run real isolated API-to-MCP lifecycle parity

@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "a902a3d776782e49816064a52a2b77b4603915495c86cb6ba83aa45a884ecef1",
+  "canonical_sha256": "df7eaad67c086ea7bc3241fcaf6d77a21207d16de2422319a59f68f25373a508",
   "components": {
     "schemas": {
       "ApiError": {
@@ -297,6 +297,7 @@
               "current_runner",
               "checker_implementation",
               "model_proxy",
+              "trial_proxy",
               "runtime_gap"
             ],
             "type": "string"
@@ -2148,6 +2149,6 @@
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/post-submission-policies/{policy_id}",
-    "repository_sha": "59c52cc81179611ea316935552cc177f83eec687"
+    "repository_sha": "9e38a8491f3497702c7395bb24260433ea8b4199"
   }
 }
