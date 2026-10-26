@@ -1686,9 +1686,10 @@ provider qualification through real gVisor execution and PostgreSQL/MinIO custod
 two verified trial receipts, four settled model effects and replay without new
 provider calls. Owned resource cleanup passed. This uses a qualification package;
 it does not establish live-model grading or the public contribution journey.
-That qualification used gVisor. The intended Smol deployment still lacks this
-image's model/trial callbacks and predecessor-material support; it remains
-blocked until those capabilities and the microVM composition are qualified.
+That qualification used gVisor. The Smol implementation now includes typed
+model/trial callbacks, predecessor material and fresh sibling trials with atomic
+capacity admission. These changes still require real microVM composition and
+resource-boundary qualification before deployment readiness can be claimed.
 Model-enabled checks require exact approved project profiles before binding;
 project publication and complete live-journey qualification remain separate.
 Registration, corrected policy binding and approval must precede activation;
