@@ -10,6 +10,8 @@ pub const EXECUTION_SOCKET: &str = "/work/execution.sock";
 pub const GUEST_IO_PROTOCOL: &str = "workstream.smol_guest_io.v1";
 pub const MODEL_FRAME_MAXIMUM: usize = 1024 * 1024;
 pub const EXECUTION_FRAME_MAXIMUM: usize = 4 * 1024 * 1024;
+pub const TRIAL_LIMITS_ARGUMENT: &str = "--trial-limits";
+pub const TRIAL_LIMITS_MAXIMUM_BYTES: usize = 4096;
 pub const TRIAL_REQUEST_PROTOCOL: &str = "workstream.smol_trial_request.v1";
 pub const TRIAL_CHILD_PROTOCOL: &str = "workstream.smol_trial_child.v1";
 pub const TRIAL_EXPORT_PROTOCOL: &str = "workstream.smol_trial_export.v1";
@@ -118,7 +120,7 @@ pub struct TrialFilesystemLimit {
     pub entries: u64,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct TrialChildLimits {
     pub cpu_quota_millis: u64,

@@ -229,7 +229,8 @@ fn read_staged_bytes(
 ) -> Result<()> {
     while !bytes.is_empty() {
         check()?;
-        match input.read(bytes) {
+        let maximum = bytes.len().min(65_536);
+        match input.read(&mut bytes[..maximum]) {
             Ok(0) => return Err("material input truncated".into()),
             Ok(count) => bytes = &mut bytes[count..],
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -964,6 +965,37 @@ mod tests {
     }
 
     #[test]
+    fn framed_bootstrap_body_is_read_in_checked_bounded_chunks() {
+        struct Chunks {
+            maximum: usize,
+            remaining: usize,
+        }
+        impl Read for Chunks {
+            fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+                self.maximum = self.maximum.max(bytes.len());
+                let count = bytes.len().min(self.remaining);
+                bytes[..count].fill(1);
+                self.remaining -= count;
+                Ok(count)
+            }
+        }
+        let mut input = Chunks {
+            maximum: 0,
+            remaining: MAX_JOB_BYTES,
+        };
+        let checks = std::cell::Cell::new(0);
+        let mut bytes = vec![0_u8; MAX_JOB_BYTES];
+        read_staged_bytes(&mut input, &mut bytes, &|| {
+            checks.set(checks.get() + 1);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(input.maximum, 65_536);
+        assert_eq!(checks.get(), MAX_JOB_BYTES / 65_536 + 1);
+        assert_eq!(input.remaining, 0);
+    }
+
+    #[test]
     fn project_material_topology_is_closed() {
         assert!(valid_project_material_roots(["current"]));
         assert!(valid_project_material_roots(["current", "predecessor"]));
@@ -1072,6 +1104,15 @@ fn main() {
     }
 }
 fn run() -> Result<()> {
+    let bootstrap_limits = trial::parse_bootstrap_limits(std::env::args_os().skip(1))?;
+    let trial_envelope = bootstrap_limits
+        .map(trial::TrialEnvelope::prepare)
+        .transpose()?;
+    let check_input = || {
+        trial_envelope
+            .as_ref()
+            .map_or(Ok(()), |envelope| envelope.check())
+    };
     // Read exactly the bootstrap bytes without userspace read-ahead: trusted
     // intake keeps the remaining command stream as its stdin after exec.
     let descriptor = unsafe { libc::dup(0) };
@@ -1079,15 +1120,21 @@ fn run() -> Result<()> {
         return Err(std::io::Error::last_os_error().into());
     }
     let mut input = unsafe { File::from_raw_fd(descriptor) };
+    if trial_envelope.is_some() {
+        trial::set_nonblocking(&input)?;
+    }
     let mut length = [0u8; 4];
-    input.read_exact(&mut length)?;
+    read_staged_bytes(&mut input, &mut length, &check_input)?;
     let length = u32::from_be_bytes(length) as usize;
     if length == 0 || length > MAX_JOB_BYTES {
         return Err("job size invalid".into());
     }
     let mut bytes = vec![0; length];
-    input.read_exact(&mut bytes)?;
+    read_staged_bytes(&mut input, &mut bytes, &check_input)?;
     let job: GuestJob = serde_json::from_slice(&bytes)?;
+    check_input()?;
+    let trial_request = trial::bind_bootstrap_job(&job, bootstrap_limits)?;
+    check_input()?;
     let purpose = job.purpose.clone();
     let (cpu, memory, roots) = match &purpose {
         GuestPurpose::Project { materials, .. } => {
@@ -1131,16 +1178,6 @@ fn run() -> Result<()> {
         return Err("image configuration invalid".into());
     }
     private_mounts().map_err(|e| format!("mount namespace: {e}"))?;
-    let trial_envelope = if matches!(
-        purpose,
-        GuestPurpose::TrialBuild { .. } | GuestPurpose::TrialStep { .. }
-    ) {
-        let envelope = trial::TrialEnvelope::prepare(&job)?;
-        trial::set_nonblocking(&input)?;
-        Some(envelope)
-    } else {
-        None
-    };
     // Trial staging belongs to the same finite envelope as formatting, child
     // execution and export. Other purposes retain their existing custody owner.
     let staged = stage(&job, &roots, &mut input, || {
@@ -1151,7 +1188,8 @@ fn run() -> Result<()> {
     .map_err(|e| format!("staging: {e}"))?;
     if let Some(envelope) = trial_envelope {
         drop(input);
-        return trial::run(&job, &staged, envelope);
+        let request = trial_request.ok_or("trial request binding missing")?;
+        return trial::run(&job, &staged, request, envelope);
     }
     if let GuestPurpose::Project { capabilities, .. } = &purpose {
         let request = parse_request(&serde_json::to_vec(&job.request)?)?;

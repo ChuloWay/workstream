@@ -26,7 +26,8 @@ use std::sync::{
 use std::time::Instant;
 use workstream_checker_guest::{
     GuestJob, GuestPurpose, TrialChildLimits, TrialChildResult, TrialExportOutcome,
-    TrialFilesystemLimit, TrialRequest, TrialVisibleRole,
+    TrialFilesystemLimit, TrialRequest, TrialVisibleRole, TRIAL_LIMITS_ARGUMENT,
+    TRIAL_LIMITS_MAXIMUM_BYTES,
 };
 
 const GIB: u64 = 1024 * 1024 * 1024;
@@ -533,7 +534,11 @@ fn revalidate_machine_inputs(
     Ok(())
 }
 
-fn spawn_guest(machine: &Machine) -> Result<std::process::Child, String> {
+fn spawn_guest(machine: &Machine, limits: TrialChildLimits) -> Result<std::process::Child, String> {
+    let bootstrap = serde_json::to_string(&limits).map_err(|_| "trial bootstrap limits invalid")?;
+    if bootstrap.len() > TRIAL_LIMITS_MAXIMUM_BYTES {
+        return Err("trial bootstrap limits unbounded".into());
+    }
     let mut command = command(
         &machine.lease.runtime,
         &[
@@ -547,6 +552,8 @@ fn spawn_guest(machine: &Machine) -> Result<std::process::Child, String> {
             "--stream",
             "--",
             "/.workstream-guest",
+            TRIAL_LIMITS_ARGUMENT,
+            &bootstrap,
         ],
         Some(&machine.lease.cgroup()),
     )?;
@@ -811,7 +818,8 @@ impl SmolTrialRuntime for Runtime {
             .and_then(|_| stage_tools(&machine, &self.runtime, &self.client, &guard));
         let result = match prepared {
             Ok(()) => {
-                let child = spawn_guest(&machine).map_err(|_| SmolTrialRuntimeFailure::Unavailable);
+                let child = spawn_guest(&machine, child_limits)
+                    .map_err(|_| SmolTrialRuntimeFailure::Unavailable);
                 child.and_then(|child| {
                     trial_io::exchange(
                         child,
@@ -1035,7 +1043,8 @@ impl SmolTrialRuntime for Runtime {
             .and_then(|_| stage_tools(&machine, &self.runtime, &self.client, &guard));
         let result = match prepared {
             Ok(()) => {
-                let child = spawn_guest(&machine).map_err(|_| SmolTrialRuntimeFailure::Unavailable);
+                let child = spawn_guest(&machine, child_limits)
+                    .map_err(|_| SmolTrialRuntimeFailure::Unavailable);
                 child.and_then(|child| {
                     trial_io::exchange(
                         child,

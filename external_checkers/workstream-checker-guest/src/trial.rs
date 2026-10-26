@@ -15,7 +15,8 @@ use workstream_checker_guest::{
     GuestJob, GuestPurpose, MaterialFile, TrialChildLimits, TrialChildOutcome, TrialChildResult,
     TrialExport, TrialExportHeader, TrialExportOutcome, TrialFilesystemLimit, TrialRequest,
     TrialTermination, MINIMUM_TRIAL_FILESYSTEM_BYTES, MINIMUM_TRIAL_FILESYSTEM_ENTRIES,
-    MINIMUM_TRIAL_PIDS, TRIAL_CHILD_PROTOCOL, TRIAL_EXPORT_PROTOCOL, TRIAL_REQUEST_PROTOCOL,
+    MINIMUM_TRIAL_PIDS, TRIAL_CHILD_PROTOCOL, TRIAL_EXPORT_PROTOCOL, TRIAL_LIMITS_ARGUMENT,
+    TRIAL_LIMITS_MAXIMUM_BYTES, TRIAL_REQUEST_PROTOCOL,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -36,7 +37,6 @@ const STATUS_MAXIMUM: u64 = 16 * 1024;
 const REQUEST_SCHEMA: &str = TRIAL_REQUEST_PROTOCOL;
 
 pub(crate) struct TrialEnvelope {
-    request: TrialRequest,
     limits: TrialChildLimits,
     started: Instant,
     deadline: Instant,
@@ -70,21 +70,66 @@ fn require_publishable_measurements(
     Ok(())
 }
 
+// Only the trusted host supplies this small scalar envelope. It must precede
+// all input-dependent job allocation: moving an existing process into a cgroup
+// does not transfer the charge for already allocated pages.
+pub(crate) fn parse_bootstrap_limits(
+    mut arguments: impl Iterator<Item = std::ffi::OsString>,
+) -> Result<Option<TrialChildLimits>> {
+    let Some(option) = arguments.next() else {
+        return Ok(None);
+    };
+    if option != TRIAL_LIMITS_ARGUMENT {
+        return Err("guest bootstrap argument invalid".into());
+    }
+    let document = arguments.next().ok_or("trial bootstrap limits missing")?;
+    if document.len() > TRIAL_LIMITS_MAXIMUM_BYTES || arguments.next().is_some() {
+        return Err("trial bootstrap limits unbounded".into());
+    }
+    let document = document.to_str().ok_or("trial bootstrap limits invalid")?;
+    let limits: TrialChildLimits = serde_json::from_str(document)?;
+    if !valid_child_limits(limits) {
+        return Err("trial bootstrap limits invalid".into());
+    }
+    Ok(Some(limits))
+}
+
+pub(crate) fn bind_bootstrap_job(
+    job: &GuestJob,
+    bootstrap: Option<TrialChildLimits>,
+) -> Result<Option<TrialRequest>> {
+    let trial_purpose = matches!(
+        job.purpose,
+        GuestPurpose::TrialBuild { .. } | GuestPurpose::TrialStep { .. }
+    );
+    let Some(limits) = bootstrap else {
+        return if trial_purpose {
+            Err("trial bootstrap envelope missing".into())
+        } else {
+            Ok(None)
+        };
+    };
+    let request: TrialRequest = serde_json::from_value(job.request.clone())?;
+    if !matches!(
+        (&job.purpose, &request),
+        (GuestPurpose::TrialBuild { .. }, TrialRequest::Build { .. })
+            | (GuestPurpose::TrialStep { .. }, TrialRequest::Step { .. })
+    ) || job.uid == 0
+        || job.gid == 0
+        || request_limits(&request) != limits
+    {
+        return Err("trial bootstrap job binding differs".into());
+    }
+    validate_material_contract(job, &request)?;
+    validate_request(job, &request)?;
+    Ok(Some(request))
+}
+
 impl TrialEnvelope {
-    pub(crate) fn prepare(job: &GuestJob) -> Result<Self> {
-        let request: TrialRequest = serde_json::from_value(job.request.clone())?;
-        if !matches!(
-            (&job.purpose, &request),
-            (GuestPurpose::TrialBuild { .. }, TrialRequest::Build { .. })
-                | (GuestPurpose::TrialStep { .. }, TrialRequest::Step { .. })
-        ) || job.uid == 0
-            || job.gid == 0
-        {
-            return Err("trial purpose invalid".into());
+    pub(crate) fn prepare(limits: TrialChildLimits) -> Result<Self> {
+        if !valid_child_limits(limits) {
+            return Err("trial bootstrap limits invalid".into());
         }
-        validate_material_contract(job, &request)?;
-        validate_request(job, &request)?;
-        let limits = request_limits(&request);
         let started = Instant::now();
         let memberships = fs::read_to_string("/proc/self/cgroup")?;
         let original = memberships
@@ -101,7 +146,6 @@ impl TrialEnvelope {
         let original_cgroup = Path::new("/sys/fs/cgroup").join(original.trim_start_matches('/'));
         configure_cgroup(limits)?;
         let envelope = Self {
-            request,
             limits,
             started,
             deadline: started + Duration::from_millis(limits.timeout_ms),
@@ -1212,11 +1256,15 @@ fn write_export(
     Ok(())
 }
 
-pub(crate) fn run(job: &GuestJob, staged: &StagedJob, mut envelope: TrialEnvelope) -> Result<()> {
+pub(crate) fn run(
+    job: &GuestJob,
+    staged: &StagedJob,
+    request: TrialRequest,
+    mut envelope: TrialEnvelope,
+) -> Result<()> {
     envelope.check()?;
     require_static_tool(LAUNCHER)?;
     require_static_tool(MKFS)?;
-    let request = envelope.request.clone();
     prepare_bootstrap(staged, &request, job.uid, job.gid)?;
     envelope.check()?;
     let filesystems = create_filesystems(&request, &envelope)?;
@@ -1699,6 +1747,112 @@ mod tests {
             "output_max_bytes":4096
         }))
         .unwrap()
+    }
+
+    fn build_job() -> GuestJob {
+        serde_json::from_value(serde_json::json!({
+            "purpose": {"kind": "trial_build", "materials": [
+                {"name": "context", "directories": [], "files": []},
+                {"name": "cache", "directories": [], "files": []}
+            ]},
+            "request": build_request(), "command": ["/kaniko/executor"],
+            "environment": [], "working_directory": "/", "uid": 1000, "gid": 1000,
+            "directories": [], "files": []
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn bootstrap_arguments_are_closed_bounded_and_optional_only_for_other_purposes() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+        let limits = request_limits(&build_request());
+        let document = serde_json::to_string(&limits).unwrap();
+        assert!(parse_bootstrap_limits(std::iter::empty())
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            parse_bootstrap_limits(
+                [
+                    OsString::from(TRIAL_LIMITS_ARGUMENT),
+                    OsString::from(&document)
+                ]
+                .into_iter()
+            )
+            .unwrap(),
+            Some(limits)
+        );
+        for arguments in [
+            vec![OsString::from("--unknown"), OsString::from(&document)],
+            vec![OsString::from(TRIAL_LIMITS_ARGUMENT)],
+            vec![
+                OsString::from(TRIAL_LIMITS_ARGUMENT),
+                OsString::from(&document),
+                OsString::from("extra"),
+            ],
+            vec![
+                OsString::from(TRIAL_LIMITS_ARGUMENT),
+                OsString::from(" ".repeat(TRIAL_LIMITS_MAXIMUM_BYTES + 1)),
+            ],
+            vec![
+                OsString::from(TRIAL_LIMITS_ARGUMENT),
+                OsString::from_vec(vec![0xff]),
+            ],
+        ] {
+            assert!(parse_bootstrap_limits(arguments.into_iter()).is_err());
+        }
+        let mut unknown = serde_json::to_value(limits).unwrap();
+        unknown["provider_key"] = true.into();
+        assert!(parse_bootstrap_limits(
+            [
+                OsString::from(TRIAL_LIMITS_ARGUMENT),
+                OsString::from(unknown.to_string())
+            ]
+            .into_iter()
+        )
+        .is_err());
+        let invalid = TrialChildLimits { pids: 2, ..limits };
+        assert!(parse_bootstrap_limits(
+            [
+                OsString::from(TRIAL_LIMITS_ARGUMENT),
+                OsString::from(serde_json::to_string(&invalid).unwrap())
+            ]
+            .into_iter()
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn trial_job_requires_early_envelope_and_exact_purpose_and_limits_binding() {
+        let mut job = build_job();
+        let limits = request_limits(&build_request());
+        assert!(bind_bootstrap_job(&job, None).is_err());
+        assert!(matches!(
+            bind_bootstrap_job(&job, Some(limits)).unwrap(),
+            Some(TrialRequest::Build { .. })
+        ));
+        let mut differences = [limits; 8];
+        differences[0].cpu_quota_millis += 1;
+        differences[1].cpu_time_ms += 1;
+        differences[2].finalization_cpu_time_ms += 1;
+        differences[3].memory_bytes += 1;
+        differences[4].pids += 1;
+        differences[5].timeout_ms += 1;
+        differences[6].finalization_timeout_ms += 1;
+        differences[7].output_bytes += 1;
+        for different in differences {
+            assert!(bind_bootstrap_job(&job, Some(different)).is_err());
+        }
+        job.purpose = GuestPurpose::TrialStep {
+            materials: Vec::new(),
+        };
+        assert!(bind_bootstrap_job(&job, Some(limits)).is_err());
+        job.purpose = GuestPurpose::TrustedIntake {
+            cpu_millis: 1000,
+            memory_bytes: 2 * 1024 * 1024 * 1024,
+        };
+        assert!(bind_bootstrap_job(&job, Some(limits)).is_err());
+        assert!(bind_bootstrap_job(&job, None).unwrap().is_none());
     }
 
     #[test]
