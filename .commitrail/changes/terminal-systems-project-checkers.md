@@ -995,3 +995,31 @@ directions, controller/guest death and candidate substitution still have
 focused or historical evidence rather than a new-pin adversarial KVM result;
 the earlier evidence audit retains those distinctions. Hosted and live-provider
 qualification remain separate from this controlled native proof.
+
+### Remaining parser, candidate and recovery verification
+
+The next bounded test-only scope is
+`workstream-checker-service/src/smol/io.rs` (duplicate JSON key and oversized
+declared header rejection through the actual pipe parser),
+`workstream-checker-service/src/smol/trial.rs` (same-size candidate archive
+mutation after preparation rejected by the production step path before VM
+launch), and this record. Runtime behavior is unchanged unless a reproduced
+defect requires a separately reviewed repair. Active nested-trial cancellation
+and controller/guest death probes will reuse the existing owned recovery
+conventions after the hosted baseline releases the VM lane; no concurrent VM or
+new generic proof framework is authorized by this test scope.
+
+Both focused regressions passed. The actual header pipe reader accepts the
+matching unique-key control and rejects duplicate sequence keys and a declared
+4,097-byte header while the producer remains open; producers are killed and
+reaped before assertions. The candidate test invokes production preparation and
+step admission using typed archive-validation facts: original bytes reach an
+intentionally insufficient child reservation, same-size changed bytes return
+InvalidObservation before that boundary, and restored bytes reach capacity
+again. File device/inode/length/mode stay fixed, child credit remains reusable,
+and no VM is invoked. Removing only the production step rehash makes that exact
+mutation assertion fail (CapacityExceeded instead of InvalidObservation); the
+source was restored and the complete serial native workspace then passed 193
+tests with zero failures or ignored cases. Independent test review found no
+defect; formatting and diff checks passed. This test-only change does not alter
+the static runtime artifacts qualified by direct 35 and composition 009.
