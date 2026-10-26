@@ -165,6 +165,35 @@ The operations guide also explains drained scratch-root replacement when limits
 change, preserving the old root and refreshing container and systemd mounts;
 independent review confirmed the canonical ART marker and lifecycle ordering.
 
+The same-account recovery reached a prepared model effect, but stopped before
+request-evidence binding, budget reservation or provider dispatch. Inspection
+identified a missing bootstrap prerequisite: the canonical journey service list
+omits `workstream.artifact.checker_output`, required by both checker and setup
+model evidence storage. Extend `backend/scripts/provision_local_service_actors.py`
+and the focused `backend/tests` checker-output custody regression, using existing
+public service-actor provisioning and unchanged authority. Prove denial with no
+writer, then verified storage after canonical provisioning on PostgreSQL/MinIO.
+No permission, schema, ledger, policy or retained-effect reset is allowed. Any
+continuation must use the existing recovery owners and original project account.
+The proof must also recognize the owner's supported prepared-effect recovery:
+one newly authorized successor grant can reference the same paid slot/effect as
+its failed predecessor. Retain the exact predecessor grant/call snapshot before
+retry, verify its immutable identity and direct failed-run lineage afterward,
+and continue requiring exactly one paid slot and effect. The initial path still
+requires one grant; recovery permits exactly that retained predecessor plus the
+current grant, with the same request hash and no additional spend opportunity.
+The existing model proof module and its focused tests own this bounded check;
+production grant, retry and ledger operations remain unchanged.
+Both real custody regression variants (Local and MinIO, with PostgreSQL) passed;
+the old bootstrap list, substituted only in memory, fails at request-evidence
+storage with the expected authority error. Isolated database, role and MinIO
+cleanup passed. All 35 combined hosted attachment/model tests passed, and the
+previous one-grant proof guard rejects the new supported-recovery test. Root
+review passed the canonical bootstrap change; independent review passed the
+bounded prior-grant proof. No live provider outcome is established by these
+regressions. The failed hosted recovery retains one prepared effect, no ART
+request evidence and a zero-reserved/zero-settled account for later exact recovery.
+
 Root plan review of `e07f28b4a`: PASS WITH LOW RISKS for implementation only. The review required exact numeric identity, native/Compose path parity in both directions, native health before API/worker release and explicit drain ordering. Runtime signoff remains separate. The root subsequently approved one trusted deployment-root selector and explicit pinned native binary path because fixed production paths prevented an isolated rendered-topology proof without touching shared resources. Exact UID/GID and live health requirements remain unchanged.
 
 Cold-start inspection found a schema/activation/proxy/node cycle: the proxy reads the activated ART namespace, the native node requires its model socket, and API normally applies migrations. The fixed `migrate`, AWS `proof` and exact proxy-only `up -d model-proxy` stages therefore validate static custody while releasing no application producer/worker; full `up` still requires both typed native health checks. AWS proof itself uses DB/AWS directly and retains its exact existing credential-separated observations.

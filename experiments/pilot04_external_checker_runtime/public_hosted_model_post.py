@@ -350,19 +350,43 @@ async def account_snapshot(factory, project_id):
                             for item in effects]}
 
 
+def model_grant_snapshot(grant, calls):
+    """Retain the exact immutable grant/call facts before a public recovery."""
+    require(len(calls) == 1 and calls[0].call_index == 0,
+            'model qualification grant has an unexpected call set')
+    call = calls[0]
+    return {'grant_id': grant.id, 'checker_run_id': grant.checker_run_id,
+            'registry_entry_id': str(grant.registry_entry_id),
+            'capability_hash_sha256': digest(grant.token_hash.encode()),
+            'external_request_digest': grant.external_request_digest,
+            'execution_facts_sha256': digest(canonical(grant.execution_facts)),
+            'paid_slot_sha256': digest(canonical(grant.paid_slot)),
+            'authorization_evidence_id': grant.authorization_evidence_id,
+            'issued_at': grant.issued_at.isoformat(), 'expires_at': grant.expires_at.isoformat(),
+            'effect_id': call.attempt_id, 'request_sha256': call.request_sha256,
+            'bound_at': call.bound_at.isoformat(), 'call_index': call.call_index}
+
+
 async def paid_custody(factory, project_id, run_id, submission_id, member, qualification):
     from sqlalchemy import select
     from app.modules.model_usage.models import (
         CheckerModelInvocationGrant, CheckerModelInvocationGrantCall, CheckerModelUsageSlot,
     )
+    from app.modules.checkers.models import CheckerRun
+    from app.modules.checkers.execution_repository import stored_request
 
     async with factory() as session:
         grants = (await session.scalars(select(CheckerModelInvocationGrant).where(
             CheckerModelInvocationGrant.project_id == project_id))).all()
         slots = (await session.scalars(select(CheckerModelUsageSlot).where(
             CheckerModelUsageSlot.project_id == project_id))).all()
-        require(len(grants) == len(slots) == 1, 'model qualification has unexpected grant/paid-slot count')
-        grant, slot = grants[0], slots[0]
+        retained = qualification.state.get('prior_model_grant')
+        expected_grants = 1 if retained is None else 2
+        require(len(grants) == expected_grants and len(slots) == 1,
+                'model qualification has unexpected grant/paid-slot count')
+        current = [grant for grant in grants if grant.checker_run_id == str(run_id)]
+        require(len(current) == 1, 'model qualification has no unique current grant')
+        grant, slot = current[0], slots[0]
         calls = (await session.scalars(select(CheckerModelInvocationGrantCall).where(
             CheckerModelInvocationGrantCall.grant_id == grant.id))).all()
         require(len(calls) == 1 and calls[0].call_index == 0
@@ -373,11 +397,33 @@ async def paid_custody(factory, project_id, run_id, submission_id, member, quali
                 and slot.profile_digest == qualification.profile.profile_digest
                 and slot.registry_entry_digest == qualification.registry['entry_digest'],
                 'model grant and paid slot do not bind this exact selected POST')
-        return {'grant_id': grant.id, 'checker_run_id': grant.checker_run_id,
+        if retained is not None:
+            prior = next(item for item in grants if item.id != grant.id)
+            prior_calls = (await session.scalars(select(CheckerModelInvocationGrantCall).where(
+                CheckerModelInvocationGrantCall.grant_id == prior.id))).all()
+            require(model_grant_snapshot(prior, prior_calls) == retained,
+                    'retained predecessor grant or call changed')
+            previous_run = await session.get(CheckerRun, prior.checker_run_id)
+            current_run = await session.get(CheckerRun, str(run_id))
+            require(previous_run is not None and current_run is not None
+                    and previous_run.status == 'infrastructure_failed'
+                    and previous_run.project_id == current_run.project_id == project_id
+                    and previous_run.submission_id == current_run.submission_id == submission_id
+                    and current_run.supersedes_checker_run_id == previous_run.id
+                    and stored_request(previous_run).policy == stored_request(current_run).policy
+                    and prior.registry_entry_id == grant.registry_entry_id
+                    and prior_calls[0].attempt_id == calls[0].attempt_id
+                    and prior_calls[0].request_sha256 == calls[0].request_sha256
+                    == slot.first_request_sha256,
+                    'model recovery changed lineage, policy or its single paid effect')
+        receipt = {'grant_id': grant.id, 'checker_run_id': grant.checker_run_id,
                 'external_request_digest': grant.external_request_digest,
                 'slot_id': slot.id, 'call_index': calls[0].call_index,
                 'effect_id': calls[0].attempt_id, 'request_sha256': calls[0].request_sha256,
                 'submission_id': slot.submission_id, 'profile_id': slot.profile_id}
+        if retained is not None:
+            receipt['prior_model_grant'] = retained
+        return receipt
 
 
 async def run_model_post(attachment, client, factory, qualification):

@@ -48,6 +48,139 @@ def content_sha256(value: bytes) -> str:
 
 
 @pytest.mark.parametrize("provider", ["local", "minio"])
+async def test_canonical_public_provisioning_enables_exact_model_request_custody(
+    tmp_path, isolated_database_env, admin_access, provider,
+) -> None:
+    """The journey bootstrap must provision the writer before any model request I/O."""
+    from scripts.provision_local_service_actors import (
+        JOURNEY_SERVICE_IDENTITIES,
+        idempotency_key,
+        subject_for,
+    )
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from app.adapters.artifacts import create_artifact_store_bootstrap
+    from app.interfaces.artifacts import ArtifactStoreNamespaceClaim
+    from app.modules.actors.models import ActorProfile
+    from app.modules.artifacts.preparation import (
+        ArtifactPreparationService,
+        ArtifactScratchManager,
+    )
+    from app.modules.artifacts.service import artifact_storage_namespace_spec
+    from app.modules.checkers.api.output_custody import (
+        CheckerOutputReservation,
+        CheckerOutputSelector,
+        CheckerOutputSlot,
+    )
+    from tests.artifact_store_helpers import artifact_preparation_limits
+    from tests.checker_output_admission_helpers import seed_checker_output_relationships
+    from tests.checker_output_custody_helpers import (
+        ObservedStore,
+        _output_storage_settings,
+        _prepare_model_attempt,
+        _provision_model_policy,
+        _store_model_request_evidence,
+    )
+    from tests.checkers_model_calls.model_usage_boundary_support import BoundaryPorts
+
+    if provider == "minio":
+        from tests.test_s3_artifact_store import provision_minio_bucket
+
+        await provision_minio_bucket.__wrapped__()
+    engine = create_async_engine(isolated_database_env)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    settings = _output_storage_settings(tmp_path, provider, None)
+    bootstrap = create_artifact_store_bootstrap(settings, activation_guard=None)
+    namespace = artifact_storage_namespace_spec(settings, bootstrap)
+    store = ObservedStore(bootstrap.initialize_after_namespace_claim(
+        ArtifactStoreNamespaceClaim(
+            bootstrap.identity, bootstrap.namespace_identity, namespace.namespace_fingerprint,
+        )
+    ))
+    manager = ArtifactScratchManager(
+        root=tmp_path / "request-scratch", limits=artifact_preparation_limits(),
+    )
+    try:
+        policy, profile = await _provision_model_policy(factory, namespace, admin_access)
+        data = b'{"prompt":"publicly provisioned request custody"}'
+        async with factory() as session:
+            _, _, run_id = await seed_checker_output_relationships(
+                session, namespace, policy_bundle=policy,
+            )
+            execution, attempt, _ = await _prepare_model_attempt(
+                session, run_id, content_sha256(data), model_profile=profile,
+                model_ports=BoundaryPorts(),
+            )
+            await session.commit()
+        selector = CheckerOutputSelector(
+            paid_slot=attempt.slot_key, task_id=execution.task_id,
+            model_call_slot_id=attempt.slot_id, model_call_attempt_id=attempt.attempt_id,
+            slot_key="model_request", content_sha256=content_sha256(data), execution=execution,
+        )
+        reservation = CheckerOutputReservation(
+            selector=selector,
+            slot=CheckerOutputSlot(key="model_request", maximum_bytes=profile.spec.maximum_request_bytes),
+        )
+        identity = ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value
+        async with factory() as session:
+            assert await session.scalar(select(ActorProfile.id).where(
+                ActorProfile.service_identity == identity,
+            )) is None
+        arguments = dict(
+            factory=factory, preparation=ArtifactPreparationService(manager), store=store,
+            namespace=namespace, settings=settings, reservation=reservation, request_bytes=data,
+        )
+        with pytest.raises(CheckerOutputUnavailable, match="authority_unavailable"):
+            await _store_model_request_evidence(**arguments)
+        assert (store.puts, store.opens) == (0, 0)
+        async with factory() as session:
+            for table in (ArtifactPutAttempt, ArtifactOperationReceipt):
+                assert await session.scalar(select(func.count()).select_from(table).where(
+                    table.model_call_attempt_id == str(attempt.attempt_id),
+                )) == 0
+            assert await session.scalar(select(func.count()).select_from(ArtifactBinding).where(
+                ArtifactBinding.resource_type == "checker_model_call",
+                ArtifactBinding.resource_id == str(attempt.attempt_id),
+            )) == 0
+            effect = await session.get(ModelUsageEffect, str(attempt.attempt_id))
+            assert effect.state == "prepared" and effect.request_binding_id is None
+            assert effect.reserved_nanodollars is None
+
+        # Select through the actual canonical bootstrap list; removing the identity
+        # must leave this real storage call refused, rather than pass a constant test.
+        responses = []
+        for service_identity in JOURNEY_SERVICE_IDENTITIES:
+            if service_identity == identity:
+                subject = subject_for(service_identity, "public-request-custody")
+                for _ in range(2):
+                    response = await admin_access.signed.client.post(
+                        "/api/v1/service-actors",
+                        headers=admin_access.admin.headers | {
+                            "Idempotency-Key": idempotency_key(service_identity, subject),
+                        },
+                        json={"service_identity": service_identity, "subject": subject,
+                              "reason": "Provision canonical model evidence writer"},
+                    )
+                    assert response.status_code == 201, response.text
+                    responses.append(response.json())
+        evidence = await _store_model_request_evidence(**arguments)
+        assert len(responses) == 2 and responses[0] == responses[1]
+        assert (store.puts, store.opens) == (1, 1)
+        assert evidence.content_sha256 == selector.content_sha256
+        async with factory() as session:
+            binding = await session.get(ArtifactBinding, str(evidence.binding_id))
+            assert (binding.resource_type, binding.resource_id, binding.logical_role) == (
+                "checker_model_call", str(attempt.attempt_id), "model_request",
+            )
+            assert binding.put_attempt_id == str(evidence.put_attempt_id)
+            assert binding.verification_receipt_id == str(evidence.verification_receipt_id)
+    finally:
+        manager.close()
+        bootstrap.close()
+        await engine.dispose()
+
+
+@pytest.mark.parametrize("provider", ["local", "minio"])
 async def test_real_store_verification_and_binding(
     tmp_path,
     isolated_database_env,

@@ -23,7 +23,7 @@ from app.modules.model_usage.api import ProjectModelProfile  # noqa: E402
 from experiments.pilot04_external_checker_runtime.public_hosted_model_post import (  # noqa: E402
     CEILING, CHECK, MODEL, ModelPostQualification, canonical, digest, fixture_archive,
     profile_spec, registry_spec, require_completed_effect, specification, POST_IMAGE, POST_CONFIG, POST_ARCHIVE,
-    account_snapshot, validate_runtime_window, observe_model_post,
+    account_snapshot, validate_runtime_window, observe_model_post, paid_custody, model_grant_snapshot,
 )
 
 
@@ -89,6 +89,63 @@ class HostedModelAuthority(unittest.TestCase):
         settings.external_checker_service_timeout_seconds -= 1
         with self.assertRaisesRegex(RuntimeError, 'differ from inspected hosted roles'):
             validate_runtime_window(values, settings)
+
+    def test_prepared_effect_recovery_retains_one_exact_predecessor_grant(self):
+        def exercise(change=None, *, history=True):
+            project, submission, prior_run_id, run_id, registry_id, profile_id = (new_record_id() for _ in range(6))
+            now = datetime.now(UTC)
+            effect_id, request_hash = str(new_record_id()), 'sha256:' + 'a' * 64
+            def grant(identifier):
+                return SimpleNamespace(id=str(new_record_id()), checker_run_id=str(identifier),
+                    registry_entry_id=registry_id, token_hash='sha256:' + 'b' * 64,
+                    external_request_digest='sha256:' + 'c' * 64,
+                    execution_facts={'run': str(identifier)}, paid_slot={'submission': str(submission)},
+                    authorization_evidence_id=str(new_record_id()), issued_at=now, expires_at=now)
+            previous, current = grant(prior_run_id), grant(run_id)
+            def call():
+                return SimpleNamespace(call_index=0, attempt_id=effect_id,
+                                       request_sha256=request_hash, bound_at=now)
+            prior_call, current_call = call(), call()
+            snapshot = model_grant_snapshot(previous, [prior_call])
+            slot = SimpleNamespace(id=str(new_record_id()), submission_id=str(submission), requirement_id=CHECK,
+                profile_id=str(profile_id), profile_digest='profile', registry_entry_digest='registry',
+                first_request_sha256=request_hash)
+            prior_run = SimpleNamespace(id=str(prior_run_id), status='infrastructure_failed',
+                                        project_id=str(project), submission_id=str(submission))
+            run = SimpleNamespace(project_id=str(project), submission_id=str(submission),
+                                  supersedes_checker_run_id=str(prior_run_id))
+            grants = [previous, current]
+            if change == 'history_mutated':
+                previous.execution_facts = {'changed': True}
+            elif change == 'new_effect':
+                current_call.attempt_id = str(new_record_id())
+            elif change == 'unrelated_run':
+                run.supersedes_checker_run_id = str(new_record_id())
+            elif change == 'extra_grant':
+                grants.append(grant(new_record_id()))
+            elif change == 'initial':
+                grants = [current]
+            session = AsyncMock()
+            session.__aenter__.return_value = session
+            session.scalars.side_effect = [Mock(all=Mock(return_value=rows)) for rows in
+                                            (grants, [slot], [current_call], [prior_call])]
+            session.get.side_effect = [prior_run, run]
+            qualification = SimpleNamespace(state={'prior_model_grant': snapshot} if history else {},
+                registry={'registry_entry_id': str(registry_id), 'entry_digest': 'registry'},
+                profile=SimpleNamespace(profile_id=profile_id, profile_digest='profile'))
+            with patch('app.modules.checkers.execution_repository.stored_request',
+                       return_value=SimpleNamespace(policy='same immutable policy')):
+                return asyncio.run(paid_custody(Mock(return_value=session), str(project), run_id,
+                    str(submission), SimpleNamespace(request_digest=current.external_request_digest), qualification))
+
+        receipt = exercise()
+        self.assertEqual(receipt['effect_id'], receipt['prior_model_grant']['effect_id'])
+        self.assertNotIn('prior_model_grant', exercise('initial', history=False))
+        for change in ('history_mutated', 'new_effect', 'unrelated_run', 'extra_grant'):
+            with self.subTest(change=change), self.assertRaises(RuntimeError):
+                exercise(change)
+        with self.assertRaisesRegex(RuntimeError, 'unexpected grant/paid-slot count'):
+            exercise(history=False)
 
     def test_observation_refuses_a_run_from_another_project_task_or_submission(self):
         project, task, submission = (str(new_record_id()) for _ in range(3))

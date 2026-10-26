@@ -231,6 +231,12 @@ startup, and an unrelated secret is neither mounted nor loaded. The loader
 independently requires the running identity and mode `0400`, performs no shell
 evaluation and never prints a value. Do not put AWS static keys in these files.
 
+Before setup or POST model calls, provision the existing service actors through
+the public administrative API, including `workstream.artifact.checker_output`.
+This principal admits private model request/response evidence; configuring the
+proxy and provider credentials does not provision it. The canonical journey
+service bootstrap includes it for both setup and checker model use.
+
 With the proxy enabled, the native checker service reads the global
 model socket from its canonical host path. Its separate writable
 `/var/lib/workstream/model-relays` directory is private to the native service, owned by the runtime UID/GID with mode `0700`.
