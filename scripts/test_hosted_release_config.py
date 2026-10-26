@@ -2216,6 +2216,26 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             self.assertEqual(unknown.stdout, "")
             self.assertIn("release role is unavailable or unsupported", unknown.stderr)
 
+    def test_api_entrypoint_executes_without_node_proxy_or_model_credentials(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            missing_socket = root / "not-started.sock"
+            with patch.dict(
+                os.environ,
+                {
+                    "WORKSTREAM_ARTIFACT_INTAKE_SERVICE_SOCKET": str(missing_socket),
+                    "WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET": str(missing_socket),
+                    "WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET": str(missing_socket),
+                },
+            ):
+                completed = self._run_loader(root, role="api", provider_files=())
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(completed.stdout, "loader-ok\n")
+            self.assertEqual(completed.stderr, "")
+            self.assertFalse(missing_socket.exists())
+
     def test_loader_binds_runtime_to_sdk_marker_before_provider_secret(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

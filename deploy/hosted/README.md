@@ -320,9 +320,13 @@ owned root, create its derived children with the same identities and modes, and
 replace native JSON socket/material/model paths with those exact derived paths.
 Keep source/cache/config/credential files outside that data root.
 
-Run preflight from the trusted host administrator account. Use `sudo` when the
-operator account cannot read the runtime-owned `0400` checker configuration or
-access the Docker socket; the script never opens application secret files.
+Run full preflight and the Compose wrapper as the trusted root administrator or
+through approved `sudo`. That operator needs authority to traverse the
+`10001:10001`-owned `0700` deployment root, inspect private `0400` inputs and
+access Docker. This also applies to a newly owned `/var/tmp` proof root. The
+native node and health containers run as `10001:10001`; do not grant that runtime
+identity Docker group membership or daemon access to make operator checks work.
+Preflight never opens application secret files.
 
 The configuration-only check renders Compose and validates fixed topology,
 digest identities, Flow/AWS profile and the hosted checker selectors plus
@@ -332,7 +336,7 @@ including the canonical AWS evidence fields described above. This check does not
 service:
 
 ```sh
-python3 deploy/hosted/preflight.py \
+sudo python3 deploy/hosted/preflight.py \
   --env-file /etc/workstream/release.env \
   --configuration-only
 ```
@@ -346,7 +350,7 @@ no credentials or network. Configuration-only mode performs none of those live c
 Wrong runtime, image/config or default behavior rejects launch:
 
 ```sh
-python3 deploy/hosted/preflight.py --env-file /etc/workstream/release.env
+sudo python3 deploy/hosted/preflight.py --env-file /etc/workstream/release.env
 ```
 
 Preflight cannot attest the active AWS identity, absence of extra IAM
@@ -374,21 +378,25 @@ with no dependencies. The fixed AWS `proof` sequence and exactly
 `up -d model-proxy` validate static topology and private inputs but require no live
 node and release no API, worker or scheduler. The proof command retains its exact
 credential-separated AWS observations and coordinator; it does not use intake or
-project execution. Run these reviewed operator steps:
+project execution. The API image's release entrypoint loads its API role secrets
+and executes the supplied Alembic command without application startup or service
+health checks. Alembic loads settings and model metadata, then connects directly
+to PostgreSQL; activation and proxy/node readiness follow migration. Run these
+reviewed operator steps:
 
 ```sh
-python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env pull
-python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env migrate
-python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
+sudo python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env pull
+sudo python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env migrate
+sudo python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
   proof --group-nonce <fresh-uuid>
-python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
+sudo python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
   up -d model-proxy
 # Wait for the proxy health check, then start the reviewed native unit explicitly.
 sudo systemctl start workstream-checker.service
-python3 deploy/hosted/preflight.py --env-file /etc/workstream/release.env
-python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
+sudo python3 deploy/hosted/preflight.py --env-file /etc/workstream/release.env
+sudo python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
   up --detach --wait
-python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env ps
+sudo python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env ps
 ```
 
 A proxy-disabled release omits its proxy stage. Schema migration and any required
@@ -436,7 +444,7 @@ execution bound. Celery task hard limits and durable database/outbox custody
 remain owned by the application.
 
 ```sh
-python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env stop
+sudo python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env stop
 ```
 
 For a restart or upgrade, preserve scratch until cleanup/recovery has classified
