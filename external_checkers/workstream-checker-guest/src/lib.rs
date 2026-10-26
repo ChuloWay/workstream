@@ -12,6 +12,7 @@ pub const MODEL_FRAME_MAXIMUM: usize = 1024 * 1024;
 pub const EXECUTION_FRAME_MAXIMUM: usize = 4 * 1024 * 1024;
 pub const TRIAL_LIMITS_ARGUMENT: &str = "--trial-limits";
 pub const TRIAL_LIMITS_MAXIMUM_BYTES: usize = 4096;
+pub const TRIAL_OUTPUT_MAXIMUM_BYTES: u64 = 4 * 1024 * 1024;
 pub const TRIAL_REQUEST_PROTOCOL: &str = "workstream.smol_trial_request.v1";
 pub const TRIAL_CHILD_PROTOCOL: &str = "workstream.smol_trial_child.v1";
 pub const TRIAL_EXPORT_PROTOCOL: &str = "workstream.smol_trial_export.v1";
@@ -242,6 +243,10 @@ pub struct TrialExportHeader {
     pub schema_version: String,
     pub operation_id: String,
     pub export: Option<TrialExport>,
+    pub stdout_bytes: u64,
+    pub stdout_sha256: String,
+    pub stderr_bytes: u64,
+    pub stderr_sha256: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -255,8 +260,13 @@ pub struct TrialChildResult {
     pub cpu_time_ms: u64,
     pub peak_memory_bytes: u64,
     pub peak_pids: u64,
+    /// Transported as bounded raw bytes before this terminal frame.
+    #[serde(skip)]
+    pub stdout: String,
     pub stdout_sha256: String,
     pub stdout_bytes: u64,
+    #[serde(skip)]
+    pub stderr: String,
     pub stderr_sha256: String,
     pub stderr_bytes: u64,
     pub written_bytes: u64,

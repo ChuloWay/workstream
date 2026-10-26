@@ -17,7 +17,7 @@ use workstream_checker_guest::{
     TrialExport, TrialExportHeader, TrialExportOutcome, TrialFilesystemLimit, TrialRequest,
     TrialTermination, MINIMUM_TRIAL_FILESYSTEM_BYTES, MINIMUM_TRIAL_FILESYSTEM_ENTRIES,
     MINIMUM_TRIAL_PIDS, TRIAL_CHILD_PROTOCOL, TRIAL_EXPORT_PROTOCOL, TRIAL_LIMITS_ARGUMENT,
-    TRIAL_LIMITS_MAXIMUM_BYTES, TRIAL_REQUEST_PROTOCOL,
+    TRIAL_LIMITS_MAXIMUM_BYTES, TRIAL_OUTPUT_MAXIMUM_BYTES, TRIAL_REQUEST_PROTOCOL,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -267,17 +267,19 @@ struct BackingGuard {
 }
 
 struct OutputCapture {
-    digest: Sha256,
+    retained: Vec<u8>,
     bytes: u64,
     eof: bool,
+    truncated: bool,
 }
 
 impl OutputCapture {
     fn new() -> Self {
         Self {
-            digest: Sha256::new(),
+            retained: Vec::new(),
             bytes: 0,
             eof: false,
+            truncated: false,
         }
     }
 
@@ -293,7 +295,7 @@ impl OutputCapture {
                 }
                 Ok(count) => {
                     let retained = count.min(allowance as usize);
-                    self.digest.update(&buffer[..retained]);
+                    self.retained.extend_from_slice(&buffer[..retained]);
                     self.bytes = self
                         .bytes
                         .checked_add(retained as u64)
@@ -301,6 +303,7 @@ impl OutputCapture {
                     allowance -= retained as u64;
                     drained += count;
                     if retained != count {
+                        self.truncated = true;
                         return Ok(true);
                     }
                     if drained >= 65_536 {
@@ -316,8 +319,25 @@ impl OutputCapture {
         }
     }
 
-    fn finish(self) -> (u64, String) {
-        (self.bytes, format!("sha256:{:x}", self.digest.finalize()))
+    fn finish(mut self) -> Result<(u64, String, String)> {
+        if let Err(error) = std::str::from_utf8(&self.retained) {
+            // A resource cut may split the last UTF-8 scalar. Preserve the
+            // enforced OutputExceeded cause and only trim that incomplete tail.
+            if !self.truncated
+                || error.error_len().is_some()
+                || self.retained.len().saturating_sub(error.valid_up_to()) > 3
+            {
+                return Err("trial retained output is not UTF-8".into());
+            }
+            self.retained.truncate(error.valid_up_to());
+        }
+        let text =
+            String::from_utf8(self.retained).map_err(|_| "trial retained output is not UTF-8")?;
+        Ok((
+            text.len() as u64,
+            format!("sha256:{:x}", Sha256::digest(text.as_bytes())),
+            text,
+        ))
     }
 }
 
@@ -632,6 +652,7 @@ fn valid_child_limits(limits: TrialChildLimits) -> bool {
         && limits.timeout_ms > 0
         && limits.finalization_timeout_ms >= limits.timeout_ms
         && limits.output_bytes > 0
+        && limits.output_bytes <= TRIAL_OUTPUT_MAXIMUM_BYTES
 }
 
 fn validate_request(job: &GuestJob, request: &TrialRequest) -> Result<()> {
@@ -1390,8 +1411,8 @@ pub(crate) fn run(
             None
         };
     }
-    let stdout = stdout_capture.finish();
-    let stderr = stderr_capture.finish();
+    let stdout = stdout_capture.finish()?;
+    let stderr = stderr_capture.finish()?;
     if forced.is_none() && !status.success() {
         return Err("trusted trial launcher failed".into());
     }
@@ -1435,7 +1456,7 @@ pub(crate) fn run(
     written_bytes = written_bytes
         .checked_add(export_usage.0)
         .ok_or("trial written byte count overflow")?;
-    // Output remains in bounded kernel pipes and is not charged as disk.
+    // Output is retained in bounded guest memory and is not charged as disk.
     // The export tree is a physical duplicate outside the bounded child filesystems.
     written_entries = written_entries
         .checked_add(export_usage.1)
@@ -1450,6 +1471,10 @@ pub(crate) fn run(
         schema_version: TRIAL_EXPORT_PROTOCOL.into(),
         operation_id: request_operation(&request).into(),
         export: export.clone(),
+        stdout_bytes: stdout.0,
+        stdout_sha256: stdout.1.clone(),
+        stderr_bytes: stderr.0,
+        stderr_sha256: stderr.1.clone(),
     };
     // An interrupted raw payload has no final receipt and cannot be admitted.
     let check_stream = || {
@@ -1461,6 +1486,8 @@ pub(crate) fn run(
     };
     write_json_frame(&mut output, &header, &check_stream)?;
     write_export(&mut output, export.as_ref(), &check_stream)?;
+    write_guarded(&mut output, stdout.2.as_bytes(), &check_stream)?;
+    write_guarded(&mut output, stderr.2.as_bytes(), &check_stream)?;
     output.flush()?;
     for filesystem in filesystems.into_iter().rev() {
         envelope.check_finalization()?;
@@ -1484,8 +1511,10 @@ pub(crate) fn run(
         cpu_time_ms,
         peak_memory_bytes,
         peak_pids,
+        stdout: stdout.2,
         stdout_sha256: stdout.1,
         stdout_bytes: stdout.0,
+        stderr: stderr.2,
         stderr_sha256: stderr.1,
         stderr_bytes: stderr.0,
         written_bytes,
@@ -1626,6 +1655,47 @@ mod tests {
             std::env::temp_dir().join(format!("workstream-guest-{name}-{}", std::process::id()));
         fs::create_dir(&root).unwrap();
         root
+    }
+
+    #[test]
+    fn retained_output_shares_one_bound_and_binds_exact_text() {
+        let mut stdout = OutputCapture::new();
+        let mut stderr = OutputCapture::new();
+        assert!(drain_outputs(
+            &mut &b"out"[..],
+            &mut &b"error"[..],
+            &mut stdout,
+            &mut stderr,
+            6,
+        )
+        .unwrap());
+        let (bytes, digest, text) = stdout.finish().unwrap();
+        assert_eq!((bytes, text.as_str()), (3, "out"));
+        assert_eq!(digest, format!("sha256:{:x}", Sha256::digest(b"out")));
+        let (bytes, digest, text) = stderr.finish().unwrap();
+        assert_eq!((bytes, text.as_str()), (3, "err"));
+        assert_eq!(digest, format!("sha256:{:x}", Sha256::digest(b"err")));
+    }
+
+    #[test]
+    fn output_cut_trims_only_an_incomplete_utf8_tail() {
+        for prefix_bytes in 1..=3 {
+            let mut capture = OutputCapture::new();
+            assert!(capture
+                .drain(&mut "a😀z".as_bytes(), 1 + prefix_bytes)
+                .unwrap());
+            let (count, digest, text) = capture.finish().unwrap();
+            assert_eq!((count, text.as_str()), (1, "a"));
+            assert_eq!(digest, format!("sha256:{:x}", Sha256::digest(b"a")));
+        }
+        let mut complete = OutputCapture::new();
+        assert!(complete.drain(&mut "a😀z".as_bytes(), 5).unwrap());
+        assert_eq!(complete.finish().unwrap().2, "a😀");
+        for (bytes, cap) in [(&b"a\xffz"[..], 2), (&b"a\xf0"[..], 2)] {
+            let mut invalid = OutputCapture::new();
+            invalid.drain(&mut &bytes[..], cap).unwrap();
+            assert!(invalid.finish().is_err());
+        }
     }
 
     #[test]
@@ -2049,8 +2119,8 @@ mod tests {
             .unwrap();
         }
         assert!(exceeded);
-        let stdout = stdout_capture.finish();
-        let stderr = stderr_capture.finish();
+        let stdout = stdout_capture.finish().unwrap();
+        let stderr = stderr_capture.finish().unwrap();
         assert_eq!(stdout.0, 2048);
         assert_eq!(stderr.0, 2048);
         assert_eq!(stdout.1, format!("sha256:{:x}", Sha256::digest(prefix)));

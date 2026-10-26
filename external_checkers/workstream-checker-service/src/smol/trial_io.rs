@@ -12,7 +12,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::ChildStdout;
 use workstream_checker_guest::{
     GuestJob, MaterialRoot, TrialChildResult, TrialExport, TrialExportHeader, TrialExportOutcome,
-    TrialTermination, TRIAL_CHILD_PROTOCOL, TRIAL_EXPORT_PROTOCOL,
+    TrialTermination, TRIAL_CHILD_PROTOCOL, TRIAL_EXPORT_PROTOCOL, TRIAL_OUTPUT_MAXIMUM_BYTES,
 };
 use workstream_checker_sdk::canonical_hash;
 
@@ -383,6 +383,20 @@ fn receive_frame<T: serde::de::DeserializeOwned>(
     serde_json::from_slice(&bytes).map_err(|_| "trial frame invalid".into())
 }
 
+fn receive_output(
+    output: &mut ChildStdout,
+    byte_count: u64,
+    expected_sha256: &str,
+    guard: &IoGuard<'_>,
+) -> Result<String, String> {
+    let mut bytes = vec![0_u8; byte_count as usize];
+    io::read_exact(output, &mut bytes, guard)?;
+    if format!("sha256:{:x}", Sha256::digest(&bytes)) != expected_sha256 {
+        return Err("trial retained output digest differs".into());
+    }
+    String::from_utf8(bytes).map_err(|_| "trial retained output is not UTF-8".into())
+}
+
 pub(super) fn exchange(
     mut child: Child,
     job: &GuestJob,
@@ -399,6 +413,10 @@ pub(super) fn exchange(
     set_nonblocking(&input)?;
     set_nonblocking(&output)?;
     let result = (|| {
+        let maximum_output = job.request["limits"]["output_bytes"]
+            .as_u64()
+            .filter(|value| (1..=TRIAL_OUTPUT_MAXIMUM_BYTES).contains(value))
+            .ok_or("trial guest output limit invalid")?;
         io::write_job(&mut input, job, materials, guard)?;
         drop(input);
         let header: TrialExportHeader = receive_frame(&mut output, guard)?;
@@ -407,16 +425,41 @@ pub(super) fn exchange(
         {
             return Err("trial export identity differs".into());
         }
+        if !valid_digest(&header.stdout_sha256)
+            || !valid_digest(&header.stderr_sha256)
+            || header
+                .stdout_bytes
+                .checked_add(header.stderr_bytes)
+                .is_none_or(|value| value > maximum_output)
+        {
+            return Err("trial retained output exceeds capacity".into());
+        }
         receive_export(&mut output, &header.export, &target, guard)?;
+        let stdout = receive_output(
+            &mut output,
+            header.stdout_bytes,
+            &header.stdout_sha256,
+            guard,
+        )?;
+        let stderr = receive_output(
+            &mut output,
+            header.stderr_bytes,
+            &header.stderr_sha256,
+            guard,
+        )?;
         // Payload remains provisional until the final measurement, cleanup,
         // successful process exit and exact EOF are all verified.
-        let result: TrialChildResult = receive_frame(&mut output, guard)?;
+        let mut result: TrialChildResult = receive_frame(&mut output, guard)?;
         if result.schema_version != TRIAL_CHILD_PROTOCOL
             || result.operation_id != expected_operation
             || result.export != header.export
             || (result.export_outcome == TrialExportOutcome::Exported) != header.export.is_some()
             || !result.terminal_facts_are_valid()
             || !result.guest_cleanup_confirmed
+            || result.stdout_bytes != header.stdout_bytes
+            || result.stdout_sha256 != header.stdout_sha256
+            || result.stderr_bytes != header.stderr_bytes
+            || result.stderr_sha256 != header.stderr_sha256
         {
             return Err("trial result identity differs".into());
         }
@@ -427,6 +470,8 @@ pub(super) fn exchange(
         if !matches!(output.read(&mut extra), Ok(0)) {
             return Err("trial guest output contains trailing bytes".into());
         }
+        result.stdout = stdout;
+        result.stderr = stderr;
         Ok(result)
     })();
     if result.is_err() {
@@ -468,6 +513,8 @@ pub(super) fn child_result(
         termination: termination(value.termination),
         exit_code: value.child.exit_code,
         signal: value.child.signal,
+        stdout: value.stdout,
+        stderr: value.stderr,
         stdout_sha256: value.stdout_sha256,
         stderr_sha256: value.stderr_sha256,
         stdout_bytes: value.stdout_bytes,
@@ -605,6 +652,15 @@ mod tests {
             "unclean",
             "trailing",
             "exit",
+            "altered_raw_output",
+            "output_over_limit",
+            "output_overflow",
+            "wrong_final_length",
+            "wrong_final_digest",
+            "invalid_utf8",
+            "json_output_substitution",
+            "maximum_raw_output",
+            "absolute_output_limit",
         ] {
             let root = Scratch::new();
             let payload = b"verified candidate";
@@ -612,10 +668,20 @@ mod tests {
                 byte_count: payload.len() as u64,
                 sha256: format!("sha256:{:x}", Sha256::digest(payload)),
             };
-            let header = TrialExportHeader {
+            let stderr = b"actual diagnostic\n";
+            let stdout = match fault {
+                "invalid_utf8" => vec![0xff],
+                "maximum_raw_output" => vec![0; TRIAL_OUTPUT_MAXIMUM_BYTES as usize - stderr.len()],
+                _ => b"actual output\n".to_vec(),
+            };
+            let mut header = TrialExportHeader {
                 schema_version: TRIAL_EXPORT_PROTOCOL.into(),
                 operation_id: "operation".into(),
                 export: Some(export.clone()),
+                stdout_bytes: stdout.len() as u64,
+                stdout_sha256: format!("sha256:{:x}", Sha256::digest(&stdout)),
+                stderr_bytes: stderr.len() as u64,
+                stderr_sha256: format!("sha256:{:x}", Sha256::digest(stderr)),
             };
             let mut terminal = TrialChildResult {
                 schema_version: TRIAL_CHILD_PROTOCOL.into(),
@@ -629,10 +695,12 @@ mod tests {
                 cpu_time_ms: 1,
                 peak_memory_bytes: 1,
                 peak_pids: 1,
-                stdout_sha256: format!("sha256:{:x}", Sha256::digest([])),
-                stdout_bytes: 0,
-                stderr_sha256: format!("sha256:{:x}", Sha256::digest([])),
-                stderr_bytes: 0,
+                stdout: String::new(),
+                stdout_sha256: header.stdout_sha256.clone(),
+                stdout_bytes: header.stdout_bytes,
+                stderr: String::new(),
+                stderr_sha256: header.stderr_sha256.clone(),
+                stderr_bytes: header.stderr_bytes,
                 written_bytes: payload.len() as u64,
                 written_entries: 1,
                 measurement_method: "test_framing_only".into(),
@@ -644,6 +712,10 @@ mod tests {
                 "wrong_identity" => terminal.operation_id = "foreign".into(),
                 "wrong_export" => terminal.export = None,
                 "unclean" => terminal.guest_cleanup_confirmed = false,
+                "wrong_final_length" => terminal.stdout_bytes += 1,
+                "wrong_final_digest" => terminal.stderr_sha256 = header.stdout_sha256.clone(),
+                "output_over_limit" => header.stdout_bytes = 1025,
+                "output_overflow" => header.stdout_bytes = u64::MAX,
                 _ => {}
             }
             let mut wire = Vec::new();
@@ -653,8 +725,18 @@ mod tests {
             };
             append(&mut wire, serde_json::to_vec(&header).unwrap());
             wire.extend_from_slice(payload);
+            let output_offset = wire.len();
+            wire.extend_from_slice(&stdout);
+            wire.extend_from_slice(stderr);
+            if fault == "altered_raw_output" {
+                wire[output_offset] ^= 1;
+            }
             if fault != "missing_final" {
-                append(&mut wire, serde_json::to_vec(&terminal).unwrap());
+                let mut document = serde_json::to_value(&terminal).unwrap();
+                if fault == "json_output_substitution" {
+                    document["stdout"] = "substituted output".into();
+                }
+                append(&mut wire, serde_json::to_vec(&document).unwrap());
             }
             if fault == "trailing" {
                 wire.push(42);
@@ -673,7 +755,11 @@ mod tests {
                 .unwrap();
             let job = GuestJob {
                 purpose: GuestPurpose::TrialBuild { materials: vec![] },
-                request: serde_json::json!({}),
+                request: serde_json::json!({"limits": {"output_bytes": match fault {
+                    "maximum_raw_output" => TRIAL_OUTPUT_MAXIMUM_BYTES,
+                    "absolute_output_limit" => TRIAL_OUTPUT_MAXIMUM_BYTES + 1,
+                    _ => 1024,
+                }}}),
                 command: vec!["unused".into()],
                 environment: vec![],
                 working_directory: "/".into(),
@@ -699,8 +785,14 @@ mod tests {
                 },
                 &guard,
             );
-            assert_eq!(result.is_ok(), fault == "none", "{fault}: {result:?}");
-            if fault == "none" {
+            let expected_success = matches!(fault, "none" | "maximum_raw_output");
+            assert_eq!(result.is_ok(), expected_success, "{fault}: {result:?}");
+            if expected_success {
+                let result = child_result(result.unwrap(), None, None);
+                assert!(result.stdout.as_bytes() == stdout.as_slice());
+                assert_eq!(result.stderr.as_bytes(), stderr);
+                assert_eq!(result.stdout_bytes, stdout.len() as u64);
+                assert_eq!(result.stderr_bytes, stderr.len() as u64);
                 assert_eq!(fs::read(target).unwrap(), payload);
             } else {
                 assert!(!target.exists(), "partial payload retained after {fault}");
