@@ -526,6 +526,17 @@ sudo python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env sta
 For a restart or upgrade, preserve scratch until cleanup/recovery has classified
 all retained work, update only reviewed digest identities/configuration, rerun
 the cold/warm dependency sequence above, and start with `up --detach --wait`.
+The scratch ownership marker binds the configured limits, including the total
+preparation deadline. Changing those limits requires a drained scratch pool;
+do not edit its marker to make a new release start. Stop all processes mounting
+that pool, verify that no reservations or workspaces remain, and retain the old
+directory intact before provisioning a fresh private directory at the canonical
+path. Let the normal ART manager initialize it, recreate the affected container
+and systemd mounts, and verify that API, worker, proxy and native node all see
+the same new directory.
+If retained work remains, complete its recovery under the original configuration
+before changing the pool.
+
 Before restarting or stopping the native unit, first drain producers and the
 worker through the wrapper, retain the proxy until node calls settle, and
 independently confirm that this node has no active owned leases, VMs or cgroups.

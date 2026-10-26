@@ -152,6 +152,19 @@ Ruff and diff checks passed. This proof-only repair does not change production
 backend, native binaries or checker images; it does not establish a live provider
 result or the still-pending active nested recovery cases.
 
+The first read-only continuation preflight then caught a proof-only assumption:
+the hosted release does not override the checker socket timeout, so indexing
+that optional key failed before opening the claim or dispatching recovery. The
+guard now uses the canonical Settings field default when absent and still
+requires the driver's resolved setting to agree. A missing-key regression uses
+the actual Settings defaults and rejects a divergent driver. The original claim,
+account and failed run are unchanged; no provider effect was created.
+All 34 combined tests passed; loading the previous guard into the new test
+reproduced the exact missing-key error. Independent review and Ruff passed.
+The operations guide also explains drained scratch-root replacement when limits
+change, preserving the old root and refreshing container and systemd mounts;
+independent review confirmed the canonical ART marker and lifecycle ordering.
+
 Root plan review of `e07f28b4a`: PASS WITH LOW RISKS for implementation only. The review required exact numeric identity, native/Compose path parity in both directions, native health before API/worker release and explicit drain ordering. Runtime signoff remains separate. The root subsequently approved one trusted deployment-root selector and explicit pinned native binary path because fixed production paths prevented an isolated rendered-topology proof without touching shared resources. Exact UID/GID and live health requirements remain unchanged.
 
 Cold-start inspection found a schema/activation/proxy/node cycle: the proxy reads the activated ART namespace, the native node requires its model socket, and API normally applies migrations. The fixed `migrate`, AWS `proof` and exact proxy-only `up -d model-proxy` stages therefore validate static custody while releasing no application producer/worker; full `up` still requires both typed native health checks. AWS proof itself uses DB/AWS directly and retains its exact existing credential-separated observations.

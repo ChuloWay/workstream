@@ -80,6 +80,16 @@ class HostedModelAuthority(unittest.TestCase):
         public_work.assert_not_called()
         self.assertFalse((self.root / 'model-post-qualification.json').exists())
 
+    def test_hosted_socket_timeout_uses_the_canonical_default_when_not_overridden(self):
+        from app.core.config import Settings
+
+        values = {'WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS': '3400'}
+        settings = Settings.model_construct(artifact_preparation_total_deadline_seconds=3400)
+        self.assertEqual(validate_runtime_window(values, settings), 720000)
+        settings.external_checker_service_timeout_seconds -= 1
+        with self.assertRaisesRegex(RuntimeError, 'differ from inspected hosted roles'):
+            validate_runtime_window(values, settings)
+
     def test_observation_refuses_a_run_from_another_project_task_or_submission(self):
         project, task, submission = (str(new_record_id()) for _ in range(3))
         for field in ('project_id', 'task_id', 'submission_id'):

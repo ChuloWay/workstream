@@ -144,6 +144,7 @@ def fixture_archive():
 
 def validate_runtime_window(values, settings):
     """Refuse an unrunnable paid rehearsal before creating its durable claim."""
+    from app.core.config import Settings
     from app.modules.checkers.api.external_policy import (
         SELECTED_POST_MATERIALIZATION_BUDGET_MS,
         EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS,
@@ -153,7 +154,10 @@ def validate_runtime_window(values, settings):
     execution = member + EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
     required = SELECTED_POST_MATERIALIZATION_BUDGET_MS + execution
     artifact_seconds = float(values['WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS'])
-    socket_seconds = float(values['WORKSTREAM_EXTERNAL_CHECKER_SERVICE_TIMEOUT_SECONDS'])
+    socket_seconds = float(values.get(
+        'WORKSTREAM_EXTERNAL_CHECKER_SERVICE_TIMEOUT_SECONDS',
+        Settings.model_fields['external_checker_service_timeout_seconds'].default,
+    ))
     require(settings.artifact_preparation_total_deadline_seconds == artifact_seconds
             and settings.external_checker_service_timeout_seconds == socket_seconds,
             'model qualification runtime windows differ from inspected hosted roles')
