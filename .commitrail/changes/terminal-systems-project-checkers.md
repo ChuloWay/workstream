@@ -525,9 +525,9 @@ not replace the PostgreSQL/MinIO composition test above or the runsc engine
 qualification.
 
 The final controlled-provider qualification owns
-`external_checkers/workstream-checker-service/scripts/qualify_terminal_systems_runsc.sh`
+`external_checkers/workstream-checker-service/scripts/qualify_terminal_systems_smol.py`
 and
-`external_checkers/workstream-checker-service/tests/terminal_systems_runsc_composition.py`.
+`external_checkers/workstream-checker-service/tests/terminal_systems_smol_composition.py`.
 Its AR-RD-001 regression may extend only the reusable test-fixture plumbing in
 `backend/tests/projects/guide_activation/source_fixtures.py`,
 `backend/tests/projects/unified_policy_fixtures.py`,
@@ -542,20 +542,17 @@ locked configurations, while a duplicate or conflicting full registry/image/
 configuration envelope remains invalid. Trial plans may retain state only from
 an earlier completed slot; a slot cannot name itself as its state source, and
 that rejection occurs before the engine is called.
-The wrapper may reuse only the explicitly prepared PILOT-00 owned DIND state,
-temporarily replacing and then byte-for-byte restoring that stopped harness's
-daemon configuration. The temporary exact configuration exposes two separately
-identified runtimes: the outer checker uses `host-uds=open` for its two exact
-invocation-local sockets and submitted-code descendants use a distinct
-`host-uds=none` key. The isolated test drives the production Rust service and
+The wrapper requires a separately prepared native Smol node with a delegated
+cgroup, exact-source binaries and sealed images/cache. It never mutates shared
+services or Docker daemon settings. It drives the production Rust service and
 project POST image through real PostgreSQL/MinIO trial custody, the generic
 offline build/run engine and an offline controlled provider. It stages only the
-qualification-only package, never a real Terminal Systems task. The wrapper
-must restore the owned harness configuration, stop a previously stopped
-harness, and remove only its exact inner registry/checker resources on success
-or failure. Docker cleanup commands have finite timeouts, and a conflicting
-cleanup container label or image identity must stop cleanup before deletion.
-This is no live provider call, deployment, publication, activation,
+qualification package, never a real Terminal Systems task. The source/build
+identities must match before and after the run. Its success record requires the
+exact non-skipped test, database/storage cleanup and owned VM resource removal.
+Failure logs and exact evidence are retained. CI exercises the fail-closed
+evidence guards in `tests/test_qualify_smol_script.py` without claiming KVM proof.
+This is no live provider call, product deployment, publication, activation,
 or contribution rehearsal.
 
 Qualification exposed two runtime-custody defects that this same trial owner

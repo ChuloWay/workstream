@@ -147,44 +147,46 @@ deliberately records `durable_art_proven=false`, `trial_proven=false`, and
 `runsc_proven=false`; the PostgreSQL/MinIO custody journey and PILOT-00 runsc
 trial qualification are distinct evidence lanes.
 
-The zero-skip composed qualifier is an explicit operator test, not part of the
-ordinary backend test suite. It requires the prepared, stopped, uniquely owned
-PILOT-00 DIND harness plus isolated-test PostgreSQL and MinIO endpoints:
+The composed qualifier is an explicit operator test on a separately provisioned
+Linux/KVM node. It uses the native Smol service, sealed local images/cache and
+isolated PostgreSQL/MinIO endpoints. It does not alter shared services or pull
+images. Provision a delegated service cgroup and build the service, guest and
+trusted launcher from the same clean commit. The required static ext4 tool is
+built with the generic [filesystem tool helper](../../../external_checkers/workstream-checker-service/scripts/build_smol_filesystem_tool.sh).
 
 ```bash
-qualification_evidence_dir="$(mktemp -d /tmp/workstream-runsc-evidence.XXXXXX)"
-WORKSTREAM_TS_RUNSC_EXPECTED_HEAD="$(git rev-parse HEAD)" \
-WORKSTREAM_TS_RUNSC_EXPECTED_TREE="$(git rev-parse 'HEAD^{tree}')" \
-WORKSTREAM_TS_RUNSC_EVIDENCE_PREFIX="${qualification_evidence_dir}/composition" \
-WORKSTREAM_TS_RUNSC_STATE_ROOT=/tmp/ws-pilot00-tsengine26 \
-WORKSTREAM_TS_RUNSC_SHARED_ROOT="$PWD/external_checkers/target/ws493-tsengine26" \
-WORKSTREAM_TS_RUNSC_CONTAINER=ws-pilot00-tsengine26-qualification-dind \
-WORKSTREAM_TS_RUNSC_PREPARED_CONTAINER=ws-pilot00-tsengine26-dind \
-WORKSTREAM_TS_RUNSC_RUN_ID=tsengine26 \
-WORKSTREAM_TEST_ADMIN_DATABASE_URL='<isolated-test-admin-url>' \
-WORKSTREAM_TEST_MINIO_ENDPOINT='<isolated-test-minio-endpoint>' \
-  external_checkers/workstream-checker-service/scripts/qualify_terminal_systems_runsc.sh
+python3 external_checkers/workstream-checker-service/scripts/qualify_terminal_systems_smol.py \
+  --expected-head "$(git rev-parse HEAD)" \
+  --expected-tree "$(git rev-parse 'HEAD^{tree}')" \
+  --node-config /absolute/prepared/node.json \
+  --build-manifest /absolute/prepared/build-manifest.json \
+  --service /absolute/prepared/workstream-checker-service \
+  --python /absolute/backend-venv/bin/python \
+  --root /absolute/fresh-composition-root \
+  --evidence /absolute/fresh-evidence-directory \
+  --platform-identity sha256:<verified-platform-identity> \
+  --cache-digest sha256:<sealed-cache-manifest> \
+  --checker-digest sha256:<project-image-platform-manifest>
 ```
 
-Run from the repository root after preparing the owned PILOT-00 harness. The
-qualification container must be distinct from the stopped preparation container.
-The source index and worktree must remain clean at the exact commit/tree for
-the entire run. Use a fresh private evidence directory for each invocation.
-The wrapper retains logs and exit status on failure. A passing result requires
-exactly one passed JUnit test, no skipped/failed/errored tests, verified isolated
-database/MinIO cleanup, and removal of owned Docker resources. Its final summary
-binds source/runtime identities and hashes the retained test and ART-custody
-evidence; a failed run cannot publish that success summary.
-The wrapper fails rather than skipping when an exact prerequisite is absent. It
-temporarily gives only the outer checker runtime `host-uds=open`, keeps the
-separate submitted-code runtime at `host-uds=none`, binds both identities into
-the trial profile, and restores the owned DIND configuration byte-for-byte. The
-test submits only `post/qualification/runtime_package`: a deliberately small
-package with a pinned Dockerfile, reference, negative mutations, controlled
-interruption and restart procedures. It is integration evidence for the
-production image/service/runtime/custody path, not a delivered project task or
-a substitute for #555's activation and contribution journey. No live provider
-is called.
+Supply the isolated-test PostgreSQL and MinIO environment documented in the
+backend testing guide. The build manifest records `source_head`, `source_tree`
+and a `binaries` map with the SHA-256 identities of `service`, `guest`, `launcher`
+and `filesystem_tool`. The wrapper checks those against the actual files and
+node pins before and after execution. Source and prepared node configuration
+must remain unchanged. Missing prerequisites fail the run; they never skip it.
+Logs and failure status are retained. Success requires the exact completed test,
+no skips or failures, database/MinIO cleanup, verified trial/model custody,
+zero extra model calls on replay and removal of owned VM resources.
+
+The test uses `post/qualification/runtime_package`: a deliberately small package
+with a pinned Dockerfile, reference, negative mutations, interruption and restart
+procedures. Its explicit 2 GiB total trial disk ceiling covers pinned builder,
+cache, material and export copies as well as mutable work. The generic runtime
+checks that aggregate budget; it does not add an implicit tool allowance.
+This is controlled-provider image/service/runtime/custody evidence, not a
+project task or #555's public activation-to-contribution journey. Historical
+runsc results do not qualify the Smol target. No live provider is called.
 
 The author-accuracy draft adds `reproduction_procedure_unavailable` for the
 narrow case where an absent or ambiguous exact procedure prevents authenticated

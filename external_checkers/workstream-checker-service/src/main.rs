@@ -530,6 +530,8 @@ fn load_trial_runtime(config: &mut ServiceConfig) -> Result<(), String> {
                 || config.runtime != "smolvm"
                 || config.isolation_mode != "smol-microvm"
                 || config.model_proxy_socket.is_none()
+                || runtime.outer_runtime_config_digest
+                    != trial_runtime_configuration_digest(config, runtime)?
             {
                 return Err("trial runtime configuration invalid".into());
             }
@@ -552,6 +554,30 @@ fn load_trial_runtime(config: &mut ServiceConfig) -> Result<(), String> {
     }
 }
 
+fn trial_runtime_configuration_digest(
+    config: &ServiceConfig,
+    runtime: &TrialRuntimeConfiguration,
+) -> Result<String, String> {
+    let smol = config.smol.as_ref().ok_or("Smol runtime unavailable")?;
+    canonical_hash(&serde_json::json!({
+        "schema_version": "workstream.smol_runtime_configuration.v1",
+        "runtime": config.runtime,
+        "isolation_mode": config.isolation_mode,
+        "engine_identity_digest": smol.binary_sha256,
+        "guest_binary_digest": smol.guest_sha256,
+        "outer_transport": "workstream.smol_guest_io.v1",
+        "child_transport": "workstream.smol_guest_io.v1",
+        "network": "none",
+        "swap": "none",
+        "sandbox_uid": config.sandbox_uid,
+        "sandbox_gid": config.sandbox_gid,
+        "trusted_launcher_digest": runtime.trusted_launcher_digest,
+        "filesystem_tool_digest": runtime.filesystem_tool_digest,
+        "maximum_candidate_archive_bytes": runtime.maximum_candidate_archive_bytes,
+    }))
+    .map_err(|_| "Smol runtime configuration invalid".into())
+}
+
 fn trial_engine(
     config: &ServiceConfig,
     request: &ValidatedRequest,
@@ -567,6 +593,9 @@ fn trial_engine(
         .ok_or("trial runtime unavailable")?;
     let smol = config.smol.as_ref().ok_or("Smol runtime unavailable")?;
     if runtime.outer_runtime_config_digest != profile.outer_runtime_config_digest
+        || runtime.outer_runtime_config_digest != profile.child_runtime_config_digest
+        || runtime.outer_runtime_config_digest
+            != trial_runtime_configuration_digest(config, runtime)?
         || smol.binary_sha256 != profile.engine_identity_digest
         || smol.guest_sha256 != profile.guest_binary_digest
         || runtime.trusted_launcher_digest != profile.trusted_launcher_digest
@@ -3119,6 +3148,65 @@ mod tests {
             .unwrap_err(),
             "trial authority manifest changed"
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn trial_runtime_refuses_stale_configuration_pin_before_execution() {
+        let (root, mut config) = test_config();
+        config.runtime = "smolvm".into();
+        config.isolation_mode = "smol-microvm".into();
+        config.smol = Some(smol::SmolConfig {
+            binary: root.join("smol"),
+            binary_sha256: format!("sha256:{}", "a".repeat(64)),
+            home: root.join("home"),
+            guest_binary: root.join("guest"),
+            guest_sha256: format!("sha256:{}", "b".repeat(64)),
+            cgroup_root: root.join("cgroup"),
+            maximum_parallel: 2,
+            maximum_storage_bytes: 8 * 1024 * 1024 * 1024,
+        });
+        config.model_proxy_socket = Some(root.join("model.sock"));
+        config.trial_profiles = Some(TrialProfileCatalog::empty_for_test());
+        let mut runtime = TrialRuntimeConfiguration {
+            relay_root: root.join("relay"),
+            scratch_root: root.join("scratch"),
+            child_home_root: root.join("children"),
+            offline_cache_root: root.join("cache"),
+            outer_runtime_config_digest: String::new(),
+            deployment_owner: "test".into(),
+            builder_image_id: format!("sha256:{}", "c".repeat(64)),
+            trusted_launcher_path: root.join("launcher"),
+            trusted_launcher_digest: format!("sha256:{}", "d".repeat(64)),
+            filesystem_tool_path: root.join("mkfs"),
+            filesystem_tool_digest: format!("sha256:{}", "e".repeat(64)),
+            maximum_candidate_archive_bytes: 64 * 1024 * 1024,
+        };
+        for path in [
+            &runtime.relay_root,
+            &runtime.scratch_root,
+            &runtime.child_home_root,
+        ] {
+            fs::create_dir(path).unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        runtime.outer_runtime_config_digest =
+            trial_runtime_configuration_digest(&config, &runtime).unwrap();
+        config.trial_runtime = Some(runtime);
+        assert!(load_trial_runtime(&mut config).is_ok());
+        let original = config.clone();
+        config
+            .trial_runtime
+            .as_mut()
+            .unwrap()
+            .maximum_candidate_archive_bytes += 1;
+        assert!(load_trial_runtime(&mut config).is_err());
+        config = original.clone();
+        config.smol.as_mut().unwrap().guest_sha256 = format!("sha256:{}", "f".repeat(64));
+        assert!(load_trial_runtime(&mut config).is_err());
+        config = original;
+        config.sandbox_uid += 1;
+        assert!(load_trial_runtime(&mut config).is_err());
         fs::remove_dir_all(root).unwrap();
     }
 
