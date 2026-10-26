@@ -14,6 +14,51 @@ contribution-evidence exports and exact Audit Authority task reads:
 Separate commands record human guide sufficiency diagnostics and warning
 acknowledgements; neither approves policy nor activates a guide.
 
+## Interactive contributor workspace
+
+Run `workstream tui` in an interactive terminal using the same
+`WORKSTREAM_API_URL` and `WORKSTREAM_TOKEN` environment as explicit commands.
+`workstream tui --plain` uses ASCII, no application colors and no alternate
+screen; a nonempty `NO_COLOR` also disables application colors. Interactive
+cursor controls remain necessary. For redirected input/output or automation,
+use the explicit commands below with text or `--output json`; the TUI refuses
+non-terminal input/output and JSON mode before making an API request.
+
+Start with your exact-grant projects, then browse **Ready**, **Mine** (active
+assignments) and **Submissions**. Enter opens fresh contributor-safe task or
+owned Submission detail. Active Mine details also offer explicit Context and
+Intake reads. Each list fetches one page; filtering searches only that loaded
+page. Project membership, terms and action hints are observations, not authority
+for a later operation. Workstream rechecks each public read.
+
+| Key | Action |
+|---|---|
+| Arrows / Enter | Select, scroll and inspect |
+| Tab / Esc | Change section / go back or cancel |
+| `g` | Fetch the project picker again |
+| `n` / `r` | Fetch the next page / refresh the current view |
+| `/` | Filter loaded names/titles locally; Enter finishes and Esc cancels |
+| `c` / `?` | Show inert CLI arguments / keyboard help |
+| `q` / Ctrl+C | Quit and cancel outstanding client reads |
+
+This first workspace is read-only: it does not claim/start work, prepare or
+submit ZIPs, download documents, export records, poll, acquire tokens or save
+local history. Guide metadata is not proof of downloaded-byte integrity.
+Detailed findings and contribution evidence are clearly labelled manual CLI
+handoffs, not populated TUI screens; displayed arguments never execute or copy
+automatically. Use `submission findings SUBMISSION_ID` and
+`contributions --project PROJECT_ID` explicitly when needed.
+
+A denial clears affected content; expired authentication clears the session's
+work data. Network failure is shown as unavailable, never as an empty queue or
+successful operation. Refresh is deliberate. No background request retries or
+write recovery occur. The profile read may perform Workstream's existing actor
+admission, last-seen and audit effects; “read-only” does not mean no server-side
+effects. This local interface does not establish a deployed service, payment,
+or completion of the broader [terminal design](../docs/design/cli-terminal-experience.md).
+
+## Explicit commands
+
 | Command | Public API |
 |---|---|
 | `workstream whoami` | `GET /api/v1/actors/me` |

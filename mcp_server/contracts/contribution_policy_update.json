@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "e3914c070cd9b5e8ec7f87abe7e7dc747ef7624e89c3cecaa4131eeb24167654",
+  "canonical_sha256": "150c2b8145c8be16785df48a10479560d42662d4ece245e0f631cad11de6034c",
   "components": {
     "schemas": {
       "ApiError": {
@@ -7,24 +7,19 @@
         "description": "Canonical machine-readable API error.",
         "properties": {
           "code": {
-            "title": "Code",
             "type": "string"
           },
           "correlation_id": {
-            "title": "Correlation Id",
             "type": "string"
           },
           "details": {
             "additionalProperties": true,
-            "title": "Details",
             "type": "object"
           },
           "message": {
-            "title": "Message",
             "type": "string"
           },
           "retryable": {
-            "title": "Retryable",
             "type": "boolean"
           }
         },
@@ -35,7 +30,6 @@
           "correlation_id",
           "retryable"
         ],
-        "title": "ApiError",
         "type": "object"
       },
       "ApiErrorResponse": {
@@ -48,8 +42,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Detail"
+            ]
           },
           "error": {
             "$ref": "#/components/schemas/ApiError"
@@ -58,7 +51,6 @@
         "required": [
           "error"
         ],
-        "title": "ApiErrorResponse",
         "type": "object"
       },
       "CompensationInstrumentType": {
@@ -67,7 +59,6 @@
           "money",
           "project_points"
         ],
-        "title": "CompensationInstrumentType",
         "type": "string"
       },
       "ContributionPolicyMutationResult": {
@@ -75,22 +66,18 @@
         "properties": {
           "actor_profile_id": {
             "format": "uuid",
-            "title": "Actor Profile Id",
             "type": "string"
           },
           "contribution_policy_id": {
             "format": "uuid",
-            "title": "Contribution Policy Id",
             "type": "string"
           },
           "contribution_policy_version_id": {
             "format": "uuid",
-            "title": "Contribution Policy Version Id",
             "type": "string"
           },
           "event_id": {
             "format": "uuid",
-            "title": "Event Id",
             "type": "string"
           },
           "event_type": {
@@ -100,7 +87,6 @@
               "published",
               "retired"
             ],
-            "title": "Event Type",
             "type": "string"
           },
           "from_policy_status": {
@@ -111,8 +97,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "From Policy Status"
+            ]
           },
           "from_version_status": {
             "anyOf": [
@@ -122,17 +107,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "From Version Status"
+            ]
           },
           "occurred_at": {
             "format": "date-time",
-            "title": "Occurred At",
             "type": "string"
           },
           "operation_id": {
             "format": "uuid",
-            "title": "Operation Id",
             "type": "string"
           },
           "prior_current_version_id": {
@@ -144,8 +126,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Prior Current Version Id"
+            ]
           },
           "prior_current_version_number": {
             "anyOf": [
@@ -155,28 +136,22 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Prior Current Version Number"
+            ]
           },
           "project_id": {
             "format": "uuid",
-            "title": "Project Id",
             "type": "string"
           },
           "request_digest": {
-            "title": "Request Digest",
             "type": "string"
           },
           "to_policy_status": {
-            "title": "To Policy Status",
             "type": "string"
           },
           "to_version_status": {
-            "title": "To Version Status",
             "type": "string"
           },
           "version_number": {
-            "title": "Version Number",
             "type": "integer"
           }
         },
@@ -198,7 +173,6 @@
           "to_version_status",
           "occurred_at"
         ],
-        "title": "ContributionPolicyMutationResult",
         "type": "object"
       },
       "PolicyDefinitionInput": {
@@ -207,18 +181,15 @@
         "properties": {
           "adapter_binding_id": {
             "format": "uuid",
-            "title": "Adapter Binding Id",
             "type": "string"
           },
           "instrument_type": {
             "$ref": "#/components/schemas/CompensationInstrumentType"
           },
           "quantity": {
-            "title": "Quantity",
             "type": "string"
           },
           "unit_code": {
-            "title": "Unit Code",
             "type": "string"
           }
         },
@@ -228,7 +199,6 @@
           "quantity",
           "adapter_binding_id"
         ],
-        "title": "PolicyDefinitionInput",
         "type": "object"
       },
       "PolicyRuleInput": {
@@ -240,7 +210,6 @@
               "unpaid",
               "compensated"
             ],
-            "title": "Compensation Mode",
             "type": "string"
           },
           "contribution_type": {
@@ -248,7 +217,6 @@
               "accepted_submission",
               "completed_review"
             ],
-            "title": "Contribution Type",
             "type": "string"
           },
           "definitions": {
@@ -256,7 +224,6 @@
             "items": {
               "$ref": "#/components/schemas/PolicyDefinitionInput"
             },
-            "title": "Definitions",
             "type": "array"
           }
         },
@@ -264,7 +231,6 @@
           "contribution_type",
           "compensation_mode"
         ],
-        "title": "PolicyRuleInput",
         "type": "object"
       },
       "PolicyUpdateInput": {
@@ -277,14 +243,12 @@
             },
             "maxItems": 2,
             "minItems": 2,
-            "title": "Rules",
             "type": "array"
           }
         },
         "required": [
           "rules"
         ],
-        "title": "PolicyUpdateInput",
         "type": "object"
       }
     }
@@ -299,7 +263,6 @@
         "required": true,
         "schema": {
           "format": "uuid",
-          "title": "Project Id",
           "type": "string"
         }
       },
@@ -309,7 +272,6 @@
         "required": true,
         "schema": {
           "format": "uuid",
-          "title": "Policy Id",
           "type": "string"
         }
       },
@@ -319,7 +281,6 @@
         "required": true,
         "schema": {
           "format": "uuid",
-          "title": "Version Id",
           "type": "string"
         }
       },
@@ -621,6 +582,6 @@
     "method": "PUT",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}",
-    "repository_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694"
+    "repository_sha": "59c52cc81179611ea316935552cc177f83eec687"
   }
 }

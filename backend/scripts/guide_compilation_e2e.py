@@ -4,6 +4,7 @@ from functools import partial
 from hashlib import sha256
 from pathlib import Path
 from unittest.mock import patch
+from uuid import UUID, uuid4
 
 
 from app.adapters.guide_document_tools import (
@@ -15,6 +16,8 @@ from app.adapters.guide_document_tools import (
 )
 from app.adapters.project_agents import build_project_guide_adapter_profile
 from app.core.config import get_settings
+from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
 from app.core.project_agents import project_guide_runtime_configuration
 from app.interfaces.external_services import (
     ExternalServiceAdapterFactory,
@@ -30,6 +33,11 @@ from app.interfaces.project_agents import (
 )
 from app.modules.projects.api.guide_compilation import (
     ProjectGuideCompilationDelivery,
+)
+from app.modules.model_usage.api import (
+    ModelGenerationSettings,
+    ModelPricing,
+    ProjectModelProfileSpec,
 )
 
 
@@ -143,6 +151,62 @@ def runtime_factory(runtime):
         return factory.create(configuration.runtime_key)
 
     return create
+
+
+async def publish_scripted_model_profile(
+    client, operator_token: str, project_id: str,
+) -> dict:
+    """Publish the exact finite profile required by the scripted setup runtime."""
+    settings = get_settings()
+    configuration = project_guide_runtime_configuration(
+        settings,
+        adapter_profile_builder=partial(
+            build_project_guide_adapter_profile, settings.project_agent_runtime
+        ),
+    )
+    maximum_calls = configuration.maximum_turns
+    spec = ProjectModelProfileSpec(
+        project_id=UUID(project_id),
+        profile_version=1,
+        provider=configuration.model_provider,
+        api=configuration.model_api,
+        model_snapshot=configuration.model,
+        settings=ModelGenerationSettings(
+            reasoning_effort="medium", text_verbosity="low",
+        ),
+        maximum_request_bytes=1_048_576,
+        maximum_output_bytes=131_072,
+        maximum_response_bytes=1_048_576,
+        maximum_input_tokens=1_000_000,
+        maximum_output_tokens=16_384,
+        maximum_calls=maximum_calls,
+        maximum_total_request_bytes=1_048_576 * maximum_calls,
+        maximum_total_response_bytes=1_048_576 * maximum_calls,
+        maximum_total_input_tokens=1_000_000 * maximum_calls,
+        maximum_total_output_tokens=16_384 * maximum_calls,
+        allowed_tools=("read_document", "search_document"),
+        maximum_tool_calls=configuration.maximum_tool_calls,
+        maximum_tool_output_bytes=configuration.maximum_tool_output_characters * 4,
+        deadline_ms=configuration.timeout_seconds * 1000,
+        pricing=ModelPricing(
+            pricing_policy_id=new_record_id(),
+            pricing_policy_version=1,
+            pricing_policy_digest=canonical_json_hash(
+                {"contract": "real_api_scripted_model_pricing", "version": 1}
+            ),
+            uncached_input_nanodollars_per_token=1,
+            cached_input_nanodollars_per_token=1,
+            output_nanodollars_per_token=1,
+        ),
+    )
+    response = await client.post(
+        f"/api/v1/operations/projects/{project_id}/model-profiles",
+        headers={"Authorization": f"Bearer {operator_token}",
+                 "Idempotency-Key": str(uuid4())},
+        json=spec.model_dump(mode="json"),
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
 
 
 async def compile_live_guide(delivery: ProjectGuideCompilationDelivery) -> dict:
