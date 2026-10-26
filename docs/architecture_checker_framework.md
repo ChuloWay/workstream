@@ -374,7 +374,9 @@ finalization overrun for bounded export and cleanup; they add no new allowance.
 The guest streams an export header and bytes before its final measured receipt.
 The host accepts that receipt only after matching identity, verified bytes,
 confirmed guest cleanup, successful process exit and exact EOF. VM cleanup
-must also succeed before observations can be published. Projected files, retained images and workspaces,
+must also succeed before observations can be published. A limit reached during
+trusted finalization without a publishable terminal receipt is an infrastructure
+failure; it never becomes a fabricated workload failure. Projected files, retained images and workspaces,
 temporary filesystems and export copies share one invocation byte/entry budget.
 Missing prepared material, launch/cache failure, platform capacity exhaustion,
 cancellation and uncertain cleanup are infrastructure outcomes. An observed

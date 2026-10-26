@@ -646,3 +646,24 @@ receipts and replay without another model effect. Negative cases must cover
 control-frame spoofing, unknown/duplicate/oversize frames, cancellation in each
 direction, controller/guest death, candidate substitution, resource ceilings
 and confirmed cleanup. Preserve the separately owned public journey boundary.
+
+
+### Whole-operation Smol integration checks
+
+The guest bounds input staging, filesystem preparation, workload, export and
+cleanup under one parent cgroup. A separate workload leaf permits a bounded
+forced stop while the supervisor finalizes facts. Final export bytes remain
+provisional until the host verifies the final receipt, exact EOF and VM cleanup.
+Trusted finalization that cannot produce a truthful bounded receipt remains
+infrastructure failure. No extra policy allowance or receipt variant is added.
+Host accounting reserves transient guest input copies and simultaneous guest/host
+exports from the existing invocation budget. Persistent exclusive root custody
+and exact VM leases cover restart recovery; unknown or foreign residue refuses
+readiness. Peak admission includes the approved child-memory overrun.
+
+Focused integration evidence at `1a8264488`: 22 trial-engine tests and three
+export-framing tests passed. Replacing guest-copy reservation with a no-op makes
+the large-context regression fail its aggregate-budget assertion; restored
+source preserves the reservation. Guest envelope/launcher evidence at
+`bc58f2424`: 31 focused tests and an offline static-musl build passed. These are
+not a complete KVM composition or current-head hosted CI qualification.
