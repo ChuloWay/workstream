@@ -680,6 +680,7 @@ async def _assert_outcome(factory, *, guide_source, project_id: UUID, task_id: s
                 and row.acceptance_source == "task_post_submit_route",
                 "submitter ContributionRecord lost its exact source or artifact lineage",
             )
+        if expected_awards:
             award = (await session.execute(text(
                 "SELECT contribution_record_id,contributor_id,contribution_policy_version_id,"
                 "instrument_type,unit_code,quantity FROM public.compensation_awards "
@@ -789,7 +790,10 @@ async def _one_mode(client, factory, env, *,
                     human_review_required: bool, operator_id: UUID | None,
                     stop_worker: Callable[[], None] | None = None,
                     start_worker: Callable[[], Awaitable[None]] | None = None, fault_root=None, operator_token=None) -> dict:
-    awards = () if human_review_required else ("project_points",)
+    from experiments.pilot04_external_checker_runtime.public_hosted_attachment import HostedAttachment
+
+    attachment = env if isinstance(env, HostedAttachment) else None
+    awards = () if human_review_required or attachment else ("project_points",)
     from app.workers.outbox import deliver_event
 
     compilation, contributor, manager_token, contributor_token = await _public_project(
@@ -930,8 +934,11 @@ async def _one_mode(client, factory, env, *,
         _require(stop_worker is not None and start_worker is not None,
                  "prefork restart control is absent")
         stop_worker()
-        from tests.reviews.lifecycle.transition_support import command_for, transition
-        await transition(await command_for(operator_id, "live"))
+        if attachment:
+            await attachment.transition('live')
+        else:
+            from tests.reviews.lifecycle.transition_support import command_for, transition
+            await transition(await command_for(operator_id, "live"))
         await _wait_outbox_due(factory, completion_id)
         await start_worker()
         await _wait_outbox_acknowledged(factory, completion_id,
@@ -960,22 +967,25 @@ async def _one_mode(client, factory, env, *,
         _require(item["submission_id"] == saved["submission_id"]
                  and item["acceptance_source"] == "task_post_submit_route"
                  and [(award["instrument"], award["unit"], Decimal(award["quantity"]))
-                 for award in item["awards"]] == [("project_points", "PTS", Decimal("7"))],
+                 for award in item["awards"]] == ([("project_points", "PTS", Decimal("7"))] if awards else []),
                  "public contribution source or award set differs")
-    # A result for this one probe publish proves the prefork child consumed
-    # the duplicate; the production task still ignores results by default.
+    # Observe this exact duplicate in the actual prefork worker. The local
+    # fixture has a result backend; hosted custody uses production task logs.
     before_delivery = await _outbox_snapshot(factory, completion_id)
     duplicate = await asyncio.to_thread(
         deliver_event.apply_async,
         args=(str(completion_id), project_id),
-        ignore_result=False,
+        ignore_result=attachment is not None,
     )
-    try:
-        duplicate_result = await asyncio.to_thread(
-            duplicate.get, timeout=120, propagate=True,
-        )
-    finally:
-        await asyncio.to_thread(duplicate.forget)
+    if attachment:
+        duplicate_result = await attachment.wait_duplicate(duplicate.id)
+    else:
+        try:
+            duplicate_result = await asyncio.to_thread(
+                duplicate.get, timeout=120, propagate=True,
+            )
+        finally:
+            await asyncio.to_thread(duplicate.forget)
     _require(duplicate_result == {"status": "delivery_unavailable"},
              "prefork child did not refuse duplicate completion delivery")
     _require(await _outbox_snapshot(factory, completion_id) == before_delivery,
@@ -990,7 +1000,7 @@ async def _one_mode(client, factory, env, *,
     )
     _require(again == outcome, "duplicate completion changed governed outcome")
     late_revocation = None
-    if not human_review_required:
+    if not human_review_required and attachment is None:
         late_revocation = await _late_revocation_trial(
             client, factory, env, project_id=compilation.project_id,
             accepted_task_id=task_id, manager_token=manager_token,
@@ -1014,6 +1024,8 @@ async def _one_mode(client, factory, env, *,
         ),
         "outcome": outcome,
         "submitted_inputs": expected_inputs,
+        'duplicate_delivery': {'task_id': duplicate.id,
+                               'observation': 'production_worker_log' if attachment else 'result_backend'},
         "late_revocation": late_revocation,
     }
 
@@ -1249,13 +1261,23 @@ def main() -> int:
     parser.add_argument("--image-reference")
     parser.add_argument("--node-config", type=Path, help="Owned provisioned Smol node configuration")
     parser.add_argument("--broker-url")
-    parser.add_argument("--expected-custody", type=Path, required=True)
+    parser.add_argument("--expected-custody", type=Path)
     parser.add_argument("--work-dir", type=Path,
                         help="Unique private directory retaining API and worker diagnostics")
+    parser.add_argument('--hosted-attachment', type=Path,
+                        help='Private attachment manifest for an existing hosted API/worker/Beat')
     args = parser.parse_args()
     if not args.database_url:
         parser.error("isolated --database-url or WORKSTREAM_TEST_DATABASE_URL is required")
-    if not args.image_reference or not args.node_config or not args.broker_url:
+    if args.hosted_attachment:
+        if (not args.broker_url or args.image_reference or args.node_config
+                or args.work_dir or args.expected_custody):
+            parser.error('hosted attachment requires broker URL and excludes local launch arguments')
+        from experiments.pilot04_external_checker_runtime.public_hosted_attachment import HostedAttachment, run as attach
+        value = asyncio.run(attach(HostedAttachment.read(args.hosted_attachment), args.database_url, args.broker_url))
+        print(json.dumps(value, sort_keys=True, separators=(',', ':')))
+        return 0
+    if not args.image_reference or not args.node_config or not args.broker_url or not args.expected_custody:
         parser.error("full drill requires image, node config, and broker URL")
     workspace = (nullcontext(args.work_dir) if args.work_dir else
                  tempfile.TemporaryDirectory(prefix="ws-pilot04-public-"))
