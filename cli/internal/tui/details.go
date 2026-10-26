@@ -320,12 +320,16 @@ func (m *Model) guideText() string {
 	if len(v.GuideDocuments) == 0 {
 		d.note("No assigned guide documents.")
 	}
+	separator := " · "
+	if m.plain {
+		separator = " | "
+	}
 	for index, original := range v.GuideDocuments {
 		mark := "  "
 		if index == m.guideSelected {
 			mark = "> "
 		}
-		d.note(mark + fmt.Sprint(index+1) + ". " + m.clean(original.Label) + " · " + m.clean(original.MediaType) + " · " + humanBytes(original.ByteCount))
+		d.note(mark + fmt.Sprint(index+1) + ". " + m.clean(original.Label) + separator + m.clean(original.MediaType) + separator + humanBytes(original.ByteCount))
 	}
 	d.heading("References")
 	d.line("Task", v.Task.TaskID)

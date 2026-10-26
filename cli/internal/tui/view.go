@@ -80,6 +80,17 @@ func (m *Model) renderLabels(value string) string {
 	return strings.Join(parts, "  ")
 }
 
+func (m *Model) renderFooter() string {
+	footer := m.footerText()
+	styles := m.styles()
+	for _, action := range []string{"d download", "y download"} {
+		if at := strings.Index(footer, action); at >= 0 {
+			return styles.secondary.Render(footer[:at]) + styles.action.Render(action) + styles.secondary.Render(footer[at+len(action):])
+		}
+	}
+	return styles.secondary.Render(footer)
+}
+
 func (m *Model) footerText() string {
 	if m.guideMode == guideDestination {
 		return "Enter review  Esc cancel  Ctrl+C quit"
@@ -116,7 +127,22 @@ func (m *Model) footerText() string {
 	}
 	if m.height < 16 {
 		if m.detail {
-			return "scroll  Esc back  ? help  q quit"
+			if m.tab == mine && m.section == 3 {
+				if m.context != nil && len(m.context.GuideDocuments) > 0 {
+					return "Up/Down doc  PgUp/PgDn scroll\nd download  Tab  Esc back  ?  q quit"
+				}
+				return "PgUp/PgDn scroll  Tab section\nEsc back  ? help  q quit"
+			}
+			if m.tab == submissions && m.section == 1 {
+				if m.findingsCursor != "" {
+					return "Up/Down PgUp/PgDn scroll  Tab\nn next  Esc back  ? help  q quit"
+				}
+				return "Up/Down PgUp/PgDn scroll  Tab\nEsc back  ? help  q quit"
+			}
+			if m.tab == mine {
+				return "PgUp/PgDn scroll  Tab section\nEsc back  ? help  q quit"
+			}
+			return "PgUp/PgDn scroll  Esc back\n? help  q quit"
 		}
 		if m.picker {
 			return "Enter project  ? help  q quit"
@@ -219,7 +245,11 @@ func (m *Model) View() tea.View {
 		return tea.NewView("")
 	}
 	if m.tooSmall() {
-		v := tea.NewView(lipgloss.Wrap("Resize to at least 40x10. q quit", max(1, m.width), ""))
+		guidance := "Resize to at least 40x10. q quit"
+		if m.filtering || m.guideMode == guideDestination {
+			guidance = "Resize to at least 40x10. Ctrl+C quit"
+		}
+		v := tea.NewView(lipgloss.Wrap(guidance, max(1, m.width), ""))
 		v.AltScreen = !m.plain
 		return v
 	}
@@ -246,7 +276,7 @@ func (m *Model) View() tea.View {
 	} else {
 		lines = append(lines, m.viewport.View())
 	}
-	lines = append(lines, styles.secondary.Render(m.statusText()), styles.secondary.Render(m.footerText()))
+	lines = append(lines, styles.secondary.Render(m.statusText()), m.renderFooter())
 	v := tea.NewView(strings.Join(lines, "\n"))
 	v.AltScreen = !m.plain
 	return v
@@ -289,7 +319,7 @@ func (m *Model) body() string {
 		return m.handoffText()
 	}
 	if m.failure != "" {
-		return m.failure + "\nNo retained page or detail is available.\n" + m.failureHelp()
+		return m.styles().error.Render(m.failure) + "\nNo retained page or detail is available.\n" + m.failureHelp()
 	}
 	if m.loading {
 		return m.loadingText()

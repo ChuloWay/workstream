@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/viewport"
 	"github.com/Flow-Research/workstream/cli/internal/api"
 )
 
@@ -92,6 +93,59 @@ func TestGuideBrowseKeepsServerOrderAndSelectedExactMetadata(t *testing.T) {
 	for _, want := range []string{"Task: " + taskID, "Project: " + projectID, "Guide: " + actorID, "Locked guide version: locked-v1"} {
 		if !strings.Contains(rendered, want) {
 			t.Fatal(want, rendered)
+		}
+	}
+}
+
+func TestGuidePlainModeUsesASCIIChromeWithoutChangingUnicodeContent(t *testing.T) {
+	doc := api.TaskGuideDocument{DocumentID: actorID, Order: 1, Label: "Café 指南", MediaType: "text/markdown", ByteCount: 1024}
+	context := guideContext(doc)
+	m := &Model{context: &context, section: 3, plain: true, noColor: true,
+		started: true, detail: true, tab: mine, width: 80, height: 24, viewport: viewport.New()}
+	m.reflow()
+	rendered := m.View().Content
+	if !strings.Contains(rendered, "> 1. Café 指南 | text/markdown | 1.0 KiB") || strings.Contains(rendered, " · ") || strings.Contains(rendered, "\x1b") {
+		t.Fatal(rendered)
+	}
+}
+
+func TestContextRetainsExactLockedPolicyAndRevisionReferences(t *testing.T) {
+	reviewHash := "sha256:" + strings.Repeat("a", 64)
+	revisionHash := "sha256:" + strings.Repeat("b", 64)
+	preparationHash := "sha256:" + strings.Repeat("c", 64)
+	predecessor, deadline := policyID, "2026-10-27T10:00:00Z"
+	context := guideContext()
+	context.ReviewPolicy = api.ContextPolicy{PolicyID: runID, Generation: 17, PolicyHash: reviewHash}
+	context.RevisionPolicy = api.ContextPolicy{PolicyID: findingID, Generation: 23, PolicyHash: revisionHash}
+	context.Lifecycle.NextActions = []string{"start"}
+	context.RevisionContext = &api.RevisionContext{
+		PreparationID: actorID, PreparationSHA256: preparationHash,
+		PredecessorPreparationID: &predecessor, SourceSubmissionID: submissionID,
+		SourceRoutingManifestID: taskID, Sequence: 4, NextRevisionRound: 2,
+		MaxRevisionRounds: 3, RequestedAt: "2026-10-26T10:00:00Z",
+		DeadlineAt: &deadline, ClockState: "running", Outcome: "prepared",
+		Disposition: "needs_revision", Prior: api.RevisionSnapshot{GuideID: actorID},
+		Target:  &api.RevisionSnapshot{GuideID: policyID},
+		Changes: []api.RevisionChange{{Component: "guide", Before: "v1", After: "v2"}},
+	}
+	m := &Model{context: &context, section: 1, noColor: true}
+	rendered := m.detailText()
+	orderOf(t, rendered, "Assignment", "Task: "+taskID, "Project: "+projectID, "Assigned to current actor: true", "Observed action hints (not authority): start", "Locked rules", "Revision context")
+	for _, exact := range []string{
+		"Guide: " + actorID, "Locked guide version: locked-v1",
+		"Review policy: " + runID, "Review policy generation: 17", "Review policy hash: " + reviewHash,
+		"Revision policy: " + findingID, "Revision policy generation: 23", "Revision policy hash: " + revisionHash,
+		"Contribution policy version: " + policyID,
+		"Revision preparation: " + actorID, "Revision preparation digest: " + preparationHash,
+		"Revision source Submission: " + submissionID, "Revision source routing manifest: " + taskID,
+		"Predecessor preparation: " + policyID, "Revision sequence: 4", "Next revision round: 2",
+		"Maximum revision rounds: 3", "Revision requested: 2026-10-26T10:00:00Z",
+		"Revision outcome: prepared", "Revision disposition: needs_revision", "Revision clock: running",
+		"Revision deadline: " + deadline, "Prior guide: " + actorID, "Target guide: " + policyID,
+		"Changed component: guide", "Before: v1", "After: v2",
+	} {
+		if !strings.Contains(rendered, exact) {
+			t.Fatalf("missing exact %q in:\n%s", exact, rendered)
 		}
 	}
 }

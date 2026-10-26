@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"image/color"
 	"reflect"
@@ -9,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/Flow-Research/workstream/cli/internal/api"
 )
 
 func TestWideShellKeepsSelectionOutsideScrollingDetails(t *testing.T) {
@@ -154,5 +156,130 @@ func TestFilterEditingFooterMatchesEffectiveKeys(t *testing.T) {
 	press(t, m, "esc")
 	if m.filtering || m.filter != "q" || len(f.calls) != before {
 		t.Fatal("Esc did not restore the previous local filter")
+	}
+}
+
+func TestBelowMinimumTextModesAdvertiseEffectiveQuit(t *testing.T) {
+	m := boot(t, &fakeClient{})
+	press(t, m, "enter")
+	press(t, m, "/")
+	m.Update(tea.WindowSizeMsg{Width: 30, Height: 8})
+	if got := m.View().Content; !strings.Contains(got, "Ctrl+C quit") || strings.Contains(got, "q quit") {
+		t.Fatal("filter below minimum advertised an ineffective quit key", got)
+	}
+	press(t, m, "q")
+	if m.closed || m.filter != "q" {
+		t.Fatal("q should remain local filter input")
+	}
+	press(t, m, "ctrl+c")
+	if !m.closed {
+		t.Fatal("Ctrl+C did not quit during below-minimum filter editing")
+	}
+
+	document := api.TaskGuideDocument{DocumentID: actorID, Label: "Original", MediaType: "text/plain"}
+	f := &fakeClient{context: func(context.Context, string) (api.Result[api.WorkContext], error) {
+		return api.Result[api.WorkContext]{Value: guideContext(document)}, nil
+	}}
+	guide := openMineGuide(t, f)
+	press(t, guide, "d")
+	guide.Update(tea.WindowSizeMsg{Width: 30, Height: 8})
+	if got := guide.View().Content; !strings.Contains(got, "Ctrl+C quit") || strings.Contains(got, "q quit") {
+		t.Fatal("destination below minimum advertised an ineffective quit key", got)
+	}
+	press(t, guide, "q")
+	if guide.closed || guide.guideDirectory != "q" {
+		t.Fatal("q should remain download-directory input")
+	}
+	press(t, guide, "ctrl+c")
+	if !guide.closed {
+		t.Fatal("Ctrl+C did not quit during below-minimum destination editing")
+	}
+}
+
+func TestCompactGuideFooterExposesWorkingDocumentAndScrollKeys(t *testing.T) {
+	documents := []api.TaskGuideDocument{
+		{DocumentID: actorID, Label: "First original", MediaType: "text/plain"},
+		{DocumentID: policyID, Label: "Second original", MediaType: "text/plain"},
+	}
+	f := &fakeClient{context: func(context.Context, string) (api.Result[api.WorkContext], error) {
+		return api.Result[api.WorkContext]{Value: guideContext(documents...)}, nil
+	}}
+	m := openMineGuide(t, f)
+	m.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
+	footer := m.footerText()
+	for _, key := range []string{"Up/Down doc", "PgUp/PgDn scroll", "d download", "Tab"} {
+		if !strings.Contains(footer, key) {
+			t.Fatalf("compact Guide footer lacks %q: %q", key, footer)
+		}
+	}
+	assertShellBounded(t, m, 40, 10)
+	press(t, m, "down")
+	if m.guideSelected != 1 {
+		t.Fatal("Down did not select next guide original")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	if m.viewport.YOffset() == 0 {
+		t.Fatal("PgDown did not scroll the Guide viewport")
+	}
+	press(t, m, "d")
+	if m.guideMode != guideDestination {
+		t.Fatal("d did not enter download destination")
+	}
+	press(t, m, "esc")
+	press(t, m, "tab")
+	if m.section != 0 {
+		t.Fatal("Tab did not change Guide section")
+	}
+}
+
+func TestCompactFindingsFooterExposesWorkingScrollAndConditionalNext(t *testing.T) {
+	m := boot(t, &fakeClient{})
+	press(t, m, "enter")
+	press(t, m, "tab")
+	press(t, m, "tab")
+	press(t, m, "enter")
+	press(t, m, "tab")
+	m.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
+	footer := m.footerText()
+	for _, key := range []string{"PgUp/PgDn scroll", "Tab"} {
+		if !strings.Contains(footer, key) {
+			t.Fatalf("compact Findings footer lacks %q: %q", key, footer)
+		}
+	}
+	if strings.Contains(footer, "n next") {
+		t.Fatal("Findings footer offered unavailable continuation")
+	}
+	assertShellBounded(t, m, 40, 10)
+	m.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	if m.viewport.YOffset() == 0 {
+		t.Fatal("PgDown did not scroll Findings")
+	}
+	m.findingsCursor = "opaque-next"
+	if !strings.Contains(m.footerText(), "n next") {
+		t.Fatal("available Findings continuation is not advertised")
+	}
+	m.reflow()
+	assertShellBounded(t, m, 40, 10)
+	_, cmd := m.Update(keyMessage("n"))
+	if cmd == nil || m.findingsPage != 2 {
+		t.Fatal("n did not request exactly one next Findings page")
+	}
+	apply(t, m, cmd)
+	press(t, m, "tab")
+	if m.section != 0 {
+		t.Fatal("Tab did not change Findings section")
+	}
+}
+
+func assertShellBounded(t *testing.T, m *Model, width, height int) {
+	t.Helper()
+	content := m.View().Content
+	if lipgloss.Height(content) > height {
+		t.Fatalf("view exceeds %d rows: %q", height, content)
+	}
+	for _, line := range strings.Split(content, "\n") {
+		if lipgloss.Width(line) > width {
+			t.Fatalf("view exceeds %d columns: %q", width, line)
+		}
 	}
 }

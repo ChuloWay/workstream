@@ -34,7 +34,7 @@ an unaudited server interaction.
 Every displayed fact belongs to its returned scope. List rows are observations,
 not reservations, current eligibility, or authority for a later command.
 Checker runs and findings are evidence, not acceptance decisions. Only a stored
-Submission outcome can say `review_pending`, `needs_revision`, `rejected` or
+Submission outcome can say `evaluation_pending`, `review_pending`, `needs_revision`, `rejected` or
 `accepted`; the TUI does not infer one from passing checks. Contribution records
 are earned facts, not payment or fulfillment proof. The default locked
 ReviewPolicy requires human review; supported false-policy acceptance is an
@@ -53,7 +53,8 @@ normal panes with a scrollable exact-target review. At widths of at least
 terminals use sequential, single-column list and detail views; `--plain`
 always uses that layout, even on a wide terminal. Reflow preserves selection,
 exact project, section and confirmation target, and dispatches no request.
-At less than 40×10, show only resize and `q`/Ctrl+C guidance: hidden content
+At less than 40×10, show only resize and quit guidance (`q` ordinarily,
+Ctrl+C during text entry): hidden content
 cannot be selected and `y` cannot stage or dispatch a download. Restoring size
 still requires deliberate confirmation.
 
@@ -110,7 +111,7 @@ request. `Enter` requests fresh exact-resource detail; opening Context, Intake,
 Guide or Findings uses its existing scoped read. `n` requests one continuation
 page, never walks pages in the background. `/` filters only loaded row titles
 or names and says so; it is not search across pages. Refresh resets the current
-page's cursor. The fixed status line identifies the resource, loaded row/run
+page's cursor. The collection/section header identifies the resource; the fixed status line shows loaded row/run
 count, current page, whether a continuation was returned, and local observation
 time. It never presents loaded-page length as a total, a server timestamp, or
 an inferred project-wide count. Loading is explicit. A failed read clears the
