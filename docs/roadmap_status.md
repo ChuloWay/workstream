@@ -487,7 +487,7 @@ Smol node with exact private material paths and pinned cached image identities.
 Compose starts no checker controller; credential-owning model proxy and native
 node use the same host-visible socket path under one numeric identity. Cold
 startup explicitly orders migrations, AWS activation, proxy, native readiness
-and API/worker release. It carries the required release digest and exact AWS
+and API/Celery worker release. It carries the required release digest and exact AWS
 role/policy/trust/bucket-policy identities into every long-running process
 environment. The external-host credential integration uses AWS Roles Anywhere
 with dedicated certificate identities, preserving the same S3 adapter and
@@ -1646,7 +1646,7 @@ and [operator runbook](../deploy/hosted/README.md), extended by the
 [hosted Smol integration](../.commitrail/changes/hosted-smol-project-execution.md),
 define the digest-only backend topology, existing native Smol node, one private
 endpoint for two typed capabilities, root-derived absolute paths and live health
-checks before API/worker release. Deployed operation and full public journey
+checks before API/Celery worker release. Deployed operation and full public journey
 evidence remain separate.
 
 The [Terminal Systems project inputs](../pilots/terminal_systems/README.md)

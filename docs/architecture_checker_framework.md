@@ -309,7 +309,7 @@ KVM VM, a static trusted bootstrap, workload and host resource limits, bounded
 concurrency and independent exact-lease cleanup guardians. Its node requires
 Linux amd64, KVM and delegated cgroup v2. The hosted release composition uses the existing native Smol systemd node for
 two typed capabilities at one private endpoint: trusted intake and project
-execution. API/worker containers share its absolute ART material path and numeric
+execution. API/Celery worker containers share its absolute ART material path and numeric
 identity and mount its socket directory read-only; Compose starts no checker
 controller or Docker/runsc fallback. Guest-native model/trial callbacks retain
 their existing invocation custody and trusted proxy ownership. PRE model
