@@ -44,13 +44,68 @@ for separate runner provisioning and Operator registration; it changes no policy
   normalized result and settles owned resources.
 - The image evaluates the approved project requirements and returns bounded
   findings. It cannot approve a submission, mutate project policy, select another
-  image, mount another project's files or request a private host-side continuation.
+  image, mount another project's files or request a private host-side continuation
+  through its final output.
+
+POST grants use one aggregate v2 workspace with fixed role roots and a separate
+temporary manifest for each selected binding. Current work mounts at
+`/work/input`. A registry-declared, policy-approved revision-context selection
+may additionally expose the exact prior attempt at `/work/context/predecessor`
+and bounded prior findings in `input.evaluation_context`. Neither a global
+Submission version nor a project image request authorizes historical access.
+Initial attempts carry explicit null prior context, including after another
+contributor releases a task. PRE keeps its distinct pre-admission grant; there
+is no POST fallback to the PRE protocol. See the
+[POST contract](../docs/architecture_checker_framework.md#post-submit-contract)
+for selection, evidence, quota and replay rules.
 
 The service does not interpret project-private build plans. An image that needs
-to compile or test submitted work must implement that behavior within the
-supported isolation and resource contract. Unsupported runtime needs must be
-resolved explicitly before approving that capability; they are not permission
-to add a named-project exception or expose the host Docker socket.
+to compile or test submitted work may use the typed generic invocation-local
+trial tool only when its exact POST binding and administrative profile authorize
+that capability. The image supplies bounded generic operations, safe relative
+selectors and workload argument arrays through `/work/execution.sock`; it never
+selects Docker flags, host paths, mounts, runtime, images, network, devices,
+credentials or resource enlargements. Opaque profile material roles control
+build and runtime visibility. Shared Rust contains no project filenames, task
+allowlists, rubrics or command allowlists.
+
+A visible read-only role occupies one profile-selected top-level workspace
+name. Nested overlay destinations and existing-entry collisions are refused;
+the launcher removes its temporary mountpoint before retaining workspace
+state. Build-context and state-seed selectors may still use safe nested paths.
+
+The service keeps Smol launch authority, approved offline material, protected
+role projection, aggregate limits, observation and cleanup custody. Workload
+argv is passed to the trusted guest launcher as bounded workload arguments; it
+is never interpreted as host launcher flags. Trial observations become usable
+only after required operations and cleanup complete. A dependent model call
+resolves server-owned same-invocation receipt facts instead of trusting JSON
+copied by the checker. Unsupported runtime or material remains an explicit gap;
+it is not permission to expose the host Docker socket or add a named-project
+service branch.
+
+Candidate images are checked before Smol loads them: ordered uncompressed
+layer digests must match the image configuration, and streaming expansion plus
+conservative file/directory allocation must fit the invocation's remaining
+byte and entry allowances. Repeated layers consume that allowance again.
+Malformed archives and unsupported sparse/device representations are refused.
+Smol does not create anonymous storage from image `Volumes` metadata; the
+trusted launcher owns writable mounts and their quotas. These are runtime
+capability limits, not additional project requirements. Project checks must report unavailable execution distinctly
+from a verified work failure.
+
+Every completed build or step records `export_outcome` separately from the
+child's exit code or signal. `exported` means the bounded candidate or workspace
+was retained; `capacity_exceeded` means its logical bytes or entries exceed the
+allowance; `invalid` means it cannot be represented by the supported export
+format. The latter two produce `disk_exceeded` or `export_invalid` observations
+while preserving the actual child status. A forced runtime stop records
+`unavailable` and does not invent an exit code or signal. `not_started` covers
+dependency-skipped steps and failed builds that never request candidate export.
+Only an exported workspace whose work outcome the profile permits may feed a
+later step. Host storage or export I/O failures remain infrastructure failures;
+they are not evidence that submitted work exceeded its allowance. Project
+images interpret these execution facts against their own approved requirements.
 
 ## Optional model socket
 
@@ -108,15 +163,19 @@ deployment must separately enable `host-uds=open` before a mounted host Unix
 socket can work. This repository does not claim that the model relay has been
 qualified under gVisor.
 
-The hosted release selects the native Smol node through the same typed adapter.
-Its model/trial transport is supplied by the coordinated
-[Smol runtime change](https://github.com/Flow-Research/workstream/pull/677):
-guest-local capability sockets forward bounded invocation traffic through the
-trusted host relay. Project guests receive no global host socket or provider
-credential. The [hosted composition](../deploy/hosted/README.md) keeps credentials
-in the trusted proxy and uses one native endpoint for typed intake and project
-execution. Its configuration/readiness checks do not establish a live model call
-or public lifecycle qualification. PRE model selectors remain unsupported; only
+Smol exposes guest-local model and execution sockets through its trusted guest
+stream. The host forwards only the capabilities granted to that invocation to
+the existing relays. A persistent model connection can remain open while an
+execution request runs; workload stdout never carries control frames. No host
+socket or provider credential is mounted into the microVM. Trials use fresh
+Smol sibling VMs and have no Docker/runsc fallback. Real KVM composition
+qualification is required before this path is ready for deployment; historical
+Docker/runsc results do not qualify it.
+
+The [hosted composition](../deploy/hosted/README.md) uses that same native node
+for typed intake and project execution, with credentials confined to the trusted
+proxy. Its configuration/readiness checks do not establish a live model call or
+public lifecycle qualification. PRE model selectors remain unsupported; only
 existing approved POST model lineage can issue that grant.
 
 The opt-in
@@ -193,15 +252,19 @@ configuration before starting this version; unknown configuration is rejected.
 Retain registry entries, locked policies, submissions and historical evidence.
 Do not rewrite them to point at replacement images. Any replacement needs the
 normal versioned registration, proposal and approval process. A retained image
-that returns a private plan now produces an invalid-output infrastructure failure,
-not a continuation or a contributor-work failure. Do not blindly retry it as if
-the capability still exists.
+that returns `project_private_plan.v1` or another private plan as its outer
+output still produces an invalid-output infrastructure failure, not a
+continuation or a contributor-work failure. The typed invocation tool does not
+parse an outer result to start host work. Do not blindly retry a retired plan as
+if that capability still exists.
 
 ## Smol microVM engine
 
 The hosted node uses the deployment pair `smolvm` / `smol-microvm`. Python still
 uses the single `external_checker_execution/unix_socket` provider; neither a
-project policy nor a checker request can choose the engine. Each execution gets
+project policy nor a checker request can choose the engine. The trusted guest
+receives typed current and optional predecessor material roots and the authorized
+callback capabilities. Each execution gets
 a fresh VM and the same verified ART grant and JSON result contract. The native
 bootstrap has no Python or shell dependency in a project image.
 
@@ -219,23 +282,51 @@ node JSON and API/worker mounts. See the
 [hosted operator sequence](../deploy/hosted/README.md#start-and-inspect) for
 migration/activation/proxy prerequisites and native readiness.
 
+Keep the canonical Smol HOME path at most 59 filesystem bytes. Trial-enabled
+nodes also need a separately owned `trial_runtime.child_home_root` at most 18
+bytes (for example, an operator-created private `/var/lib/wschild`). Smol appends
+its VM directory and socket names; each child additionally receives its full
+random private HOME name. Startup rejects longer paths before accepting work.
+These bounds count encoded bytes, not characters. Do not use symlink aliases or
+shorten invocation identities to fit the Linux Unix-socket limit.
+
 For this engine omit `docker_binary`, and configure `smol` with absolute `binary`,
 `home`, `guest_binary`, `cgroup_root` paths; `binary_sha256` and `guest_sha256`;
-and `maximum_parallel`. Install the verified Smol release bundle together and
+and required positive `maximum_parallel` and `maximum_storage_bytes`. Install the verified Smol release bundle together and
 keep it operator-controlled. Build `workstream-checker-guest` for
 `x86_64-unknown-linux-musl`; the node and bootstrap must come from the same source.
 Each existing cache entry additionally has `smol.archive`,
 `smol.archive_sha256` and `smol.image_config`. The
-[cache preparation command](../backend/scripts/checker_smol_cache.py) checks an already local
-Docker-save archive against its platform manifest, config and rootfs identities.
-Run it from `backend/` with `uv run python -m scripts.checker_smol_cache`.
-It shares platform-manifest validation with the image publisher and verifies
-every declared layer blob and its uncompressed identity. It emits cache configuration; it neither registers the image nor activates a
-policy. Runtime execution needs no Docker daemon, registry credentials or image
-pull. Smol retains private hard links to imported archives; link count alone is
-not an image-integrity check.
+[cache preparation command](../backend/scripts/checker_smol_cache.py) verifies an already local
+Docker-save archive against its approved platform manifest, config and rootfs identities.
+It writes a distinct canonical USTAR archive containing only the closed Docker-save
+manifest and exact approved platform/config and selected/approved layer bytes. Nullable
+source tags, layer-source hints and unrelated compatibility metadata confer no authority
+and are omitted. The source archive and its permissions remain unchanged; the new archive
+has its own hash while the approved platform/config/layer identities stay the same.
 
-The node reserves aggregate memory and concurrent slots before launch. A guest
+Run from `backend/` with two new, distinct output paths:
+
+```sh
+uv run python -m scripts.checker_smol_cache \
+  --archive /absolute/source/image.tar --repository registry.example/checker \
+  --manifest sha256:<approved-platform-manifest> \
+  --archive-output /absolute/cache/image.tar --config-output /absolute/cache/config.json
+```
+
+The command bounds raw headers, paths and metadata before parsing, rejects aliases,
+links, unsupported tar extensions and conflicting ancestry, and rehashes graph bytes
+while copying. Outputs are created exclusively and sealed read-only; failure removes
+only partial files still matching this invocation's created inodes. It shares platform
+validation with the image publisher and verifies each layer's uncompressed identity.
+It emits cache configuration; it neither registers the image nor activates a policy.
+Runtime execution needs no Docker daemon, registry credentials or image pull. Smol
+retains private hard links to imported archives; link count alone is not an integrity check.
+
+The node reserves aggregate memory, disk and concurrent slots before launch.
+A trial invocation reserves the outer checker plus one sequential child VM
+atomically, before either VM launch or model spend. A one-slot node rejects such
+an invocation instead of waiting for capacity while holding its only slot. A guest
 supervisor applies the exact requested CPU and memory controls, a bounded PID
 limit, non-root IDs, no capabilities, read-only root/material, a 16 MiB `/tmp`,
 and denied management syscalls and network access. Image-owned `/work` and `/tmp`

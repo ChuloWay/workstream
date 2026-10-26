@@ -79,6 +79,27 @@ pinned cached inputs; the release does not start a Docker/runsc fallback. The
 explicit `docker-dev` mode remains local mechanism qualification, outside the
 selected hosted topology.
 
+For an approved POST capability that needs to build or execute submitted work,
+the same service may expose one invocation-local Unix socket to the selected
+checker image. This is a typed sub-capability of the existing external-checker
+execution, not another external-service adapter, daemon, runtime factory or
+image-output continuation. A locked administrative profile authorizes the exact
+POST registry/image/configuration scope, prepared offline builder/base/cache
+identities, material-role visibility and aggregate resource ceilings. The image
+may supply only closed operation types, safe package-relative selectors and
+workload argument arrays. The service—not the image—selects the engine, runtime,
+images, mounts, host paths, network, limits and cleanup behavior.
+
+The service publishes completed trial observations into request-bound
+invocation memory only after cleanup is confirmed. The model capability may
+resolve those server-owned facts through the same invocation; checker-supplied
+copies are not evidence. Normalized final output remains the registered
+external-checker result. An image cannot trigger host work by returning a
+private plan as that result, and `project_private_plan.v1` remains invalid.
+Persisting or replaying exact trial evidence requires an owner-typed CHECKERS/ART
+contract; a transient socket receipt or ordinary isolation metadata does not by
+itself establish durable evidence custody.
+
 Registration is explicit in the FastAPI or Celery composition root.
 Runtime plugin discovery, import scanning, mutable global registration, and
 generic service locators are forbidden.

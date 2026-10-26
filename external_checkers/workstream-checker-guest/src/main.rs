@@ -1,17 +1,26 @@
 //! Static bootstrap for an untrusted image, invoked before its first instruction.
 use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, HashSet};
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
-use std::os::fd::FromRawFd;
+use std::os::fd::{AsRawFd, FromRawFd};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::os::unix::process::CommandExt;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
+use std::sync::mpsc::{self, Sender, SyncSender};
+use std::thread;
+use std::time::Duration;
 use workstream_checker_guest::{
-    GuestJob, GuestPurpose, CAPACITY_EXIT_CODE, INPUT_ROOT, MAX_JOB_BYTES,
+    GuestCapabilities, GuestIoChannel, GuestIoHeader, GuestJob, GuestPurpose, MaterialRoot,
+    CAPACITY_EXIT_CODE, EXECUTION_FRAME_MAXIMUM, EXECUTION_SOCKET, GUEST_IO_PROTOCOL, INPUT_ROOT,
+    MAX_JOB_BYTES, MODEL_FRAME_MAXIMUM, MODEL_SOCKET, PREDECESSOR_ROOT,
 };
 use workstream_checker_sdk::parse_request;
+
+mod trial;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -48,15 +57,7 @@ fn cgroups(cpu: u64, memory: u64) -> Result<()> {
     fs::create_dir(&group)?;
     fs::write(group.join("cpu.max"), format!("{} 100000", cpu * 100))?;
     fs::write(group.join("memory.max"), memory.to_string())?;
-    let swap_limit = group.join("memory.swap.max");
-    if swap_limit.exists() {
-        fs::write(swap_limit, "0")?;
-    } else if !fs::read_to_string("/proc/meminfo")?
-        .lines()
-        .any(|line| line.split_whitespace().collect::<Vec<_>>() == ["SwapTotal:", "0", "kB"])
-    {
-        return Err("unbounded guest swap".into());
-    }
+    disable_swap(&group, Path::new("/proc/meminfo"))?;
     fs::write(group.join("memory.oom.group"), "1")?;
     fs::write(
         group.join("pids.max"),
@@ -64,6 +65,37 @@ fn cgroups(cpu: u64, memory: u64) -> Result<()> {
     )?;
     Ok(())
 }
+// Some fixed guest kernels omit the swap controller. In that case only a
+// verified guest-wide absence of swap can replace the per-cgroup zero limit.
+fn disable_swap(group: &Path, meminfo: &Path) -> Result<()> {
+    let swap_limit = group.join("memory.swap.max");
+    match fs::symlink_metadata(&swap_limit) {
+        Ok(metadata) => {
+            if !metadata.is_file() || metadata.file_type().is_symlink() {
+                return Err("guest swap control invalid".into());
+            }
+            fs::write(&swap_limit, "0")?;
+            if fs::read_to_string(&swap_limit)?.trim() != "0" {
+                return Err("guest swap limit differs".into());
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let meminfo = fs::read_to_string(meminfo)?;
+            let totals = meminfo
+                .lines()
+                .filter(|line| line.starts_with("SwapTotal:"))
+                .collect::<Vec<_>>();
+            if totals.len() != 1
+                || totals[0].split_whitespace().collect::<Vec<_>>() != ["SwapTotal:", "0", "kB"]
+            {
+                return Err("unbounded guest swap".into());
+            }
+        }
+        Err(error) => return Err(error.into()),
+    }
+    Ok(())
+}
+
 fn material_path_is_relative(value: &str) -> bool {
     // ART owns Unicode normalization and project archive limits. Bootstrap only
     // enforces filesystem containment; finding-path presentation rules differ.
@@ -89,7 +121,33 @@ fn mount_directory(path: &Path) -> Result<()> {
     }
 }
 
-fn stage(job: &GuestJob, input: &mut impl Read) -> Result<File> {
+pub(crate) struct StagedJob {
+    request: File,
+    roots: BTreeMap<String, PathBuf>,
+}
+
+impl StagedJob {
+    #[allow(dead_code)] // Consumed by the separately owned trial guest module.
+    pub(crate) fn root(&self, name: &str) -> Option<&Path> {
+        self.roots.get(name).map(PathBuf::as_path)
+    }
+}
+
+fn valid_root_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
+fn stage(
+    job: &GuestJob,
+    roots: &[MaterialRoot],
+    input: &mut impl Read,
+    check: impl Fn() -> Result<()>,
+) -> Result<StagedJob> {
+    check()?;
     // Mask any image-owned /work before handling untrusted paths. Only this
     // trusted process runs in the image until staging and confinement complete.
     mount_directory(Path::new("/work"))?;
@@ -103,45 +161,309 @@ fn stage(job: &GuestJob, input: &mut impl Read) -> Result<File> {
     let staging = format!("/.workstream-material-{suffix}");
     fs::create_dir(&staging)?;
     mount(&staging, "/work", "", libc::MS_BIND, "")?;
-    fs::create_dir(INPUT_ROOT)?;
-    for directory in &job.directories {
-        if !material_path_is_relative(directory) {
-            return Err("unsafe directory".into());
+    fs::create_dir("/work/.materials")?;
+    fs::set_permissions("/work/.materials", fs::Permissions::from_mode(0o700))?;
+    let mut names = HashSet::new();
+    let mut staged_roots = BTreeMap::new();
+    for root in roots {
+        check()?;
+        if !valid_root_name(&root.name) || !names.insert(root.name.as_str()) {
+            return Err("material root invalid".into());
         }
-        fs::create_dir_all(Path::new(INPUT_ROOT).join(directory))?;
-    }
-    for entry in &job.files {
-        if !material_path_is_relative(&entry.normalized_path) {
-            return Err("unsafe file".into());
+        let root_path = Path::new("/work/.materials").join(&root.name);
+        fs::create_dir(&root_path)?;
+        for directory in &root.directories {
+            check()?;
+            if !material_path_is_relative(directory) {
+                return Err("unsafe directory".into());
+            }
+            fs::create_dir_all(root_path.join(directory))?;
         }
-        let path = Path::new(INPUT_ROOT).join(&entry.normalized_path);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
+        for entry in &root.files {
+            check()?;
+            if !material_path_is_relative(&entry.normalized_path) {
+                return Err("unsafe file".into());
+            }
+            let path = root_path.join(&entry.normalized_path);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(if entry.executable { 0o555 } else { 0o444 })
+                .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+                .open(&path)?;
+            let mut remaining = entry.byte_count;
+            let mut hash = Sha256::new();
+            let mut bytes = [0u8; 65536];
+            while remaining > 0 {
+                let size = remaining.min(bytes.len() as u64) as usize;
+                read_staged_bytes(input, &mut bytes[..size], &check)?;
+                hash.update(&bytes[..size]);
+                file.write_all(&bytes[..size])?;
+                remaining -= size as u64;
+                check()?;
+            }
+            if format!("sha256:{:x}", hash.finalize()) != entry.sha256 {
+                return Err("material hash differs".into());
+            }
         }
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(if entry.executable { 0o555 } else { 0o444 })
-            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-            .open(&path)?;
-        let mut remaining = entry.byte_count;
-        let mut hash = Sha256::new();
-        let mut bytes = [0u8; 65536];
-        while remaining > 0 {
-            let size = remaining.min(bytes.len() as u64) as usize;
-            input.read_exact(&mut bytes[..size])?;
-            hash.update(&bytes[..size]);
-            file.write_all(&bytes[..size])?;
-            remaining -= size as u64;
-        }
-        if format!("sha256:{:x}", hash.finalize()) != entry.sha256 {
-            return Err("material hash differs".into());
-        }
+        staged_roots.insert(root.name.clone(), root_path);
     }
     let request = "/work/request.json";
     fs::write(request, serde_json::to_vec(&job.request)?)?;
     fs::set_permissions(request, fs::Permissions::from_mode(0o444))?;
-    Ok(File::open(request)?)
+    Ok(StagedJob {
+        request: File::open(request)?,
+        roots: staged_roots,
+    })
+}
+
+// The trial input is nonblocking so a stalled host cannot hide CPU/deadline
+// checks behind read_exact. Ordinary checker inputs keep their existing stream.
+fn read_staged_bytes(
+    input: &mut impl Read,
+    mut bytes: &mut [u8],
+    check: &impl Fn() -> Result<()>,
+) -> Result<()> {
+    while !bytes.is_empty() {
+        check()?;
+        let maximum = bytes.len().min(65_536);
+        match input.read(&mut bytes[..maximum]) {
+            Ok(0) => return Err("material input truncated".into()),
+            Ok(count) => bytes = &mut bytes[count..],
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(2));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    check()
+}
+
+fn bind_material_root(staged: &StagedJob, name: &str, destination: &str) -> Result<()> {
+    let source = staged.roots.get(name).ok_or("material root missing")?;
+    let destination = Path::new(destination);
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    mount_directory(destination)?;
+    mount(
+        source.to_str().ok_or("material path invalid")?,
+        destination.to_str().ok_or("material path invalid")?,
+        "",
+        libc::MS_BIND,
+        "",
+    )
+}
+
+fn bind_project_materials(staged: &StagedJob) -> Result<()> {
+    if !valid_project_material_roots(staged.roots.keys().map(String::as_str)) {
+        return Err("project material roots invalid".into());
+    }
+    bind_material_root(staged, "current", INPUT_ROOT)?;
+    if staged.roots.len() == 2 {
+        bind_material_root(staged, "predecessor", PREDECESSOR_ROOT)?;
+    }
+    Ok(())
+}
+
+fn valid_project_material_roots<'a>(names: impl IntoIterator<Item = &'a str>) -> bool {
+    let names: Vec<_> = names.into_iter().collect();
+    names == ["current"] || names == ["current", "predecessor"]
+}
+
+fn create_capability_socket(path: &str, uid: u32, gid: u32) -> Result<UnixListener> {
+    let listener = UnixListener::bind(path)?;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+    syscall_ok(unsafe { libc::chown(c(path)?.as_ptr(), uid, gid) })?;
+    listener.set_nonblocking(true)?;
+    Ok(listener)
+}
+
+fn write_guest_header(header: &GuestIoHeader) -> Result<()> {
+    let bytes = serde_json::to_vec(header)?;
+    if bytes.is_empty() || bytes.len() > 4096 {
+        return Err("guest I/O header invalid".into());
+    }
+    let mut output = std::io::stdout().lock();
+    output.write_all(&(bytes.len() as u32).to_be_bytes())?;
+    output.write_all(&bytes)?;
+    output.flush()?;
+    Ok(())
+}
+
+fn read_guest_header(input: &mut File) -> Result<GuestIoHeader> {
+    let mut length = [0_u8; 4];
+    input.read_exact(&mut length)?;
+    let length = u32::from_be_bytes(length) as usize;
+    if length == 0 || length > 4096 {
+        return Err("guest I/O header invalid".into());
+    }
+    let mut bytes = vec![0_u8; length];
+    input.read_exact(&mut bytes)?;
+    Ok(serde_json::from_slice(&bytes)?)
+}
+
+fn read_local_frame(stream: &mut UnixStream, maximum: usize) -> Result<Option<Vec<u8>>> {
+    let mut length = [0_u8; 4];
+    let mut offset = 0;
+    while offset < length.len() {
+        match stream.read(&mut length[offset..]) {
+            Ok(0) if offset == 0 => return Ok(None),
+            Ok(0) => return Err("guest capability frame truncated".into()),
+            Ok(count) => offset += count,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error.into()),
+        }
+    }
+    let length = u32::from_be_bytes(length) as usize;
+    if length == 0 || length > maximum {
+        return Err("guest capability frame unbounded".into());
+    }
+    let mut bytes = vec![0_u8; length];
+    stream.read_exact(&mut bytes)?;
+    Ok(Some(bytes))
+}
+
+fn write_local_frame(stream: &mut UnixStream, bytes: &[u8], maximum: usize) -> Result<()> {
+    if bytes.is_empty() || bytes.len() > maximum {
+        return Err("guest capability frame unbounded".into());
+    }
+    stream.write_all(&(bytes.len() as u32).to_be_bytes())?;
+    stream.write_all(bytes)?;
+    Ok(())
+}
+
+struct CapabilityExchange {
+    channel: GuestIoChannel,
+    request: Vec<u8>,
+    response: SyncSender<std::result::Result<Vec<u8>, String>>,
+}
+
+fn serve_capability_session(
+    mut stream: UnixStream,
+    channel: GuestIoChannel,
+    exchanges: Sender<CapabilityExchange>,
+) -> Result<()> {
+    let maximum = match channel {
+        GuestIoChannel::Model => MODEL_FRAME_MAXIMUM,
+        GuestIoChannel::Execution => EXECUTION_FRAME_MAXIMUM,
+    };
+    while let Some(request) = read_local_frame(&mut stream, maximum)? {
+        let (response, receiver) = mpsc::sync_channel(0);
+        exchanges.send(CapabilityExchange {
+            channel,
+            request,
+            response,
+        })?;
+        let response = receiver
+            .recv()?
+            .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
+        write_local_frame(&mut stream, &response, maximum)?;
+    }
+    Ok(())
+}
+
+fn accept_capability_session(
+    listener: Option<&UnixListener>,
+    channel: GuestIoChannel,
+    accepted: &mut bool,
+    exchanges: &Sender<CapabilityExchange>,
+    sessions: &mut Vec<thread::JoinHandle<bool>>,
+) -> Result<bool> {
+    let Some(listener) = listener else {
+        return Ok(false);
+    };
+    match listener.accept() {
+        Ok((stream, _)) => {
+            if *accepted {
+                return Err("guest capability opened more than one session".into());
+            }
+            *accepted = true;
+            let exchanges = exchanges.clone();
+            sessions.push(thread::spawn(move || {
+                serve_capability_session(stream, channel, exchanges).is_ok()
+            }));
+            Ok(true)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => Ok(false),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn forward_capability(
+    input: &mut File,
+    channel: GuestIoChannel,
+    sequence: &mut u32,
+    request: &[u8],
+) -> Result<Vec<u8>> {
+    let maximum = match channel {
+        GuestIoChannel::Model => MODEL_FRAME_MAXIMUM,
+        GuestIoChannel::Execution => EXECUTION_FRAME_MAXIMUM,
+    };
+    *sequence = sequence
+        .checked_add(1)
+        .ok_or("guest I/O sequence exhausted")?;
+    write_guest_header(&GuestIoHeader::Request {
+        protocol_version: GUEST_IO_PROTOCOL.into(),
+        sequence: *sequence,
+        channel,
+        byte_count: request.len() as u32,
+    })?;
+    std::io::stdout().write_all(request)?;
+    std::io::stdout().flush()?;
+    let response = read_guest_header(input)?;
+    let byte_count = match response {
+        GuestIoHeader::Response {
+            protocol_version,
+            sequence: observed_sequence,
+            channel: observed_channel,
+            byte_count,
+        } if protocol_version == GUEST_IO_PROTOCOL
+            && observed_sequence == *sequence
+            && observed_channel == channel =>
+        {
+            byte_count as usize
+        }
+        _ => return Err("guest capability response invalid".into()),
+    };
+    if byte_count == 0 || byte_count > maximum {
+        return Err("guest capability response unbounded".into());
+    }
+    let mut bytes = vec![0_u8; byte_count];
+    input.read_exact(&mut bytes)?;
+    Ok(bytes)
+}
+
+fn read_bounded(mut stream: UnixStream, maximum: usize) -> (Vec<u8>, bool) {
+    let mut output = Vec::new();
+    let mut exceeded = false;
+    let mut buffer = [0_u8; 8192];
+    loop {
+        match stream.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(count) => {
+                if output.len().saturating_add(count) <= maximum {
+                    output.extend_from_slice(&buffer[..count]);
+                } else {
+                    exceeded = true;
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => {
+                exceeded = true;
+                break;
+            }
+        }
+    }
+    (output, exceeded)
+}
+
+fn socket_pair() -> Result<(UnixStream, UnixStream)> {
+    Ok(UnixStream::pair()?)
 }
 fn confined_devices() -> Result<()> {
     mount(
@@ -364,6 +686,215 @@ fn supervised_exit(status: i32, oom_kills: u64) -> i32 {
     }
 }
 
+fn finish_workload_cgroup() -> Result<u64> {
+    let group = Path::new("/sys/fs/cgroup/workstream-checker");
+    if group.join("cgroup.kill").exists() {
+        fs::write(group.join("cgroup.kill"), "1")?;
+    }
+    for _ in 0..5000 {
+        let events = fs::read_to_string(group.join("cgroup.events"))?;
+        if events.lines().any(|line| line == "populated 0") {
+            let memory = fs::read_to_string(group.join("memory.events"))?;
+            return Ok(memory
+                .lines()
+                .find_map(|line| line.strip_prefix("oom_kill "))
+                .ok_or("memory OOM evidence missing")?
+                .parse::<u64>()?);
+        }
+        thread::sleep(Duration::from_millis(2));
+    }
+    Err("workload descendants did not stop".into())
+}
+
+fn run_project(
+    job: GuestJob,
+    capabilities: GuestCapabilities,
+    staged: StagedJob,
+    mut input: File,
+    cpu: u64,
+    memory: u64,
+    maximum_output_bytes: usize,
+) -> Result<()> {
+    bind_project_materials(&staged)?;
+    let model = capabilities
+        .model
+        .then(|| create_capability_socket(MODEL_SOCKET, job.uid, job.gid))
+        .transpose()?;
+    let execution = capabilities
+        .execution
+        .then(|| create_capability_socket(EXECUTION_SOCKET, job.uid, job.gid))
+        .transpose()?;
+    let (stdout_parent, stdout_child) = socket_pair()?;
+    let (stderr_parent, stderr_child) = socket_pair()?;
+    cgroups(cpu, memory).map_err(|error| format!("cgroup: {error}"))?;
+    // The supervisor retains the trusted stream and capability listeners. The
+    // workload receives separate output pipes, so it cannot forge mux frames.
+    let child = unsafe { libc::fork() };
+    if child < 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    if child == 0 {
+        drop(stdout_parent);
+        drop(stderr_parent);
+        drop(model);
+        drop(execution);
+        drop(input);
+        private_mounts().map_err(|error| format!("workload mount namespace: {error}"))?;
+        fs::write(
+            "/sys/fs/cgroup/workstream-checker/cgroup.procs",
+            std::process::id().to_string(),
+        )?;
+        confined_devices().map_err(|error| format!("devices: {error}"))?;
+        readonly_filesystem().map_err(|error| format!("filesystem: {error}"))?;
+        drop_privileges(job.uid, job.gid).map_err(|error| format!("privileges: {error}"))?;
+        // SAFETY: both streams are live child-owned descriptors and dup2
+        // atomically replaces the conventional output descriptors.
+        if unsafe { libc::dup2(stdout_child.as_raw_fd(), 1) } < 0
+            || unsafe { libc::dup2(stderr_child.as_raw_fd(), 2) } < 0
+        {
+            return Err(std::io::Error::last_os_error().into());
+        }
+        drop(stdout_child);
+        drop(stderr_child);
+        syscall_filter().map_err(|error| format!("syscall policy: {error}"))?;
+        let mut command = Command::new(&job.command[0]);
+        command
+            .args(&job.command[1..])
+            .env_clear()
+            .stdin(staged.request);
+        for entry in &job.environment {
+            let (key, value) = entry.split_once('=').ok_or("invalid image environment")?;
+            command.env(key, value);
+        }
+        command.current_dir(if job.working_directory.is_empty() {
+            "/"
+        } else {
+            &job.working_directory
+        });
+        return Err(command.exec().into());
+    }
+    drop(stdout_child);
+    drop(stderr_child);
+    let stdout_reader = thread::spawn(move || read_bounded(stdout_parent, maximum_output_bytes));
+    let stderr_reader = thread::spawn(move || read_bounded(stderr_parent, 64 * 1024));
+    let (exchange_sender, exchange_receiver) = mpsc::channel::<CapabilityExchange>();
+    let mut sessions = Vec::new();
+    let mut model_accepted = false;
+    let mut execution_accepted = false;
+    let mut sequence = 0_u32;
+    let mut status = 0_i32;
+    loop {
+        let waited = unsafe { libc::waitpid(child, &mut status, libc::WNOHANG) };
+        if waited == child {
+            break;
+        }
+        if waited < 0 && std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+            return Err(std::io::Error::last_os_error().into());
+        }
+        let mut handled = false;
+        handled |= accept_capability_session(
+            model.as_ref(),
+            GuestIoChannel::Model,
+            &mut model_accepted,
+            &exchange_sender,
+            &mut sessions,
+        )?;
+        handled |= accept_capability_session(
+            execution.as_ref(),
+            GuestIoChannel::Execution,
+            &mut execution_accepted,
+            &exchange_sender,
+            &mut sessions,
+        )?;
+        match exchange_receiver.try_recv() {
+            Ok(exchange) => {
+                handled = true;
+                let response = match forward_capability(
+                    &mut input,
+                    exchange.channel,
+                    &mut sequence,
+                    &exchange.request,
+                ) {
+                    Ok(response) => response,
+                    Err(error) => {
+                        let message = error.to_string();
+                        let _ = exchange.response.send(Err(message));
+                        let _ = fs::write("/sys/fs/cgroup/workstream-checker/cgroup.kill", "1");
+                        let _ = unsafe { libc::waitpid(child, &mut status, 0) };
+                        return Err(error);
+                    }
+                };
+                exchange
+                    .response
+                    .send(Ok(response))
+                    .map_err(|_| "guest capability client disconnected")?;
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
+                return Err("guest capability workers unavailable".into())
+            }
+        }
+        let mut index = 0;
+        while index < sessions.len() {
+            if sessions[index].is_finished() {
+                let session = sessions.swap_remove(index);
+                if !matches!(session.join(), Ok(true)) {
+                    let _ = fs::write("/sys/fs/cgroup/workstream-checker/cgroup.kill", "1");
+                    let _ = unsafe { libc::waitpid(child, &mut status, 0) };
+                    return Err("guest capability session failed".into());
+                }
+            } else {
+                index += 1;
+            }
+        }
+        if !handled {
+            thread::sleep(Duration::from_millis(2));
+        }
+    }
+    drop(model);
+    drop(execution);
+    let oom_kills = finish_workload_cgroup()?;
+    drop(exchange_receiver);
+    drop(exchange_sender);
+    for session in sessions {
+        if !matches!(session.join(), Ok(true)) {
+            return Err("guest capability session failed".into());
+        }
+    }
+    let (stdout, stdout_exceeded) = stdout_reader
+        .join()
+        .map_err(|_| "workload stdout reader failed")?;
+    let (stderr, stderr_exceeded) = stderr_reader
+        .join()
+        .map_err(|_| "workload stderr reader failed")?;
+    let output_exceeded = stdout_exceeded || stderr_exceeded;
+    let (stdout, stderr) = if output_exceeded {
+        (Vec::new(), Vec::new())
+    } else {
+        (stdout, stderr)
+    };
+    let exit_code = libc::WIFEXITED(status).then(|| libc::WEXITSTATUS(status));
+    let signal = libc::WIFSIGNALED(status).then(|| libc::WTERMSIG(status));
+    write_guest_header(&GuestIoHeader::Completed {
+        protocol_version: GUEST_IO_PROTOCOL.into(),
+        exit_code,
+        signal,
+        oom_kills,
+        output_exceeded,
+        stdout_bytes: stdout.len() as u32,
+        stderr_bytes: stderr.len() as u32,
+    })?;
+    let mut output = std::io::stdout().lock();
+    output.write_all(&stdout)?;
+    output.write_all(&stderr)?;
+    output.flush()?;
+    std::process::exit(if output_exceeded && oom_kills == 0 {
+        125
+    } else {
+        supervised_exit(status, oom_kills)
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -410,6 +941,160 @@ mod tests {
         assert_eq!(supervised_exit(libc::SIGKILL, 1), CAPACITY_EXIT_CODE);
         assert_eq!(supervised_exit(0, 0), 0);
     }
+
+    #[test]
+    fn stalled_trial_material_input_remains_interruptible() {
+        struct Stalled;
+        impl Read for Stalled {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::ErrorKind::WouldBlock.into())
+            }
+        }
+        let checks = std::cell::Cell::new(0);
+        let result = read_staged_bytes(&mut Stalled, &mut [0_u8; 1], &|| {
+            checks.set(checks.get() + 1);
+            if checks.get() >= 3 {
+                Err("cancelled".into())
+            } else {
+                Ok(())
+            }
+        });
+        assert!(result.is_err());
+        assert_eq!(checks.get(), 3);
+        assert!(read_staged_bytes(&mut std::io::empty(), &mut [0_u8; 1], &|| Ok(())).is_err());
+    }
+
+    #[test]
+    fn framed_bootstrap_body_is_read_in_checked_bounded_chunks() {
+        struct Chunks {
+            maximum: usize,
+            remaining: usize,
+        }
+        impl Read for Chunks {
+            fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+                self.maximum = self.maximum.max(bytes.len());
+                let count = bytes.len().min(self.remaining);
+                bytes[..count].fill(1);
+                self.remaining -= count;
+                Ok(count)
+            }
+        }
+        let mut input = Chunks {
+            maximum: 0,
+            remaining: MAX_JOB_BYTES,
+        };
+        let checks = std::cell::Cell::new(0);
+        let mut bytes = vec![0_u8; MAX_JOB_BYTES];
+        read_staged_bytes(&mut input, &mut bytes, &|| {
+            checks.set(checks.get() + 1);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(input.maximum, 65_536);
+        assert_eq!(checks.get(), MAX_JOB_BYTES / 65_536 + 1);
+        assert_eq!(input.remaining, 0);
+    }
+
+    #[test]
+    fn project_material_topology_is_closed() {
+        assert!(valid_project_material_roots(["current"]));
+        assert!(valid_project_material_roots(["current", "predecessor"]));
+        assert!(!valid_project_material_roots([]));
+        assert!(!valid_project_material_roots(["predecessor"]));
+        assert!(!valid_project_material_roots(["current", "other"]));
+        assert!(!valid_project_material_roots([
+            "current",
+            "predecessor",
+            "other"
+        ]));
+    }
+
+    #[test]
+    fn capability_session_distinguishes_clean_eof_from_truncated_frame() {
+        let (mut reader, writer) = UnixStream::pair().unwrap();
+        drop(writer);
+        assert!(read_local_frame(&mut reader, 16).unwrap().is_none());
+
+        let (mut reader, mut writer) = UnixStream::pair().unwrap();
+        writer.write_all(&[0, 0]).unwrap();
+        writer.shutdown(std::net::Shutdown::Write).unwrap();
+        assert!(read_local_frame(&mut reader, 16).is_err());
+    }
+
+    #[test]
+    fn persistent_model_session_does_not_block_execution_or_second_model_call() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "ws-guest-capabilities-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir(&root).unwrap();
+        let model_listener = UnixListener::bind(root.join("model.sock")).unwrap();
+        let execution_listener = UnixListener::bind(root.join("execution.sock")).unwrap();
+        model_listener.set_nonblocking(true).unwrap();
+        execution_listener.set_nonblocking(true).unwrap();
+        let mut model_client = UnixStream::connect(root.join("model.sock")).unwrap();
+        let mut execution_client = UnixStream::connect(root.join("execution.sock")).unwrap();
+        let (sender, receiver) = mpsc::channel();
+        let mut sessions = Vec::new();
+        let mut model_accepted = false;
+        let mut execution_accepted = false;
+        assert!(accept_capability_session(
+            Some(&model_listener),
+            GuestIoChannel::Model,
+            &mut model_accepted,
+            &sender,
+            &mut sessions,
+        )
+        .unwrap());
+        assert!(accept_capability_session(
+            Some(&execution_listener),
+            GuestIoChannel::Execution,
+            &mut execution_accepted,
+            &sender,
+            &mut sessions,
+        )
+        .unwrap());
+
+        let exchange = |client: &mut UnixStream,
+                        expected_channel: GuestIoChannel,
+                        request: &[u8],
+                        response: &[u8]| {
+            write_local_frame(client, request, 1024).unwrap();
+            let exchange = receiver.recv_timeout(Duration::from_secs(1)).unwrap();
+            assert_eq!(exchange.channel, expected_channel);
+            assert_eq!(exchange.request, request);
+            exchange.response.send(Ok(response.to_vec())).unwrap();
+            assert_eq!(read_local_frame(client, 1024).unwrap().unwrap(), response);
+        };
+        exchange(
+            &mut model_client,
+            GuestIoChannel::Model,
+            b"model-one",
+            b"model-one-response",
+        );
+        exchange(
+            &mut execution_client,
+            GuestIoChannel::Execution,
+            b"execute",
+            b"execution-response",
+        );
+        exchange(
+            &mut model_client,
+            GuestIoChannel::Model,
+            b"model-two",
+            b"model-two-response",
+        );
+
+        drop(model_client);
+        drop(execution_client);
+        drop(sender);
+        assert!(sessions.into_iter().all(|session| session.join().unwrap()));
+        fs::remove_dir_all(root).unwrap();
+    }
 }
 
 fn main() {
@@ -419,6 +1104,15 @@ fn main() {
     }
 }
 fn run() -> Result<()> {
+    let bootstrap_limits = trial::parse_bootstrap_limits(std::env::args_os().skip(1))?;
+    let trial_envelope = bootstrap_limits
+        .map(trial::TrialEnvelope::prepare)
+        .transpose()?;
+    let check_input = || {
+        trial_envelope
+            .as_ref()
+            .map_or(Ok(()), |envelope| envelope.check())
+    };
     // Read exactly the bootstrap bytes without userspace read-ahead: trusted
     // intake keeps the remaining command stream as its stdin after exec.
     let descriptor = unsafe { libc::dup(0) };
@@ -426,26 +1120,36 @@ fn run() -> Result<()> {
         return Err(std::io::Error::last_os_error().into());
     }
     let mut input = unsafe { File::from_raw_fd(descriptor) };
+    if trial_envelope.is_some() {
+        trial::set_nonblocking(&input)?;
+    }
     let mut length = [0u8; 4];
-    input.read_exact(&mut length)?;
+    read_staged_bytes(&mut input, &mut length, &check_input)?;
     let length = u32::from_be_bytes(length) as usize;
     if length == 0 || length > MAX_JOB_BYTES {
         return Err("job size invalid".into());
     }
     let mut bytes = vec![0; length];
-    input.read_exact(&mut bytes)?;
+    read_staged_bytes(&mut input, &mut bytes, &check_input)?;
     let job: GuestJob = serde_json::from_slice(&bytes)?;
-    let (cpu, memory, intake) = match job.purpose {
-        GuestPurpose::Project => {
+    check_input()?;
+    let trial_request = trial::bind_bootstrap_job(&job, bootstrap_limits)?;
+    check_input()?;
+    let purpose = job.purpose.clone();
+    let (cpu, memory, roots) = match &purpose {
+        GuestPurpose::Project { materials, .. } => {
+            if !job.directories.is_empty() || !job.files.is_empty() {
+                return Err("project material roots invalid".into());
+            }
             let request = parse_request(&serde_json::to_vec(&job.request)?)?;
-            (request.cpu_millis, request.memory_bytes, false)
+            (request.cpu_millis, request.memory_bytes, materials.clone())
         }
         GuestPurpose::TrustedIntake {
             cpu_millis,
             memory_bytes,
         } => {
-            if cpu_millis != 1000
-                || memory_bytes != 2 * 1024 * 1024 * 1024
+            if *cpu_millis != 1000
+                || *memory_bytes != 2 * 1024 * 1024 * 1024
                 || job.files.len() != 1
                 || job.files[0].normalized_path != "archive.zip"
                 || job.files[0].byte_count > 512 * 1024 * 1024
@@ -453,18 +1157,55 @@ fn run() -> Result<()> {
             {
                 return Err("trusted intake bootstrap invalid".into());
             }
-            (cpu_millis, memory_bytes, true)
+            (
+                *cpu_millis,
+                *memory_bytes,
+                vec![MaterialRoot {
+                    name: "archive".into(),
+                    directories: job.directories.clone(),
+                    files: job.files.clone(),
+                }],
+            )
+        }
+        GuestPurpose::TrialBuild { materials } | GuestPurpose::TrialStep { materials } => {
+            if !job.directories.is_empty() || !job.files.is_empty() {
+                return Err("trial material roots invalid".into());
+            }
+            (0, 0, materials.clone())
         }
     };
     if job.command.is_empty() || job.command.len() > 256 || job.environment.len() > 1024 {
         return Err("image configuration invalid".into());
     }
     private_mounts().map_err(|e| format!("mount namespace: {e}"))?;
-    // Stage before applying workload memory: submitted files are immutable input,
-    // not checker heap. The enclosing VMM and disk bounds cover staging custody.
-    let request_file = stage(&job, &mut input).map_err(|e| format!("staging: {e}"))?;
+    // Trial staging belongs to the same finite envelope as formatting, child
+    // execution and export. Other purposes retain their existing custody owner.
+    let staged = stage(&job, &roots, &mut input, || {
+        trial_envelope
+            .as_ref()
+            .map_or(Ok(()), |envelope| envelope.check())
+    })
+    .map_err(|e| format!("staging: {e}"))?;
+    if let Some(envelope) = trial_envelope {
+        drop(input);
+        let request = trial_request.ok_or("trial request binding missing")?;
+        return trial::run(&job, &staged, request, envelope);
+    }
+    if let GuestPurpose::Project { capabilities, .. } = &purpose {
+        let request = parse_request(&serde_json::to_vec(&job.request)?)?;
+        return run_project(
+            job,
+            *capabilities,
+            staged,
+            input,
+            cpu,
+            memory,
+            request.maximum_output_bytes,
+        );
+    }
     drop(input);
-    if intake {
+    bind_material_root(&staged, "archive", INPUT_ROOT)?;
+    if matches!(purpose, GuestPurpose::TrustedIntake { .. }) {
         fs::create_dir("/work/scratch")?;
         mount("/work/scratch", "/work/scratch", "", libc::MS_BIND, "")?;
         syscall_ok(unsafe { libc::chown(c("/work/scratch")?.as_ptr(), job.uid, job.gid) })?;
@@ -506,7 +1247,7 @@ fn run() -> Result<()> {
     )?;
     confined_devices().map_err(|e| format!("devices: {e}"))?;
     readonly_filesystem().map_err(|e| format!("filesystem: {e}"))?;
-    if intake {
+    if matches!(purpose, GuestPurpose::TrustedIntake { .. }) {
         // Only the trusted worker receives private VM-disk scratch. Project
         // workloads retain their existing bounded tmpfs-only writable surface.
         mount(
@@ -521,9 +1262,7 @@ fn run() -> Result<()> {
     syscall_filter().map_err(|e| format!("syscall policy: {e}"))?;
     let mut command = Command::new(&job.command[0]);
     command.args(&job.command[1..]).env_clear();
-    if !intake {
-        command.stdin(request_file);
-    }
+    // Trusted intake retains the remaining host command stream as stdin.
     for entry in &job.environment {
         let (key, value) = entry.split_once('=').ok_or("invalid image environment")?;
         command.env(key, value);

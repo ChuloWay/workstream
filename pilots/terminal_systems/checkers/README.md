@@ -4,6 +4,25 @@ These are project-owned images. They use the standard request/result protocol
 and verified read-only material mounted at `/work/input`; they do not import
 Workstream, modify the shared Rust service, or depend on the five initial tasks.
 
+## How the parts fit together
+
+The project guide defines the work. Setup proposes PRE and POST check
+specifications from that guide; engineering implements the project images and
+the PM approves their policy bindings. Setup does not decide revision limits or
+task lifecycle rules.
+
+Workstream supplies shared budgeted model access and stores verified evidence.
+The external Rust service supplies isolated execution. This project's Python
+POST image decides what to inspect and how to assess it against the project
+requirements. A different project supplies its own rules and image.
+
+Here, a **trial** is one isolated execution of submitted code, such as a build
+or test run. The `trial_*` modules implement its transport, limits, execution,
+and evidence handling; they are not separate services or product lifecycles.
+`post/qualification/runtime_package` is an engineering test fixture, not the
+real project guide or a live pilot task. The runtime qualification limits below
+remain distinct from a completed live project journey.
+
 ## Source specification
 
 [`setup-handoff.json`](setup-handoff.json) retains the actual final reviewed
@@ -65,18 +84,123 @@ do not establish hosted gVisor isolation.
 
 ## POST prerequisites
 
-The six model specifications and two execution specifications are not yet
-implemented. The user has resumed the minimal budgeted model runtime needed by
-this project. The generic runtime and its Operator provisioning/recovery controls
-are described in [the model runtime runbook](../../../docs/operations_checker_models.md).
-They preserve digest-pinned project images, exact locked configuration and
-Workstream-owned lifecycle decisions. Credentials stay outside the sandbox.
-The project still needs its review images, approved model profile selectors and
-the authorized US$10 lifetime budget before live calls. Offline runtime proofs
-do not establish this project's activation or live provider operation.
+POST engineering is in progress against the retained six model and two execution
+suggestions; those counts describe the historical handoff, not an eligibility
+set or approval. The project agent now has strict material/rubric validation, a
+bounded source-cited plan, invocation-local model-session and execution-socket
+clients, protected build/state projections, and receipt-bound runtime and author
+assessment cores. The shared runner implements generic offline image building
+and trials in Smol sibling microVMs, with resource, cancellation, cleanup and
+recovery controls. An earlier Rust service and Python project image passed the
+model→trial→retained-receipt→model flow with a controlled provider, real gVisor
+execution, PostgreSQL and MinIO at `3e67d39c8`. That run retained two verified trial
+receipts with 17 step outcomes each and four settled model effects; replay made
+no additional provider calls. Database, storage and owned Docker cleanup passed.
+This qualifies the runtime composition using a qualification package. It does
+not establish live-model grading or the public guide-to-contribution journey.
+This POST image has not been published, registered, approved or activated.
 
-Execution additionally needs a generic isolated build/trial capability and
-approved offline material. Author-evidence review needs authenticated trial
-records; revision checks need the exact prior work and feedback from their
-owners. The current one-container runner does not supply these capabilities.
-Do not activate this guide or publish passing substitutes while these gaps remain.
+The deployment target is Smol microVMs. The historical qualification above
+exercised the superseded gVisor trial implementation only. Smol now implements
+model/trial callbacks and predecessor material through the existing guest and
+lease boundaries; its real microVM composition qualification remains required.
+The earlier result does not qualify this project for its intended deployment.
+There is no Docker/runsc trial fallback.
+
+[`post/model/execution-rubrics.json`](post/model/execution-rubrics.json) is an
+exact semantic projection of that historical handoff. Its
+`post_submit_capability_gap` disposition records the source proposal's state; it
+is not a current policy binding or a claim that the implemented trial runtime is
+unavailable. Qualification constructs a separate typed specification declaring
+the outer `isolated_execution/current_runner`, nested
+`nested_sandbox/trial_proxy`, and receipt assessment
+`model_service/model_proxy` dependencies. A future #555 correction must review
+that current dependency shape before it can bind or approve it.
+
+The locked POST configuration schema must declare all six flat trial selectors:
+`trial_profile_id`, `trial_profile_version`, `trial_profile_digest`,
+`trial_projection_id`, `trial_projection_version`, and
+`trial_projection_digest`. They are selected together and resolved against the
+exact operator-provisioned authority manifest entry already bound to the
+registry entry, checker image and configuration hashes. Missing, partial,
+unknown or noncanonical `trial_*` fields fail closed. Final qualification
+evidence must carry the exact image digest, profile/projection digests, runtime
+configuration and engine/platform identities, offline builder/cache/base
+identities, canonical retained receipt digest and ART binding identities.
+
+The project image and production service boundary have a separate explicit
+Docker-development qualifier:
+
+```bash
+python3 external_checkers/workstream-checker-service/tests/terminal_systems_post_composition.py \
+  --service external_checkers/target/debug/workstream-checker-service
+```
+
+On 2026-10-23 it rebuilt the pinned Dockerfile offline from locally verified
+base layers (60.29 KiB context), selected project image ID
+`sha256:cd11dc1125a96527641cf9a1e5c99d947b3566cb07bb51bbae086d369476126d`,
+and passed an assessed v2 model-session request through the production Rust
+service. The qualifier checks exact immutable image selection, verified
+read-only material, network-disabled/read-only/capability-free containment,
+invocation-local socket mounting, and container/relay cleanup. Its result
+deliberately records `durable_art_proven=false`, `trial_proven=false`, and
+`runsc_proven=false`; the PostgreSQL/MinIO custody journey and PILOT-00 runsc
+trial qualification are distinct evidence lanes.
+
+The composed qualifier is an explicit operator test on a separately provisioned
+Linux/KVM node. It uses the native Smol service, sealed local images/cache and
+isolated PostgreSQL/MinIO endpoints. It does not alter shared services or pull
+images. Provision a delegated service cgroup and build the service, guest and
+trusted launcher from the same clean commit. The required static ext4 tool is
+built with the generic [filesystem tool helper](../../../external_checkers/workstream-checker-service/scripts/build_smol_filesystem_tool.sh).
+
+```bash
+python3 external_checkers/workstream-checker-service/scripts/qualify_terminal_systems_smol.py \
+  --expected-head "$(git rev-parse HEAD)" \
+  --expected-tree "$(git rev-parse 'HEAD^{tree}')" \
+  --node-config /absolute/prepared/node.json \
+  --build-manifest /absolute/prepared/build-manifest.json \
+  --service /absolute/prepared/workstream-checker-service \
+  --python /absolute/backend-venv/bin/python \
+  --root /absolute/fresh-composition-root \
+  --evidence /absolute/fresh-evidence-directory \
+  --platform-identity sha256:<verified-platform-identity> \
+  --cache-digest sha256:<sealed-cache-manifest> \
+  --checker-digest sha256:<project-image-platform-manifest>
+```
+
+Supply the isolated-test PostgreSQL and MinIO environment documented in the
+backend testing guide. The build manifest records `source_head`, `source_tree`
+and a `binaries` map with the SHA-256 identities of `service`, `guest`, `launcher`
+and `filesystem_tool`. The wrapper checks those against the actual files and
+node pins before and after execution. Source and prepared node configuration
+must remain unchanged. Missing prerequisites fail the run; they never skip it.
+Logs and failure status are retained. Success requires the exact completed test,
+no skips or failures, database/MinIO cleanup, verified trial/model custody,
+zero extra model calls on replay and removal of owned VM resources.
+
+The test uses `post/qualification/runtime_package`: a deliberately small package
+with a pinned Dockerfile, reference, negative mutations, interruption and restart
+procedures. Its explicit 2 GiB total trial disk ceiling covers pinned builder,
+cache, material and export copies as well as mutable work. The generic runtime
+checks that aggregate budget; it does not add an implicit tool allowance.
+This is controlled-provider image/service/runtime/custody evidence, not a
+project task or #555's public activation-to-contribution journey. Historical
+runsc results do not qualify the Smol target. No live provider is called.
+
+The author-accuracy draft adds `reproduction_procedure_unavailable` for the
+narrow case where an absent or ambiguous exact procedure prevents authenticated
+comparison. It reports incomplete coverage; it does not call healthy runtime
+infrastructure unavailable, invent an unobserved discrepancy, add a guide duty,
+or reuse another requirement's finding. The retained setup handoff remains
+byte-for-byte historical. The #555 owner must include this exact draft finding
+and image contract in a fresh PRE/POST proposal for review before any binding or
+activation.
+
+The shared model-account owner retains provider budget/effect custody and the
+durable receipt resolver. TASK/ART/CHECKERS owners supply authenticated revision
+context and predecessor material; project code does not query their private
+tables. Credentials stay outside the sandbox, nested submitted code receives no
+relay sockets, and all model/trial unavailability remains infrastructure rather
+than a contributor finding. Do not publish passing substitutes or treat this
+engineering checkpoint as the live contribution journey.

@@ -420,7 +420,6 @@ impl InvocationRelay {
         )
     }
 
-    #[cfg(test)]
     pub(crate) fn socket_path(&self) -> &Path {
         &self.paths.socket
     }
@@ -689,7 +688,6 @@ fn canonical_json_receipt(value: &str, expected_sha256: &str) -> bool {
     digest.update(value.as_bytes());
     format!("sha256:{:x}", digest.finalize()) == expected_sha256
 }
-
 fn cleanup_paths(paths: &RelayPaths) -> bool {
     let socket_ok = match fs::symlink_metadata(&paths.socket) {
         Ok(metadata)

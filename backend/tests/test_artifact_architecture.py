@@ -713,6 +713,7 @@ def test_checker_materialization_contract_has_one_canonical_consumer_owner() -> 
     tree = _tree(CHECKER_MATERIALIZATION_API)
     classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
     assert set(classes) == {
+        "MaterializationMaterialFacts",
         "MaterializationFacts",
         "PreparedMaterialization",
         "MaterializationAuthorityPort",
@@ -765,7 +766,8 @@ def _assert_checker_custody_consumers(
     expected = {
         "app.modules.checkers.api.output_custody": {
             "app/adapters/artifacts/__init__.py",
-                "app/adapters/checkers/model_proxy.py",
+            "app/adapters/checkers/model_proxy.py",
+            "app/adapters/checkers/trial_proxy.py",
             "app/modules/artifacts/api/checker_output_authority.py",
             "app/modules/artifacts/checker_output_bindings.py",
             "app/modules/artifacts/checker_output_custody.py",
