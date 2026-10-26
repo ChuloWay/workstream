@@ -1075,3 +1075,20 @@ exact process UID/GID, one link and zero bytes, preserving its initial device an
 inode. Unknown entries remain unclean. Focused inventory and filesystem controls
 passed, including wrong/multiple inventory and replacement lock refusal. No
 runtime or image change was needed; fresh physical recovery cases remain required.
+
+Fresh recovery 014 also stopped before its marker or fault: this time the strict
+observer rejected a nonempty wrong/multiple inventory, whose actual rows were
+not retained by the assertion. No negative recovery claim is made. Its cleanup
+receipt is
+`sha256:3153166334f1101ffdf3697165d0c1090f570edaef3cce7a362373e994d172e8`;
+all owned VM directories, leases and cgroups were absent, all three roots had
+only their verified marker, and database/object-store cleanup passed.
+A bounded create-only discriminator 37 observed empty inventory followed by
+one exact named/labelled created VM; it did not reproduce the anomalous rows.
+Its exact machine/HOME/cgroup were removed, with receipt
+`sha256:6c4c54cf5c2cdf504b0e02e039e77492c5b2a18cac65b87c92ffd7ddcd6f3e9b`.
+The VM window was released for the hosted baseline. The next observer probe
+will retain bounded whitelisted inventory identities and a raw-inventory hash
+before the unchanged strict rejection; no unobserved inventory normalization
+or runtime change is justified. All three active nested recovery cases remain
+pending actual marker/fault/custody/capacity evidence.

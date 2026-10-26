@@ -138,12 +138,40 @@ class NestedTrialRecovery:
                 assert lease["runtime"][key] == self.config["smol"][key]
             try:
                 home_identity = self.private_directory(home)
-                rows = json.loads(self.runtime(home, "machine", "ls", "--json").stdout)
+                inventory_bytes = self.runtime(home, "machine", "ls", "--json").stdout
+                rows = json.loads(inventory_bytes)
             except (FileNotFoundError, subprocess.CalledProcessError):
                 if not path.exists():
                     continue  # Only an already-removed exact lease may disappear.
                 raise
-            machine = self.child_inventory(rows, name)
+            try:
+                machine = self.child_inventory(rows, name)
+            except AssertionError:
+                # Preserve the exact discriminator before failing closed. These
+                # are bounded owned-VM identity facts, never argv or payloads.
+                def fact(value):
+                    if isinstance(value, str):
+                        return value[:256]
+                    return value if value is None or type(value) in (int, bool) else type(value).__name__
+                observed = []
+                for row in rows[:8] if isinstance(rows, list) else ():
+                    if not isinstance(row, dict):
+                        observed.append({"row_type": type(row).__name__})
+                        continue
+                    labels = row.get("labels")
+                    observed.append({key: fact(row.get(key)) for key in ("name", "state", "pid", "network")} | {
+                        "owner": fact(labels.get("workstream.external-checker-owner")) if isinstance(labels, dict) else None,
+                    })
+                diagnostic = {"expected_name": name, "expected_owner": owner,
+                              "child_home": str(home), "child_home_identity": home_identity,
+                              "row_count": len(rows) if isinstance(rows, list) else None,
+                              "inventory_type": type(rows).__name__, "observed_rows": observed,
+                              "raw_inventory_sha256": "sha256:" + hashlib.sha256(inventory_bytes).hexdigest()}
+                destination = self.service_root.parent / "inventory-failure.json"
+                descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+                with os.fdopen(descriptor, "w") as output:
+                    json.dump(diagnostic, output, sort_keys=True)
+                raise
             if machine is None:
                 self.pending_create_observations += 1
                 continue
