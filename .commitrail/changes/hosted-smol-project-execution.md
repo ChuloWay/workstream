@@ -165,3 +165,32 @@ and outstanding reserved amounts within the total cap; conservative ledger
 charges are not represented as an external provider invoice. Any later live
 model-plus-trial proof must reuse this same project/account and its remaining
 headroom. No separate US$10 allowance or automatic paid retry is introduced.
+
+### Hosted fault-supervisor qualification
+
+The hosted proof separates root-owned operator controls from a fixed
+`10001:10001` runtime sibling. The existing node configuration remains mode
+`0400` on its original inode and is restored without changing ownership or
+permissions. Writes reject file substitution, aliases, extra links and foreign
+ancestors. A root-owned sticky ancestor is allowed only above the validated
+private directory. Runtime inventory commands drop root and supplementary groups;
+the runtime cannot read the operator controls or acquire operator authority.
+
+The root independently reviewed the three-file change at `5e28b089e`.
+Twenty-five focused supervisor/attachment tests passed, including refusal of a
+FIFO, foreign ancestry and substituted configuration. An isolated EC2 custody
+probe confirmed the identity split and exact configuration restoration; that
+probe preceded the final nonblocking-open addition, which has focused test proof.
+The canonical fresh hosted migration also passed after correcting the unused
+fixture secrets to the required padded Base64 encoding. Product validation was
+unchanged. These results do not establish the pending public hosted journey or
+live model result.
+
+The five-file model qualification at `ea49554b7` passed 37 focused tests. Root
+review verified the public profile/budget/registry owners, exact model effect
+inspection DTO, paid-slot joins, fixed deployment claim and full lifetime budget.
+The exclusive claim is synced with its parent directory before public mutations;
+changing the input path cannot allocate another paid project. Both evaluation
+and completion duplicates are observed through real Celery task identities, with
+unchanged model, grant, slot, account and governed-outcome facts required. No
+live provider call is established by these tests.
