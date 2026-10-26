@@ -32,15 +32,16 @@ pub(crate) struct Admission {
     used: Mutex<Capacity>,
     maximum: Capacity,
     pub(crate) epoch: String,
+    poisoned: AtomicBool,
 }
 
 impl Admission {
     pub(crate) fn reserved_storage_bytes(&self) -> Result<u64, String> {
-        Ok(self
-            .used
-            .lock()
-            .map_err(|_| "node admission unavailable")?
-            .storage_bytes)
+        let used = self.used.lock().map_err(|_| "node admission unavailable")?;
+        if self.poisoned.load(Ordering::SeqCst) {
+            return Err("node admission quarantined".into());
+        }
+        Ok(used.storage_bytes)
     }
 
     pub(crate) fn new(maximum: Capacity, epoch: String) -> Result<Self, String> {
@@ -51,6 +52,7 @@ impl Admission {
             used: Mutex::new(Capacity::default()),
             maximum,
             epoch,
+            poisoned: AtomicBool::new(false),
         })
     }
 
@@ -70,6 +72,9 @@ impl Admission {
             .checked_add(child.unwrap_or_default())
             .ok_or("capacity overflow")?;
         let mut used = self.used.lock().map_err(|_| "node admission unavailable")?;
+        if self.poisoned.load(Ordering::SeqCst) {
+            return Err("node admission quarantined".into());
+        }
         let next = used
             .checked_add(charge)
             .filter(|v| v.fits(self.maximum))
@@ -103,6 +108,14 @@ impl Reservation {
         {
             return Err("child exceeds reserved capacity".into());
         }
+        let _used = self
+            .admission
+            .used
+            .lock()
+            .map_err(|_| "node admission unavailable")?;
+        if self.admission.poisoned.load(Ordering::SeqCst) {
+            return Err("node admission quarantined".into());
+        }
         self.child_active
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .map_err(|_| "child capacity already in use")?;
@@ -126,6 +139,14 @@ impl Drop for Reservation {
 #[derive(Debug)]
 pub(crate) struct ChildReservation {
     parent: Arc<Reservation>,
+}
+
+impl ChildReservation {
+    /// Keep the full invocation charge and reject new work after uncertain cleanup.
+    pub(crate) fn quarantine(self) {
+        self.parent.admission.poisoned.store(true, Ordering::SeqCst);
+        std::mem::forget(self);
+    }
 }
 
 impl Drop for ChildReservation {
@@ -205,5 +226,18 @@ mod tests {
         assert_eq!(held.iter().filter(|v| v.is_ok()).count(), 1);
         drop(held);
         assert_eq!(*node.used.lock().unwrap(), Capacity::default());
+    }
+
+    #[test]
+    fn unsettled_child_quarantines_the_node_until_restart() {
+        let node = Arc::new(Admission::new(amount(2, 20, 20), "test".into()).unwrap());
+        let held = node
+            .reserve(amount(1, 10, 10), Some(amount(1, 10, 10)))
+            .unwrap();
+        held.child(amount(1, 10, 10)).unwrap().quarantine();
+        drop(held);
+        assert!(node.reserve(amount(1, 1, 1), None).is_err());
+        assert!(node.reserved_storage_bytes().is_err());
+        assert_eq!(node.used.lock().unwrap().storage_bytes, 20);
     }
 }
