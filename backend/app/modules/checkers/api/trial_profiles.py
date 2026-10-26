@@ -103,8 +103,8 @@ class TrialResourceCeilings:
             self.maximum_step_timeout_ms > self.maximum_total_timeout_ms
         ):
             raise TrialProfileError("trial timeout ceiling is invalid")
-        if self.maximum_pids < 2:
-            raise TrialProfileError("trial PID ceiling cannot host the trusted launcher and child")
+        if self.maximum_pids < 3:
+            raise TrialProfileError("trial PID ceiling cannot host supervisor, launcher and child")
         if (
             any(
                 value > 4 * 1024 * 1024

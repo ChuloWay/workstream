@@ -489,7 +489,7 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
             builder_image_digest: context.profile.builder_image_digest.clone(),
             trusted_launcher_digest: context.profile.trusted_launcher_digest.clone(),
             offline_cache_digest: context.profile.offline_cache_digest.clone(),
-            base_image_digests: context.profile.approved_base_digests.clone(),
+            approved_base_digests: context.profile.approved_base_digests.clone(),
             material_inventory_digests: inventories,
             build: build.observation,
             steps,

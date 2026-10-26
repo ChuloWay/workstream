@@ -77,6 +77,7 @@ pub(crate) struct TrialProfile {
     pub(crate) builder_image_digest: String,
     pub(crate) trusted_launcher_digest: String,
     pub(crate) offline_cache_digest: String,
+    // Locked profile authority context, not an observation of consumed FROM images.
     pub(crate) approved_base_digests: Vec<String>,
     pub(crate) source_material_roles: Vec<String>,
     pub(crate) material_projections: Vec<TrialMaterialProjectionProfile>,
@@ -178,7 +179,8 @@ pub(crate) struct TrialExecution {
     pub(crate) builder_image_digest: String,
     pub(crate) trusted_launcher_digest: String,
     pub(crate) offline_cache_digest: String,
-    pub(crate) base_image_digests: Vec<String>,
+    // Locked profile authority context, not an observation of consumed FROM images.
+    pub(crate) approved_base_digests: Vec<String>,
     pub(crate) material_inventory_digests: Vec<RoleInventoryDigest>,
     pub(crate) build: TrialBuildObservation,
     pub(crate) steps: Vec<TrialStepObservation>,
@@ -907,7 +909,7 @@ pub(crate) fn valid_profile(profile: &TrialProfile) -> bool {
         && profile.maximum_entries_overrun > 0
         // Every submitted operation runs beneath the trusted PID 1 launcher,
         // and the whole-container ceiling includes both processes.
-        && profile.maximum_pids >= 2
+        && profile.maximum_pids >= workstream_checker_guest::MINIMUM_TRIAL_PIDS
         && profile.maximum_pids_overrun > 0
         && !profile.platform.is_empty()
 }
@@ -1536,7 +1538,7 @@ fn validate_execution(
         || execution.builder_image_digest != profile.builder_image_digest
         || execution.trusted_launcher_digest != profile.trusted_launcher_digest
         || execution.offline_cache_digest != profile.offline_cache_digest
-        || execution.base_image_digests != profile.approved_base_digests
+        || execution.approved_base_digests != profile.approved_base_digests
         || execution.steps.len() != plan.steps.len()
         || !valid_build_observation(&execution.build, plan, profile)
         || !valid_role_inventory(

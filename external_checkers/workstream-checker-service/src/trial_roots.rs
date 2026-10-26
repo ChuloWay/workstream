@@ -202,6 +202,28 @@ impl RecoveryBudget {
     }
 }
 
+// Smol hard-links immutable approved image archives into its exclusive HOME.
+// Removing that cache link after lease cleanup must preserve the source inode.
+fn read_only_image_cache_link(path: &Path, custody: &Custody, metadata: &fs::Metadata) -> bool {
+    if custody.role != "child_home" || metadata.mode() & 0o7777 != 0o400 {
+        return false;
+    }
+    let Ok(relative) = path.strip_prefix(&custody.path) else {
+        return false;
+    };
+    let parts: Vec<_> = relative.components().collect();
+    parts.len() == 5
+        && parts[1].as_os_str() == ".cache"
+        && parts[2].as_os_str() == "smolvm-image-archives"
+        && parts[3].as_os_str().to_str().is_some_and(|name| {
+            name.len() == 64
+                && name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+        })
+        && parts[4].as_os_str() == "archive.tar"
+}
+
 fn inspect_entry(
     path: &Path,
     custody: &Custody,
@@ -221,7 +243,9 @@ fn inspect_entry(
         || metadata.gid() != unsafe { libc::getegid() }
         || metadata.file_type().is_symlink()
         || (!metadata.is_dir() && !metadata.is_file() && !socket)
-        || (metadata.is_file() && metadata.nlink() != 1)
+        || (metadata.is_file()
+            && metadata.nlink() != 1
+            && !read_only_image_cache_link(path, custody, &metadata))
         || (depth == 1 && !metadata.is_dir())
     {
         return Err("trial recovery entry custody differs".into());
@@ -477,6 +501,15 @@ esac
             .unwrap();
         }
         drop(sockets); // Retain abandoned socket nodes, with no live owner process.
+        let image_source = root.join("approved-image.tar");
+        fs::write(&image_source, b"immutable approved image").unwrap();
+        fs::set_permissions(&image_source, fs::Permissions::from_mode(0o400)).unwrap();
+        let image_cache = home
+            .join(".cache/smolvm-image-archives")
+            .join("a".repeat(64));
+        fs::create_dir_all(&image_cache).unwrap();
+        fs::hard_link(&image_source, image_cache.join("archive.tar")).unwrap();
+        assert_eq!(fs::metadata(&image_source).unwrap().nlink(), 2);
         fs::write(home.join("active"), b"owned VM").unwrap();
         let leases = config.socket_path.parent().unwrap().join("smol-leases");
         private_directory(&leases);
@@ -515,6 +548,11 @@ esac
         assert!(!home.exists());
         assert!(!lease.exists());
         roots.recover().unwrap();
+        assert_eq!(
+            fs::read(&image_source).unwrap(),
+            b"immutable approved image"
+        );
+        assert_eq!(fs::metadata(&image_source).unwrap().nlink(), 1);
         for path in [
             &runtime.relay_root,
             &runtime.scratch_root,

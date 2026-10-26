@@ -24,10 +24,14 @@ fn profile_rejects_receipts_larger_than_durable_custody_limit() {
 }
 
 #[test]
-fn profile_requires_room_for_trusted_pid_one_and_one_child() {
+fn profile_requires_room_for_supervisor_launcher_and_child() {
     let mut selected = profile();
-    selected.maximum_pids = 1;
-    assert!(!valid_profile(&selected));
+    for maximum in [1, 2] {
+        selected.maximum_pids = maximum;
+        assert!(!valid_profile(&selected));
+    }
+    selected.maximum_pids = 3;
+    assert!(valid_profile(&selected));
 }
 
 struct TestRoot(PathBuf);
@@ -305,7 +309,7 @@ fn execution(cleanup_confirmed: bool) -> TrialExecution {
         builder_image_digest: profile.builder_image_digest,
         trusted_launcher_digest: profile.trusted_launcher_digest,
         offline_cache_digest: profile.offline_cache_digest,
-        base_image_digests: profile.approved_base_digests,
+        approved_base_digests: profile.approved_base_digests,
         material_inventory_digests: vec![
             RoleInventoryDigest {
                 role: "source".into(),
@@ -586,6 +590,7 @@ fn host_runtime_fields_and_profile_slot_substitution_are_rejected_before_engine(
     assert_plan_rejected(|value| value["steps"][0]["working_directory"] = json!("../host"));
     assert_plan_rejected(|value| value["resources"]["pids"] = json!(33));
     assert_plan_rejected(|value| value["resources"]["pids"] = json!(1));
+    assert_plan_rejected(|value| value["resources"]["pids"] = json!(2));
     assert_plan_rejected(|value| value["environment"]["platform"] = json!("linux/arm64"));
     assert_plan_rejected(|value| {
         let trailing = value["steps"][0].clone();
@@ -594,10 +599,10 @@ fn host_runtime_fields_and_profile_slot_substitution_are_rejected_before_engine(
 }
 
 #[test]
-fn two_pid_whole_container_boundary_reaches_the_engine() {
+fn three_pid_whole_trial_boundary_reaches_the_engine() {
     let started = start(true);
     let mut bounded = plan();
-    bounded["resources"]["pids"] = json!(2);
+    bounded["resources"]["pids"] = json!(3);
     let response = exchange(started.relay.socket_path(), &request(bounded));
     assert_eq!(response["outcome"], "completed");
     assert_eq!(started.engine.calls.load(Ordering::Relaxed), 1);

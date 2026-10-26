@@ -339,6 +339,9 @@ The verified ART request binds their configuration to the registry entry,
 checker image, material and current execution. The profile bounds offline
 builder/base/cache and trusted-launcher identities, operations and aggregate resources; the
 projection selects material roles, visibility and finite ordered step templates.
+Receipt `approved_base_digests` records that locked profile context; it does not
+attest which base images a submitted Dockerfile consumed. Project checkers own
+any requirement to assess submitted base-image declarations.
 The image cannot select Docker flags, host paths, mounts, runtime,
 network, devices, credentials or another image. Workload commands remain
 untrusted argument arrays executed only inside the confined candidate image;

@@ -196,8 +196,10 @@ def test_smol_transport_and_privileges_are_closed_trusted_profile_rules():
         replace(selected, trusted_launcher_capabilities=selected.builder_capabilities)
     with pytest.raises(TrialProfileError, match="byte ceiling"):
         replace(selected.limits, maximum_receipt_bytes=1024 * 1024 + 1)
-    with pytest.raises(TrialProfileError, match="PID ceiling"):
-        replace(selected.limits, maximum_pids=1)
+    for maximum in (1, 2):
+        with pytest.raises(TrialProfileError, match="PID ceiling"):
+            replace(selected.limits, maximum_pids=maximum)
+    assert replace(selected.limits, maximum_pids=3).maximum_pids == 3
 
 
 def test_state_overlay_destination_is_exactly_one_workspace_component():
