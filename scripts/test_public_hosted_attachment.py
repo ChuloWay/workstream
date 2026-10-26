@@ -92,6 +92,51 @@ class HostedContainerCustody(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(RuntimeError):
                 self.check(dict(self.container, **{key: value}))
 
+    def test_tmpfs_must_match_rendered_targets_and_options(self):
+        self.rendered['tmpfs'] = ['/tmp:mode=0700,uid=10001,gid=10001']
+        self.container['HostConfig']['Tmpfs'] = {'/tmp': 'gid=10001,mode=0700,uid=10001'}
+        self.check()
+        for mutation in ('code-cover', 'extra-record', 'missing', 'wrong-owner', 'extra-option'):
+            changed = copy.deepcopy(self.container)
+            if mutation == 'code-cover':
+                changed['HostConfig']['Tmpfs']['/app'] = 'rw,uid=10001,gid=10001'
+                changed['Mounts'].append({'Type': 'tmpfs', 'Destination': '/app', 'RW': True})
+            elif mutation == 'extra-record':
+                changed['Mounts'].append({'Type': 'tmpfs', 'Destination': '/app', 'RW': True})
+            elif mutation == 'missing':
+                changed['HostConfig']['Tmpfs'] = {}
+            elif mutation == 'wrong-owner':
+                changed['HostConfig']['Tmpfs']['/tmp'] = 'mode=0700,uid=0,gid=10001'
+            else:
+                changed['HostConfig']['Tmpfs']['/tmp'] += ',exec'
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(RuntimeError, 'tmpfs differs'):
+                self.check(changed)
+
+    def test_parser_uses_its_exact_declared_isolation_and_resource_profile(self):
+        self.rendered.update(
+            user='0:0', command=['python', '-m', 'app.adapters.guide_document_tools.service'],
+            environment={'WORKSTREAM_RELEASE_ROLE': 'parser'}, network_mode='none',
+            cap_add=['KILL', 'SETGID', 'SETUID'], mem_limit='536870912',
+            memswap_limit='536870912', cpus=1.0, pids_limit=64,
+            tmpfs=['/tmp:mode=0700,uid=10002,gid=10001,size=268435456,noexec,nosuid,nodev'],
+        )
+        del self.rendered['networks']
+        self.container['Config'].update(User='0:0', Cmd=self.rendered['command'],
+                                        Env=['PATH=/usr/bin', 'WORKSTREAM_RELEASE_ROLE=parser'])
+        self.container['HostConfig'].update(
+            CapAdd=['CAP_KILL', 'CAP_SETGID', 'CAP_SETUID'], NetworkMode='none',
+            Memory=536870912, MemorySwap=536870912, NanoCpus=1_000_000_000, PidsLimit=64,
+            Tmpfs={'/tmp': self.rendered['tmpfs'][0].split(':', 1)[1]},
+        )
+        self.container['NetworkSettings']['Networks'] = {'none': {}}
+        self.check()
+        for key, value in (('CapAdd', ['CAP_SYS_ADMIN']), ('NetworkMode', 'host'),
+                           ('Memory', 0), ('MemorySwap', -1), ('NanoCpus', 0), ('PidsLimit', -1)):
+            changed = copy.deepcopy(self.container)
+            changed['HostConfig'][key] = value
+            with self.subTest(key=key), self.assertRaises(RuntimeError):
+                self.check(changed)
+
 
 class NativePreparationObservation(unittest.TestCase):
     def test_only_successful_final_copy_records_completion_without_altering_stream(self):

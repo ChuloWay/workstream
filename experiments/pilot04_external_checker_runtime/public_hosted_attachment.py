@@ -78,7 +78,8 @@ def validate_container(service, rendered, container, image, secrets, networks):
     require(host['ReadonlyRootfs'] is True
             and host['Privileged'] is False
             and set(host.get('CapDrop') or []) == {'ALL'}
-            and not host.get('CapAdd')
+            and {item.removeprefix('CAP_') for item in host.get('CapAdd') or []}
+            == set(rendered.get('cap_add') or [])
             and 'no-new-privileges:true' in (host.get('SecurityOpt') or []),
             "hosted service isolation differs: " + service)
     environment = dict(item.split('=', 1) for item in actual['Env'])
@@ -100,9 +101,35 @@ def validate_container(service, rendered, container, image, secrets, networks):
     require(mounts == expected_mounts
             and all(item['Type'] in {'bind', 'tmpfs'} for item in container['Mounts']),
             "hosted service mounts differ: " + service)
-    expected_networks = {networks[name]['name'] for name in rendered['networks']}
+    expected_tmpfs = {}
+    for specification in rendered.get('tmpfs', []):
+        target, separator, options = specification.partition(':')
+        require(separator and target not in expected_tmpfs,
+                'rendered tmpfs is ambiguous: ' + service)
+        expected_tmpfs[target] = set(options.split(','))
+    actual_tmpfs = {target: set(options.split(','))
+                    for target, options in (host.get('Tmpfs') or {}).items()}
+    # Docker reports configured tmpfs mounts in HostConfig.Tmpfs, usually omitting
+    # them from Mounts. If it also lists one there, it must name the same target.
+    require(actual_tmpfs == expected_tmpfs
+            and all(item['Destination'] in expected_tmpfs
+                    and item['RW'] == ('ro' not in expected_tmpfs[item['Destination']])
+                    for item in container['Mounts'] if item['Type'] == 'tmpfs'),
+            'hosted service tmpfs differs: ' + service)
+    if rendered.get('network_mode') == 'none':
+        require(host.get('NetworkMode') == 'none', 'hosted service network mode differs: ' + service)
+        expected_networks = {'none'}
+    else:
+        expected_networks = {networks[name]['name'] for name in rendered['networks']}
     require(set(container['NetworkSettings']['Networks']) == expected_networks,
             'hosted service networks differ: ' + service)
+    for setting, field_name, multiplier in (
+        ('mem_limit', 'Memory', 1), ('memswap_limit', 'MemorySwap', 1),
+        ('pids_limit', 'PidsLimit', 1), ('cpus', 'NanoCpus', 1_000_000_000),
+    ):
+        if setting in rendered:
+            require(host.get(field_name) == int(float(rendered[setting]) * multiplier),
+                    'hosted service resource limit differs: ' + service)
     expected_ports = {}
     for port in rendered.get('ports', []):
         key = str(port['target']) + '/' + port.get('protocol', 'tcp')
@@ -179,7 +206,7 @@ class HostedAttachment:
         port = urlparse(self.origin).port
         require(port == int(values.get('WORKSTREAM_API_HOST_PORT', '8000')), "published API port differs")
         environment = module.compose_environment(values)
-        services = ['api', 'worker', 'beat']
+        services = ['api', 'worker', 'beat', 'guide-document-parser']
         if values['WORKSTREAM_MODEL_PROXY_ENABLED'] == 'true':
             services.append('model-proxy')
         observed = {}
