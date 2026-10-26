@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import stat
 import subprocess
 import sys
 import time
@@ -265,6 +266,42 @@ def _directory_children(path: Path) -> set[str]:
     if not path.exists():
         return set()
     return {item.name for item in path.iterdir()}
+
+
+def _assert_idle_trial_roots(root: Path, service_root: Path) -> None:
+    owner = (service_root / ".workstream-checker-owner").read_text()
+    assert len(owner) == 64 and all(
+        character in "0123456789abcdef" for character in owner
+    )
+    for directory, role in (
+        ("trial-relay", "relay"),
+        ("trial-scratch", "scratch"),
+        ("trial-child-home", "child_home"),
+    ):
+        path = root / directory
+        identity = path.lstat()
+        assert path.resolve() == path and stat.S_ISDIR(identity.st_mode)
+        assert (identity.st_uid, identity.st_gid) == (os.geteuid(), os.getegid())
+        assert stat.S_IMODE(identity.st_mode) == 0o700
+        assert _directory_children(path) == {".workstream-trial-root.json"}
+        descriptor = os.open(
+            path / ".workstream-trial-root.json",
+            os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
+        )
+        with os.fdopen(descriptor, "rb") as marker:
+            metadata = os.fstat(marker.fileno())
+            assert stat.S_ISREG(metadata.st_mode) and metadata.st_nlink == 1
+            assert (metadata.st_uid, metadata.st_gid) == (os.geteuid(), os.getegid())
+            assert stat.S_IMODE(metadata.st_mode) == 0o600 and metadata.st_size <= 4096
+            assert json.loads(marker.read(4097)) == {
+                "schema": "workstream.trial_root.v1",
+                "owner": owner,
+                "deployment_owner": "terminal-systems-smol-qualification",
+                "role": role,
+                "path": str(path),
+                "device": identity.st_dev,
+                "inode": identity.st_ino,
+            }
 
 
 async def _retained_trial_summary(session, retained, receipts):
@@ -1169,8 +1206,7 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
                     }
                     for item in sorted(effects, key=lambda item: item.id)
                 ]
-            for directory in ("trial-relay", "trial-scratch", "trial-child-home"):
-                assert list((root / directory).iterdir()) == []
+            _assert_idle_trial_roots(root, service_root)
             assert _directory_children(service_root / "smol-leases") == set()
             assert _directory_children(vms_root) == before_vms
             assert _directory_children(cgroup_root) == before_cgroups
