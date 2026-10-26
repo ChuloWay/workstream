@@ -1693,20 +1693,24 @@ sessions, generic isolated trials, retained trial receipts and approved exact
 predecessor material. These historical eight specifications are not a platform
 allowlist or a requirement for eight separate images. The implementation and
 its qualification limits are recorded in the [checker README](../pilots/terminal_systems/checkers/README.md).
-The production Rust service and project Python image have completed a controlled
-provider qualification through real gVisor execution and PostgreSQL/MinIO custody:
+An earlier controlled-provider qualification used the production Rust service,
+project Python image, gVisor and PostgreSQL/MinIO custody:
 two verified trial receipts, four settled model effects and replay without new
 provider calls. Owned resource cleanup passed. This uses a qualification package;
 it does not establish live-model grading or the public contribution journey.
-Native Smol KVM composition also passed at `ee9436e19`, using the production Rust
+The current native Smol KVM composition passed at `74bc123fe`, using the production Rust
 service, current project image and trusted intake on an isolated Linux/amd64
 node. It retained two verified ART trial receipts with 17 steps each, four
 controlled model effects and replay without new model calls; VM, cgroup,
-database and object-store cleanup passed. The whole-invocation disk profile was
-2 GiB. Exact source and artifact hashes are in the [native qualification record](../.commitrail/changes/terminal-systems-project-checkers.md#native-kvm-composition-qualification).
-This initial-submission package does not exercise predecessor material.
-Further resource-boundary qualification, actual hosted/live-provider operation
-and the public guide-to-contribution journey remain separate.
+database and object-store cleanup passed. Both real builder and candidate-step
+guards verified the shared syscall filter. Ten additional direct KVM cases
+qualified predecessor custody and CPU, memory, process, disk, output and deadline
+enforcement, with exact cleanup. The whole-invocation disk profile was 2 GiB.
+Exact source, artifact hashes and proof limits are in the [native qualification record](../.commitrail/changes/terminal-systems-project-checkers.md#repaired-confinement-and-resource-qualification-on-real-kvm).
+Direct predecessor transport does not prove an approved revision journey, and
+guest limits do not prove every host/ART forced-stop classification. Actual
+hosted/live-provider operation and the public guide-to-contribution journey
+remain separate.
 Model-enabled checks require exact approved project profiles before binding;
 project publication and complete live-journey qualification remain separate.
 Registration, corrected policy binding and approval must precede activation;
