@@ -233,6 +233,17 @@ execution observer must also forward the current typed port's `model_grant`
 argument unchanged, including `None`; observation cannot alter adapter admission
 or drop model custody. A focused forwarding regression protects that seam.
 
+### Deadline classification repair
+
+A live sleeping guest exposed a race between independent guardian cleanup and
+process collection: observing child exit before checking the elapsed deadline
+can mislabel expiry as runtime unavailability. The shared bounded collector must
+check its original deadline before accepting exit/output, preserving independent
+cleanup, cancellation and output limits. A focused already-reaped-child control
+covers successful and failed exits before and after expiry; real KVM sleep and
+the full public deadline/recovery journey must still pass. This remains within
+the existing runtime scope and does not extend budgets or relax fault assertions.
+
 ## Intake implementation and historical owner-level proof
 
 The typed adapter, closed guest worker and Rust prepared session connect PRE and
