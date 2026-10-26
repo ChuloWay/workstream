@@ -303,8 +303,8 @@ func (c *Client) AdminPermissions(ctx context.Context) (Result[PermissionCatalog
 	}
 	var value PermissionCatalogue
 	fields, err := contextObject(raw, &value, []string{"items", "total"}, nil)
-	// The public PermissionDefinitionsResponse schema fixes total to Literal[82].
-	if err != nil || value.Items == nil || value.Total != 82 || len(value.Items) != value.Total || !c.safeMutationResponse(raw) {
+	// The public PermissionDefinitionsResponse schema fixes total to Literal[95].
+	if err != nil || value.Items == nil || value.Total != 95 || len(value.Items) != value.Total || !c.safeMutationResponse(raw) {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
 	var members []json.RawMessage

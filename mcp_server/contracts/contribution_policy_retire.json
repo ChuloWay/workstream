@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "b97bd0639a6b86328f73db5c869e482cfaee0384e933b9960588e2334067ad49",
+  "canonical_sha256": "0c1867cfe26d2452d35e0af123626c8cf91db24557701e5aa1e92ff9812114a2",
   "components": {
     "schemas": {
       "ApiError": {
@@ -7,24 +7,19 @@
         "description": "Canonical machine-readable API error.",
         "properties": {
           "code": {
-            "title": "Code",
             "type": "string"
           },
           "correlation_id": {
-            "title": "Correlation Id",
             "type": "string"
           },
           "details": {
             "additionalProperties": true,
-            "title": "Details",
             "type": "object"
           },
           "message": {
-            "title": "Message",
             "type": "string"
           },
           "retryable": {
-            "title": "Retryable",
             "type": "boolean"
           }
         },
@@ -35,7 +30,6 @@
           "correlation_id",
           "retryable"
         ],
-        "title": "ApiError",
         "type": "object"
       },
       "ApiErrorResponse": {
@@ -48,8 +42,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Detail"
+            ]
           },
           "error": {
             "$ref": "#/components/schemas/ApiError"
@@ -58,7 +51,6 @@
         "required": [
           "error"
         ],
-        "title": "ApiErrorResponse",
         "type": "object"
       },
       "ContributionPolicyMutationResult": {
@@ -66,22 +58,18 @@
         "properties": {
           "actor_profile_id": {
             "format": "uuid",
-            "title": "Actor Profile Id",
             "type": "string"
           },
           "contribution_policy_id": {
             "format": "uuid",
-            "title": "Contribution Policy Id",
             "type": "string"
           },
           "contribution_policy_version_id": {
             "format": "uuid",
-            "title": "Contribution Policy Version Id",
             "type": "string"
           },
           "event_id": {
             "format": "uuid",
-            "title": "Event Id",
             "type": "string"
           },
           "event_type": {
@@ -91,7 +79,6 @@
               "published",
               "retired"
             ],
-            "title": "Event Type",
             "type": "string"
           },
           "from_policy_status": {
@@ -102,8 +89,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "From Policy Status"
+            ]
           },
           "from_version_status": {
             "anyOf": [
@@ -113,17 +99,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "From Version Status"
+            ]
           },
           "occurred_at": {
             "format": "date-time",
-            "title": "Occurred At",
             "type": "string"
           },
           "operation_id": {
             "format": "uuid",
-            "title": "Operation Id",
             "type": "string"
           },
           "prior_current_version_id": {
@@ -135,8 +118,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Prior Current Version Id"
+            ]
           },
           "prior_current_version_number": {
             "anyOf": [
@@ -146,28 +128,22 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Prior Current Version Number"
+            ]
           },
           "project_id": {
             "format": "uuid",
-            "title": "Project Id",
             "type": "string"
           },
           "request_digest": {
-            "title": "Request Digest",
             "type": "string"
           },
           "to_policy_status": {
-            "title": "To Policy Status",
             "type": "string"
           },
           "to_version_status": {
-            "title": "To Version Status",
             "type": "string"
           },
           "version_number": {
-            "title": "Version Number",
             "type": "integer"
           }
         },
@@ -189,14 +165,12 @@
           "to_version_status",
           "occurred_at"
         ],
-        "title": "ContributionPolicyMutationResult",
         "type": "object"
       },
       "PolicyDecisionInput": {
         "additionalProperties": false,
         "description": "An explicit decision on the path-selected version; no replacement graph.",
         "properties": {},
-        "title": "PolicyDecisionInput",
         "type": "object"
       }
     }
@@ -211,7 +185,6 @@
         "required": true,
         "schema": {
           "format": "uuid",
-          "title": "Project Id",
           "type": "string"
         }
       },
@@ -221,7 +194,6 @@
         "required": true,
         "schema": {
           "format": "uuid",
-          "title": "Policy Id",
           "type": "string"
         }
       },
@@ -231,7 +203,6 @@
         "required": true,
         "schema": {
           "format": "uuid",
-          "title": "Version Id",
           "type": "string"
         }
       },
@@ -533,6 +504,6 @@
     "method": "POST",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}/retirement",
-    "repository_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694"
+    "repository_sha": "59c52cc81179611ea316935552cc177f83eec687"
   }
 }

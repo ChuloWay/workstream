@@ -587,11 +587,15 @@ func validateProposalCheckSpecification(raw json.RawMessage, value *ProposalChec
 			"nested_sandbox":     {"runtime_gap", "implementation_unavailable"},
 			"task_context":       {"runtime_gap", "material_unavailable"},
 			"guide_context":      {"runtime_gap", "material_unavailable"},
-			"model_service":      {"runtime_gap", "implementation_unavailable"},
 			"execution_capacity": {"runtime_gap", "capacity_exceeded"},
 			"prepared_material":  {"runtime_gap", "material_unavailable"},
 		}[item.Kind]
-		if expected == [2]string{} || item.Provisioning != expected[0] || item.UnavailableCode != expected[1] || (supported && item.Provisioning == "runtime_gap") {
+		valid := expected != [2]string{} && item.Provisioning == expected[0] && item.UnavailableCode == expected[1]
+		if item.Kind == "model_service" {
+			valid = item.UnavailableCode == "implementation_unavailable" &&
+				(item.Provisioning == "model_proxy" || (!supported && item.Provisioning == "runtime_gap"))
+		}
+		if !valid || (supported && item.Provisioning == "runtime_gap") {
 			return errors.New("invalid runtime dependency provisioning")
 		}
 		dependencyIDs[item.DependencyID], dependencyKinds[item.Kind] = true, true
@@ -604,6 +608,9 @@ func validateProposalCheckSpecification(raw json.RawMessage, value *ProposalChec
 	if (value.EvaluationMethod == "model_evaluation" && !dependencyKinds["model_service"]) ||
 		(value.EvaluationMethod == "isolated_execution" && !dependencyKinds["isolated_execution"]) {
 		return errors.New("missing runtime dependency")
+	}
+	if stage == "pre_submit" && dependencyKinds["model_service"] {
+		return errors.New("model service must run after submission")
 	}
 
 	infraCodes := make(map[string]bool)

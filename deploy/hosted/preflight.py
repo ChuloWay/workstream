@@ -28,6 +28,9 @@ INTAKE_SOCKET_PATH = INTAKE_SOCKET_ROOT / "checker.sock"
 INTAKE_DIGEST_KEYS = ("WORKSTREAM_ARTIFACT_INTAKE_IMAGE_DIGEST", "WORKSTREAM_ARTIFACT_INTAKE_CONFIG_DIGEST")
 GUIDE_SOCKET_ROOT = Path("/var/lib/workstream/guide-runtime")
 GUIDE_SOCKET_PATH = GUIDE_SOCKET_ROOT / "guide.sock"
+MODEL_SOCKET_ROOT = Path("/var/lib/workstream/model-runtime")
+MODEL_SOCKET_PATH = MODEL_SOCKET_ROOT / "model.sock"
+MODEL_RELAY_ROOT = Path("/var/lib/workstream/model-relays")
 GUIDE_PARSER_UID = 10002
 GUIDE_PARSER_GID = 10001
 DOCKER_SOCKET = Path("/var/run/docker.sock")
@@ -47,8 +50,11 @@ BASE_SECRET_FILE_KEYS = (
     "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE",
     "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE",
 )
-PROJECT_AGENT_SECRET_FILE_KEY = "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE"
-SECRET_FILE_KEYS = (*BASE_SECRET_FILE_KEYS, PROJECT_AGENT_SECRET_FILE_KEY)
+MODEL_PROXY_SECRET_FILE_KEYS = (
+    "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE",
+    "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE",
+)
+SECRET_FILE_KEYS = (*BASE_SECRET_FILE_KEYS, *MODEL_PROXY_SECRET_FILE_KEYS)
 SECRET_FILE_TARGETS = {
     "WORKSTREAM_DATABASE_URL_FILE": ("database_url", "/run/secrets/database_url"),
     "WORKSTREAM_CELERY_BROKER_URL_FILE": (
@@ -63,9 +69,13 @@ SECRET_FILE_TARGETS = {
         "pagination_cursor_hmac",
         "/run/secrets/pagination_cursor_hmac",
     ),
-    "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE": (
-        "project_agent_api_key",
-        "/run/secrets/project_agent_api_key",
+    "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE": (
+        "model_proxy_openai_api_key",
+        "/run/secrets/model_proxy_openai_api_key",
+    ),
+    "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE": (
+        "model_proxy_openrouter_api_key",
+        "/run/secrets/model_proxy_openrouter_api_key",
     ),
 }
 ROLE_SECRET_FILE_KEYS = {
@@ -83,6 +93,7 @@ ROLE_SECRET_FILE_KEYS = {
         "WORKSTREAM_DATABASE_URL_FILE",
         "WORKSTREAM_CELERY_BROKER_URL_FILE",
     ),
+    "model-proxy": ("WORKSTREAM_DATABASE_URL_FILE",),
 }
 FORBIDDEN_RELEASE_KEYS = (
     "AWS_ACCESS_KEY_ID",
@@ -115,6 +126,7 @@ FORBIDDEN_RENDERED_KEYS = tuple(
 EXACT_RELEASE_VALUES = {
     "WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD": {"roles-anywhere"},
     "WORKSTREAM_TOKEN_INTROSPECTION_MODE": {"disabled"},
+    "WORKSTREAM_MODEL_PROXY_ENABLED": {"true", "false"},
     "WORKSTREAM_PROJECT_AGENT_RUNTIME": {
         "openai_agents_sdk",
         "omnicore_agent",
@@ -195,7 +207,9 @@ PROOF_TIMEOUT_RETURN_CODE = 124
 REQUIRED_RELEASE_KEYS = (
     "COMPOSE_PROJECT_NAME",
     "WORKSTREAM_BACKEND_IMAGE",
+    "WORKSTREAM_MODEL_PROXY_IMAGE",
     "WORKSTREAM_CHECKER_SERVICE_IMAGE",
+    "WORKSTREAM_MODEL_PROXY_ENABLED",
     "WORKSTREAM_RUNTIME_UID",
     "WORKSTREAM_RUNTIME_GID",
     "WORKSTREAM_DOCKER_SOCKET_GID",
@@ -225,7 +239,7 @@ OPTIONAL_RELEASE_KEYS = (
     "WORKSTREAM_OBSERVABILITY_LOG_LEVEL",
     "WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT",
     "WORKSTREAM_OBSERVABILITY_TRACE_SAMPLE_RATIO",
-    PROJECT_AGENT_SECRET_FILE_KEY,
+    *MODEL_PROXY_SECRET_FILE_KEYS,
 )
 RELEASE_KEYS = frozenset((*REQUIRED_RELEASE_KEYS, *OPTIONAL_RELEASE_KEYS))
 
@@ -296,7 +310,11 @@ def validate_environment(values: dict[str, str]) -> None:
         )
     for key in REQUIRED_RELEASE_KEYS:
         _required(values, key)
-    for key in ("WORKSTREAM_BACKEND_IMAGE", "WORKSTREAM_CHECKER_SERVICE_IMAGE"):
+    for key in (
+        "WORKSTREAM_BACKEND_IMAGE",
+        "WORKSTREAM_MODEL_PROXY_IMAGE",
+        "WORKSTREAM_CHECKER_SERVICE_IMAGE",
+    ):
         if not IMAGE_REFERENCE.fullmatch(_required(values, key)):
             raise PreflightError(f"release image must use repository@sha256: {key}")
     for key in (
@@ -334,12 +352,7 @@ def validate_environment(values: dict[str, str]) -> None:
             raise PreflightError(
                 "manager-authored project agent configuration is invalid"
             )
-        if values.get(PROJECT_AGENT_SECRET_FILE_KEY):
-            raise PreflightError(
-                "manager-authored releases cannot select a provider credential"
-            )
     else:
-        _required(values, PROJECT_AGENT_SECRET_FILE_KEY)
         if provider not in {"openai", "openrouter"}:
             raise PreflightError("unsupported project agent model provider")
         if model_api not in {"chat_completions", "responses"}:
@@ -355,6 +368,14 @@ def validate_environment(values: dict[str, str]) -> None:
             ":" in model or model.casefold().startswith("openrouter/")
         ):
             raise PreflightError("OpenRouter model routing variants are unsupported")
+    model_proxy_enabled = values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true"
+    if runtime != "manager_authored" and not model_proxy_enabled:
+        raise PreflightError("inference setup requires the trusted model proxy")
+    if model_proxy_enabled:
+        for key in MODEL_PROXY_SECRET_FILE_KEYS:
+            _required(values, key)
+    elif any(values.get(key) for key in MODEL_PROXY_SECRET_FILE_KEYS):
+        raise PreflightError("disabled model proxy cannot select provider credentials")
     try:
         runtime_options = json.loads(values["WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS"])
     except json.JSONDecodeError as exc:
@@ -432,6 +453,11 @@ def validate_checker_config(config: dict[str, Any], values: dict[str, str]) -> N
         "sandbox_uid": _positive_id(values, "WORKSTREAM_RUNTIME_UID"),
         "sandbox_gid": _positive_id(values, "WORKSTREAM_RUNTIME_GID"),
     }
+    model_proxy_enabled = values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true"
+    expected.update({
+        "model_proxy_socket": str(MODEL_SOCKET_PATH) if model_proxy_enabled else None,
+        "model_relay_root": str(MODEL_RELAY_ROOT) if model_proxy_enabled else None,
+    })
     for key, required in expected.items():
         if config.get(key) != required:
             raise PreflightError(
@@ -485,18 +511,15 @@ def _private_metadata(path: Path, *, kind: str, uid: int, gid: int, mode: int) -
 
 
 def _secret_file_keys(values: dict[str, str]) -> tuple[str, ...]:
-    if values["WORKSTREAM_PROJECT_AGENT_RUNTIME"] == "manager_authored":
-        return BASE_SECRET_FILE_KEYS
-    return SECRET_FILE_KEYS
+    if values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true":
+        return SECRET_FILE_KEYS
+    return BASE_SECRET_FILE_KEYS
 
 
 def _role_secret_file_keys(role: str, values: dict[str, str]) -> tuple[str, ...]:
     keys = ROLE_SECRET_FILE_KEYS[role]
-    if (
-        role == "worker"
-        and values["WORKSTREAM_PROJECT_AGENT_RUNTIME"] != "manager_authored"
-    ):
-        return (*keys, PROJECT_AGENT_SECRET_FILE_KEY)
+    if role == "model-proxy" and values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true":
+        return (*keys, *MODEL_PROXY_SECRET_FILE_KEYS)
     return keys
 
 
@@ -515,6 +538,14 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
             or intake_socket.st_uid != uid or intake_socket.st_gid != gid
             or stat.S_IMODE(intake_socket.st_mode) != 0o600 or intake_socket.st_nlink != 1):
         raise PreflightError("trusted intake socket identity is unsafe")
+    model_proxy_enabled = values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true"
+    if model_proxy_enabled:
+        _private_metadata(
+            MODEL_SOCKET_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700
+        )
+        _private_metadata(
+            MODEL_RELAY_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700
+        )
     _private_metadata(
         GUIDE_SOCKET_ROOT,
         kind="directory",
@@ -537,6 +568,22 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
         or guide_socket.st_nlink != 1
     ):
         raise PreflightError("guide parser socket has unsafe retained state")
+    if model_proxy_enabled:
+        try:
+            model_socket = MODEL_SOCKET_PATH.lstat()
+        except FileNotFoundError:
+            model_socket = None
+        except OSError as exc:
+            raise PreflightError("model proxy socket identity is unavailable") from exc
+        if model_socket is not None and (
+            stat.S_ISLNK(model_socket.st_mode)
+            or not stat.S_ISSOCK(model_socket.st_mode)
+            or model_socket.st_uid != uid
+            or model_socket.st_gid != gid
+            or stat.S_IMODE(model_socket.st_mode) != 0o600
+            or model_socket.st_nlink != 1
+        ):
+            raise PreflightError("model proxy socket has unsafe retained state")
     private_paths = [
         Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"]),
         *(Path(values[key]) for key in _secret_file_keys(values)),
@@ -545,12 +592,15 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
     for path in private_paths:
         _private_metadata(path, kind="file", uid=uid, gid=gid, mode=0o400)
     try:
-        shared_roots = (
+        shared_roots = [
             SCRATCH_ROOT.resolve(strict=True),
             SOCKET_ROOT.resolve(strict=True),
             INTAKE_SOCKET_ROOT.resolve(strict=True),
             GUIDE_SOCKET_ROOT.resolve(strict=True),
-        )
+        ]
+        if model_proxy_enabled:
+            shared_roots.append(MODEL_SOCKET_ROOT.resolve(strict=True))
+            shared_roots.append(MODEL_RELAY_ROOT.resolve(strict=True))
         resolved_paths = [path.resolve(strict=True) for path in private_paths]
     except (OSError, RuntimeError) as exc:
         raise PreflightError("private host input identity is unavailable") from exc
@@ -606,8 +656,9 @@ def _run_json(
 
 def _compose_file_arguments(values: dict[str, str]) -> list[str]:
     arguments = ["--file", str(COMPOSE_PATH)]
-    if values["WORKSTREAM_PROJECT_AGENT_RUNTIME"] != "manager_authored":
+    if values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true":
         arguments.extend(("--file", str(INFERENCE_COMPOSE_PATH)))
+        arguments.extend(("--profile", "model-proxy"))
     return arguments
 
 
@@ -664,11 +715,13 @@ def run_compose(
 
 def run_shutdown(environment_path: Path, values: dict[str, str]) -> int:
     """Stop producers, drain the worker, then stop its isolated dependencies."""
-    phases = (
+    phases = [
         ["stop", "beat", "api"],
         ["stop", "--timeout", "7320", "worker"],
-        ["stop", "guide-document-parser", "checker-service"],
-    )
+    ]
+    if values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true":
+        phases.append(["stop", "--timeout", "7320", "model-proxy"])
+    phases.append(["stop", "guide-document-parser", "checker-service"])
     for arguments in phases:
         try:
             completed = subprocess.run(
@@ -807,14 +860,18 @@ def _validate_exact_bind_mounts(
 def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
     """Check the rendered release process and privilege topology."""
     services = rendered.get("services")
-    if not isinstance(services, dict) or set(services) != {
+    expected_services = {
         "api",
         "worker",
         "beat",
         "guide-document-parser",
         "checker-service",
         *PROOF_SERVICES,
-    }:
+    }
+    model_proxy_enabled = values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true"
+    if model_proxy_enabled:
+        expected_services.add("model-proxy")
+    if not isinstance(services, dict) or set(services) != expected_services:
         raise PreflightError(
             "release Compose services differ from the bounded topology"
         )
@@ -840,9 +897,7 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             raise PreflightError(f"release service allows new privileges: {name}")
         if name != "guide-document-parser":
             if service.get("cap_add"):
-                raise PreflightError(
-                    f"release service adds Linux capabilities: {name}"
-                )
+                raise PreflightError(f"release service adds Linux capabilities: {name}")
             user = service.get("user")
             if not isinstance(user, str) or not re.fullmatch(
                 r"[1-9][0-9]*:[1-9][0-9]*", user
@@ -853,7 +908,16 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
     runtime_identity = (
         f"{values['WORKSTREAM_RUNTIME_UID']}:{values['WORKSTREAM_RUNTIME_GID']}"
     )
-    for name in {"api", "worker", "beat", "checker-service", *PROOF_SERVICES}:
+    backend_runtime_services = {
+        "api",
+        "worker",
+        "beat",
+        "checker-service",
+        *PROOF_SERVICES,
+    }
+    if model_proxy_enabled:
+        backend_runtime_services.add("model-proxy")
+    for name in backend_runtime_services:
         if services[name]["user"] != runtime_identity:
             raise PreflightError(
                 f"release service has the wrong runtime identity: {name}"
@@ -871,12 +935,22 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         )
     if any(services[name]["image"] != backend_image for name in PROOF_SERVICES):
         raise PreflightError("AWS proof jobs must use the exact backend image")
+    if (
+        model_proxy_enabled
+        and services["model-proxy"]["image"] != values["WORKSTREAM_MODEL_PROXY_IMAGE"]
+    ):
+        raise PreflightError("model proxy must use the exact agents backend image")
+    if any(services[name].get("pull_policy") != "never" for name in PROOF_SERVICES):
+        raise PreflightError(
+            "AWS proof jobs must use the cached release image without pulling"
+        )
     for name in (
         "api",
         "worker",
         "beat",
         "guide-document-parser",
         *PROOF_SERVICES,
+        *({"model-proxy"} if model_proxy_enabled else set()),
     ):
         if services[name].get("entrypoint") is not None:
             raise PreflightError(f"backend image entrypoint is overridden: {name}")
@@ -908,10 +982,20 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             str(SCRATCH_ROOT): (str(SCRATCH_ROOT), True),
             str(SOCKET_ROOT): (str(SOCKET_ROOT), False),
             str(DOCKER_SOCKET): (str(DOCKER_SOCKET), False),
-        },
+        } | (
+            {
+                str(MODEL_SOCKET_ROOT): (str(MODEL_SOCKET_ROOT), True),
+                str(MODEL_RELAY_ROOT): (str(MODEL_RELAY_ROOT), False),
+            } if model_proxy_enabled else {}
+        ),
         "api": shared_backend_mounts | runtime_identity_mounts,
         "worker": shared_backend_mounts
         | {str(GUIDE_SOCKET_ROOT): (str(GUIDE_SOCKET_ROOT), True)}
+        | (
+            {str(MODEL_SOCKET_ROOT): (str(MODEL_SOCKET_ROOT), True)}
+            if model_proxy_enabled
+            else {}
+        )
         | runtime_identity_mounts,
         "beat": {},
         "guide-document-parser": {
@@ -948,6 +1032,12 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         },
         "aws-proof-coordinate": {},
     }
+    if model_proxy_enabled:
+        expected_mounts["model-proxy"] = {
+            str(SCRATCH_ROOT): (str(SCRATCH_ROOT), False),
+            str(MODEL_SOCKET_ROOT): (str(MODEL_SOCKET_ROOT), False),
+            **runtime_identity_mounts,
+        }
     for name, mounts in expected_mounts.items():
         _validate_exact_bind_mounts(name, services[name], mounts)
     expected_secret_files = {
@@ -1059,6 +1149,15 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         "guide-document-parser"
     ) != {"condition": "service_healthy", "required": True}:
         raise PreflightError("worker must wait for a healthy guide parser")
+    if model_proxy_enabled and worker_dependencies.get("model-proxy") != {
+        "condition": "service_healthy",
+        "required": True,
+    }:
+        raise PreflightError("worker must wait for a healthy model proxy")
+    if model_proxy_enabled and services["checker-service"].get("depends_on", {}).get(
+        "model-proxy"
+    ) != {"condition": "service_healthy", "required": True}:
+        raise PreflightError("checker service must wait for a healthy model proxy")
     worker = services["worker"]
     worker_command = worker.get("command")
     if (
@@ -1071,6 +1170,21 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         )
     ):
         raise PreflightError("project guide worker delivery profile is invalid")
+    if model_proxy_enabled:
+        proxy = services["model-proxy"]
+        if (
+            proxy.get("profiles") != ["model-proxy"]
+            or proxy.get("ports")
+            or proxy.get("command")
+            != ["python", "-m", "app.workers.checker_model_proxy"]
+            or proxy.get("stop_grace_period") not in {"7320s", "2h2m0s"}
+            or proxy.get("healthcheck", {}).get("test")
+            != [
+                "CMD-SHELL",
+                "test -S /var/lib/workstream/model-runtime/model.sock",
+            ]
+        ):
+            raise PreflightError("model proxy delivery profile is invalid")
     for name in ("aws-proof-runtime", "aws-proof-readiness", "aws-proof-negative"):
         service = services[name]
         if service.get("profiles") != ["aws-proof"]:
@@ -1117,7 +1231,10 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         ):
             raise PreflightError(f"{name} must receive only the database secret")
     environments: dict[str, dict[str, Any]] = {}
-    for role in ROLE_SECRET_FILE_KEYS:
+    active_roles = ("api", "worker", "beat") + (
+        ("model-proxy",) if model_proxy_enabled else ()
+    )
+    for role in active_roles:
         environment = services[role].get("environment")
         if not isinstance(environment, dict):
             raise PreflightError(f"{role} release environment is unavailable")
@@ -1164,6 +1281,7 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
                 not in {
                     "WORKSTREAM_RELEASE_ROLE",
                     "WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET",
+                    "WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET",
                 }
             }
         )
@@ -1196,7 +1314,13 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
     for key, value in exact.items():
         if str(environment.get(key, "")).lower() != value:
             raise PreflightError(f"rendered release environment is unsafe: {key}")
-    for name in ("api", "worker", "beat", *PROOF_SERVICES):
+    for name in (
+        "api",
+        "worker",
+        "beat",
+        *PROOF_SERVICES,
+        *(("model-proxy",) if model_proxy_enabled else ()),
+    ):
         service_environment = services[name].get("environment")
         if not isinstance(service_environment, dict):
             raise PreflightError(f"{name} release environment is unavailable")
@@ -1211,16 +1335,30 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         GUIDE_SOCKET_PATH
     ):
         raise PreflightError("worker lacks the fixed guide parser socket")
+    if model_proxy_enabled and worker_environment.get(
+        "WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET"
+    ) != str(MODEL_SOCKET_PATH):
+        raise PreflightError("worker lacks the fixed model proxy socket")
+    if model_proxy_enabled and environments["model-proxy"].get(
+        "WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET"
+    ) != str(MODEL_SOCKET_PATH):
+        raise PreflightError("model proxy lacks its fixed socket")
     for name in ("api", "beat", "checker-service", *PROOF_SERVICES):
         service_environment = services[name].get("environment") or {}
         if not isinstance(service_environment, dict):
             raise PreflightError(f"{name} release environment is invalid")
         if "WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET" in service_environment:
             raise PreflightError(f"{name} must not receive the guide parser socket")
-        if "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE" in service_environment:
+        if any(key in service_environment for key in MODEL_PROXY_SECRET_FILE_KEYS):
             raise PreflightError(
-                f"{name} must not receive the project agent credential selector"
+                f"{name} must not receive a model proxy credential selector"
             )
+        if "WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET" in service_environment:
+            raise PreflightError(f"{name} must not receive the model proxy socket")
+    if any(key in worker_environment for key in MODEL_PROXY_SECRET_FILE_KEYS):
+        raise PreflightError(
+            "worker must not receive a model proxy credential selector"
+        )
     for name, service in services.items():
         service_environment = service.get("environment") or {}
         if not isinstance(service_environment, dict):
@@ -1267,6 +1405,16 @@ def validate_docker_runtime(config: dict[str, Any], values: dict[str, str]) -> N
     )
     if not isinstance(runtimes, dict) or "runsc" not in runtimes:
         raise PreflightError("Docker does not report the required runsc runtime")
+    if values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true":
+        runtime = runtimes["runsc"]
+        arguments = runtime.get("runtimeArgs", []) if isinstance(runtime, dict) else []
+        if not isinstance(arguments, list) or [
+            argument for argument in arguments
+            if isinstance(argument, str) and argument.startswith("--host-uds")
+        ] != ["--host-uds=open"]:
+            raise PreflightError(
+                "model-enabled checker runsc requires exactly --host-uds=open"
+            )
     for entry in config["cache"]:
         reference = f"{entry['repository']}@{entry['platform_manifest_digest']}"
         inspected = _run_json(

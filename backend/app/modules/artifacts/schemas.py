@@ -7,11 +7,9 @@ from enum import StrEnum
 from typing import Protocol, TypeAlias, final
 from uuid import UUID
 
-from app.core.hashing import canonical_json_hash
 from app.modules.artifacts.sources import CommittedArtifactSource
 from app.modules.checkers.api.output_custody import (
-    CheckerOutputReservation,
-    CheckerOutputSlot,
+    GeneratedOutputReservation,
 )
 from app.modules.authorization.catalogue import ActionId
 from app.modules.actors.api import ServiceIdentity
@@ -47,50 +45,11 @@ class GuideArtifactAdmissionRequest:
 @final
 @dataclass(frozen=True, slots=True)
 class CheckerOutputArtifactAdmissionRequest:
-    """One prepared checker output admitted under its exact checker run."""
+    """One prepared model transcript admitted under its exact durable call effect."""
 
-    reservation: CheckerOutputReservation
+    reservation: GeneratedOutputReservation
     slot_key: str
     source: CommittedArtifactSource
-
-
-def checker_output_operation_identity(*, checker_run_id: UUID, slot_key: str) -> str:
-    """Keep one logical output identity across worker-lease replacement."""
-    return canonical_json_hash(
-        {
-            "request_type": "checker_output",
-            "checker_run_id": str(checker_run_id),
-            "logical_role": slot_key,
-        }
-    )
-
-
-def checker_output_request_digest_facts(
-    *,
-    reservation: CheckerOutputReservation,
-    slot: CheckerOutputSlot,
-) -> dict[str, object]:
-    """Return stable owner facts shared by checker admission and binding."""
-    evaluation = reservation.evaluation
-    return {
-        "evaluation_request_id": str(evaluation.evaluation_request_id),
-        "evaluation_request_sha256": evaluation.request_sha256,
-        "evaluation_generation": evaluation.evaluation_generation,
-        "checker_run_id": str(reservation.checker_run_id),
-        "project_id": str(evaluation.project_id),
-        "task_id": str(evaluation.task_id),
-        "submission_id": str(evaluation.submission_id),
-        "submission_version": evaluation.submission_version,
-        "slot_key": slot.key,
-        "media_type": slot.media_type,
-        "maximum_bytes": slot.maximum_bytes,
-    }
-
-
-class CheckerOutputAdmissionAuthority(Protocol):
-    """Consume caller-prepared authority for one exact output reservation."""
-
-    async def consume(self, request: CheckerOutputArtifactAdmissionRequest) -> None: ...
 
 
 @final
@@ -374,4 +333,9 @@ class ArtifactRecoveryNotFoundError(ArtifactRecoveryError):
 
 
 # Only these current producers use post-put full-object verification.
-VERIFICATION_PRODUCERS = ("checker_output", "submission_bundle", "task_import_source")
+VERIFICATION_PRODUCERS = (
+    "checker_output",
+    "setup_model_output",
+    "submission_bundle",
+    "task_import_source",
+)

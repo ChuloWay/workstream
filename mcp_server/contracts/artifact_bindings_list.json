@@ -1,0 +1,477 @@
+{
+  "canonical_sha256": "2ead3b5105440a4efb634bb25cbd893adaea3e40d9bba168ed51ea1d22d6aa36",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "ArtifactBindingResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "content_id": {
+            "format": "uuid",
+            "title": "Content Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "logical_role": {
+            "title": "Logical Role",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "resource_id": {
+            "title": "Resource Id",
+            "type": "string"
+          },
+          "resource_type": {
+            "enum": [
+              "project",
+              "project_guide",
+              "guide_source_snapshot",
+              "guide_source_snapshot_item",
+              "task",
+              "submission",
+              "checker_run"
+            ],
+            "title": "Resource Type",
+            "type": "string"
+          },
+          "scope_version": {
+            "title": "Scope Version",
+            "type": "integer"
+          },
+          "supersedes_binding_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Binding Id"
+          }
+        },
+        "required": [
+          "id",
+          "content_id",
+          "project_id",
+          "resource_type",
+          "resource_id",
+          "logical_role",
+          "scope_version",
+          "supersedes_binding_id",
+          "created_at"
+        ],
+        "title": "ArtifactBindingResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "detail",
+          "error"
+        ],
+        "type": "object"
+      },
+      "OperatorPageResponse_ArtifactBindingResponse_": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactBindingResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OperatorPageResponse[ArtifactBindingResponse]",
+        "type": "object"
+      }
+    }
+  },
+  "operation": {
+    "operationId": "list_artifact_bindings_api_v1_operator_artifacts_bindings_get",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "resource_type",
+        "required": true,
+        "schema": {
+          "enum": [
+            "project",
+            "project_guide",
+            "guide_source_snapshot",
+            "guide_source_snapshot_item",
+            "task",
+            "submission",
+            "checker_run"
+          ],
+          "title": "Resource Type",
+          "type": "string"
+        }
+      },
+      {
+        "in": "query",
+        "name": "resource_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Resource Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "query",
+        "name": "cursor",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        }
+      },
+      {
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/OperatorPageResponse_ArtifactBindingResponse_"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        },
+        "description": "Validation Error",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Identity verification unavailable.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "List Artifact Bindings",
+    "tags": [
+      "operator-artifacts"
+    ]
+  },
+  "schema_version": 1,
+  "source": {
+    "action_id": null,
+    "backend_git_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694",
+    "method": "GET",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/operator/artifacts/bindings"
+  }
+}

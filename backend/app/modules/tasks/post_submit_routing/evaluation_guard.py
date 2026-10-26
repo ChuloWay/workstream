@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.checkers.api.execution import CheckerExecutionUnavailable
 from app.modules.checkers.api.evaluation_contract import PostSubmissionExecutionRequest
+from app.modules.checkers.api.output_custody import CheckerOutputSelector, CheckerOutputUnavailable
 from app.modules.tasks.api.submitted_bundle import SubmittedBundleRequest, SubmittedBundleUnavailable
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.submitted_bundle import SubmittedBundleReader
@@ -42,6 +43,27 @@ class TaskEvaluationGuard:
     def __init__(self, session: AsyncSession):
         self._repository = TaskRepository(session)
         self._submitted = SubmittedBundleReader(session)
+
+    async def lock_model_evidence_scope(self, selector: CheckerOutputSelector) -> None:
+        """Retain exact historical owners before private model evidence FK writes."""
+        slot = selector.paid_slot
+        task = await self._repository.lock_project_task(slot.project_id, selector.task_id)
+        if task is None:
+            raise CheckerOutputUnavailable("checker_output_task_unavailable")
+        assignment = await self._repository.lock_accepted_assignment(
+            project_id=slot.project_id, task_id=selector.task_id,
+            assignment_id=slot.assignment_id,
+        )
+        submission = await self._repository.lock_exact_submission_for_task(
+            project_id=slot.project_id, task_id=selector.task_id,
+            submission_id=slot.submission_id,
+        )
+        if assignment is None or submission is None or (
+            submission.version != slot.submission_version
+            or submission.task_assignment_id != str(slot.assignment_id)
+            or submission.contributor_id != assignment.contributor_id
+        ):
+            raise CheckerOutputUnavailable("checker_output_task_unavailable")
 
     async def lock_evaluation_scope(self, request: PostSubmissionExecutionRequest) -> bool:
         """Return new-generation eligibility after exact Task/Assignment/Submission locks."""

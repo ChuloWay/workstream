@@ -1,9 +1,9 @@
 {
-  "canonical_sha256": "068aa5a75c3e505eca21e1dc08b10e4fc5e6f02e43adce7765e9a7ae692c8d36",
+  "canonical_sha256": "60e4a118da27aff0fb92147162e5c5588e8e924673841e2a03893d29f68460e3",
   "components": {
     "schemas": {
       "ActionId": {
-        "type": "string",
+        "description": "Closed action identifiers reserved by approved owner chunks.",
         "enum": [
           "task.submission.list",
           "submission.read",
@@ -59,6 +59,20 @@
           "checker.pre_submit.finalize",
           "checker.post_submit.execute",
           "checker.post_submit.finalize",
+          "checker.model_call.prepare",
+          "checker.model_call.dispatch",
+          "checker.model_call.recover",
+          "checker.model_call.observe",
+          "checker.model_call.complete",
+          "checker.model_call.grant",
+          "project.guide_compilation.model.prepare",
+          "project.guide_compilation.model.dispatch",
+          "project.guide_compilation.model.observe",
+          "project.guide_compilation.model.complete",
+          "project.model_profile.provision",
+          "project.model_budget.configure",
+          "project.model_usage.read",
+          "project.model_call.recovery_child.authorize",
           "outbox.dispatch",
           "actor.service.provision",
           "project.contributor_candidate.list",
@@ -67,6 +81,7 @@
           "project_role_grant.issue",
           "project_role_grant.revoke",
           "project.read",
+          "project.catalogue.list",
           "actor.authorization_context.read",
           "project.setup_run.read",
           "project.guide_sufficiency_report.list",
@@ -167,7 +182,6 @@
           "contribution.read_self",
           "contribution.read_project",
           "actor.project.list",
-          "project.catalogue.list",
           "actor.assignment.list",
           "actor.submission.list",
           "actor.work_summary.read",
@@ -185,57 +199,57 @@
           "contribution.policy.list"
         ],
         "title": "ActionId",
-        "description": "Closed action identifiers reserved by approved owner chunks."
+        "type": "string"
       },
       "ActorAuthorizationContextResponse": {
+        "additionalProperties": false,
+        "description": "Self-only effective authority projected onto one canonical project.",
         "properties": {
           "actor_profile_id": {
-            "type": "string",
             "format": "uuid",
-            "title": "Actor Profile Id"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "active",
-              "suspended",
-              "deactivated"
-            ],
-            "title": "Status"
-          },
-          "project_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Project Id"
+            "title": "Actor Profile Id",
+            "type": "string"
           },
           "admin_roles": {
             "items": {
               "type": "string"
             },
-            "type": "array",
-            "title": "Admin Roles"
-          },
-          "project_roles": {
-            "items": {
-              "type": "string",
-              "enum": [
-                "submitter",
-                "reviewer"
-              ]
-            },
-            "type": "array",
-            "title": "Project Roles"
+            "title": "Admin Roles",
+            "type": "array"
           },
           "effective_action_ids": {
             "items": {
               "$ref": "#/components/schemas/ActionId"
             },
-            "type": "array",
-            "title": "Effective Action Ids"
+            "title": "Effective Action Ids",
+            "type": "array"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_roles": {
+            "items": {
+              "enum": [
+                "submitter",
+                "reviewer"
+              ],
+              "type": "string"
+            },
+            "title": "Project Roles",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "suspended",
+              "deactivated"
+            ],
+            "title": "Status",
+            "type": "string"
           }
         },
-        "additionalProperties": false,
-        "type": "object",
         "required": [
           "actor_profile_id",
           "status",
@@ -245,34 +259,34 @@
           "effective_action_ids"
         ],
         "title": "ActorAuthorizationContextResponse",
-        "description": "Self-only effective authority projected onto one canonical project."
+        "type": "object"
       },
       "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
         "properties": {
           "code": {
-            "type": "string",
-            "title": "Code"
+            "title": "Code",
+            "type": "string"
           },
-          "message": {
-            "type": "string",
-            "title": "Message"
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
           },
           "details": {
             "additionalProperties": true,
-            "type": "object",
-            "title": "Details"
+            "title": "Details",
+            "type": "object"
           },
-          "correlation_id": {
-            "type": "string",
-            "title": "Correlation Id"
+          "message": {
+            "title": "Message",
+            "type": "string"
           },
           "retryable": {
-            "type": "boolean",
-            "title": "Retryable"
+            "title": "Retryable",
+            "type": "boolean"
           }
         },
-        "additionalProperties": false,
-        "type": "object",
         "required": [
           "code",
           "message",
@@ -281,13 +295,12 @@
           "retryable"
         ],
         "title": "ApiError",
-        "description": "Canonical machine-readable API error."
+        "type": "object"
       },
       "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
         "properties": {
-          "error": {
-            "$ref": "#/components/schemas/ApiError"
-          },
           "detail": {
             "anyOf": [
               {},
@@ -296,88 +309,79 @@
               }
             ],
             "title": "Detail"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "error"
-        ],
-        "title": "ApiErrorResponse",
-        "description": "Canonical error plus additive legacy compatibility fields."
-      },
-      "HTTPValidationError": {
-        "type": "object",
-        "required": [
-          "detail",
-          "error"
-        ],
-        "properties": {
-          "detail": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            }
           },
           "error": {
             "$ref": "#/components/schemas/ApiError"
           }
         },
-        "additionalProperties": false
+        "required": [
+          "error"
+        ],
+        "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "detail",
+          "error"
+        ],
+        "type": "object"
       }
     }
   },
   "operation": {
-    "tags": [
-      "actors"
-    ],
-    "summary": "Read Current Actor Authorization Context",
     "description": "Return the caller's effective authority for one canonical project.",
     "operationId": "read_current_actor_authorization_context_api_v1_actors_me_authorization_context_get",
-    "security": [
-      {
-        "HTTPBearer": []
-      }
-    ],
     "parameters": [
       {
-        "name": "project_id",
         "in": "query",
+        "name": "project_id",
         "required": true,
         "schema": {
-          "type": "string",
-          "minLength": 1,
           "maxLength": 100,
+          "minLength": 1,
           "pattern": "^[^\\x00]*$",
-          "title": "Project Id"
+          "title": "Project Id",
+          "type": "string"
         }
       },
       {
+        "in": "header",
         "name": "X-Request-ID",
-        "in": "header",
         "required": false,
         "schema": {
-          "type": "string",
           "format": "uuid",
+          "maxLength": 36,
           "minLength": 36,
-          "maxLength": 36
+          "type": "string"
         }
       },
       {
-        "name": "X-Correlation-ID",
         "in": "header",
+        "name": "X-Correlation-ID",
         "required": false,
         "schema": {
-          "type": "string",
           "format": "uuid",
+          "maxLength": 36,
           "minLength": 36,
-          "maxLength": 36
+          "type": "string"
         }
       }
     ],
     "responses": {
       "200": {
-        "description": "Successful Response",
         "content": {
           "application/json": {
             "schema": {
@@ -385,77 +389,108 @@
             }
           }
         },
+        "description": "Successful Response",
         "headers": {
-          "X-Request-ID": {
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
           "X-Correlation-ID": {
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
             }
           }
         }
       },
       "400": {
-        "description": "Invalid request.",
-        "headers": {
-          "X-Request-ID": {
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          "X-Correlation-ID": {
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        },
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
             }
           }
         }
       },
-      "500": {
-        "description": "Internal server error.",
-        "headers": {
-          "X-Request-ID": {
-            "required": true,
+      "401": {
+        "content": {
+          "application/json": {
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
             }
           },
           "X-Correlation-ID": {
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
             }
           }
-        },
+        }
+      },
+      "403": {
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
             }
           }
         }
       },
       "422": {
-        "description": "Validation Error",
         "content": {
           "application/json": {
             "schema": {
@@ -463,107 +498,86 @@
             }
           }
         },
+        "description": "Validation Error",
         "headers": {
-          "X-Request-ID": {
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
           "X-Correlation-ID": {
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "format": "uuid",
+              "type": "string"
             }
-          }
-        }
-      },
-      "401": {
-        "description": "Authentication failed.",
-        "headers": {
+          },
           "X-Request-ID": {
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          "X-Correlation-ID": {
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          "WWW-Authenticate": {
-            "schema": {
+              "format": "uuid",
               "type": "string"
             }
           }
-        },
+        }
+      },
+      "500": {
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ApiErrorResponse"
             }
           }
-        }
-      },
-      "403": {
-        "description": "Permission denied.",
+        },
+        "description": "Internal server error.",
         "headers": {
-          "X-Request-ID": {
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
           "X-Correlation-ID": {
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "format": "uuid",
+              "type": "string"
             }
-          }
-        },
-        "content": {
-          "application/json": {
+          },
+          "X-Request-ID": {
+            "required": true,
             "schema": {
-              "$ref": "#/components/schemas/ApiErrorResponse"
+              "format": "uuid",
+              "type": "string"
             }
           }
         }
       },
       "503": {
-        "description": "Identity verification unavailable.",
-        "headers": {
-          "X-Request-ID": {
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          "X-Correlation-ID": {
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        },
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ApiErrorResponse"
             }
           }
+        },
+        "description": "Identity verification unavailable.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
         }
       }
     },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Read Current Actor Authorization Context",
+    "tags": [
+      "actors"
+    ],
     "x-workstream-action-id": "actor.authorization_context.read"
   },
   "schema_version": 1,

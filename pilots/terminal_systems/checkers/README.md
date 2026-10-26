@@ -67,11 +67,13 @@ do not establish hosted gVisor isolation.
 
 The six model specifications and two execution specifications are not yet
 implemented. The user has resumed the minimal budgeted model runtime needed by
-this project. It must preserve digest-pinned project images, exact locked
-configuration and Workstream-owned lifecycle decisions. Credentials stay outside
-the sandbox. Project-budget reservations, provider-call identity and uncertain
-delivery recovery must prevent duplicate paid calls and distinguish infrastructure
-failure from contributor failure.
+this project. The generic runtime and its Operator provisioning/recovery controls
+are described in [the model runtime runbook](../../../docs/operations_checker_models.md).
+They preserve digest-pinned project images, exact locked configuration and
+Workstream-owned lifecycle decisions. Credentials stay outside the sandbox.
+The project still needs its review images, approved model profile selectors and
+the authorized US$10 lifetime budget before live calls. Offline runtime proofs
+do not establish this project's activation or live provider operation.
 
 Execution additionally needs a generic isolated build/trial capability and
 approved offline material. Author-evidence review needs authenticated trial

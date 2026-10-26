@@ -59,8 +59,8 @@ GRANT = {
     "revoked_at": None,
 }
 PERMISSIONS = {
-    "items": [{"permission_id": f"test.permission_{i}"} for i in range(82)],
-    "total": 82,
+    "items": [{"permission_id": f"test.permission_{i}"} for i in range(95)],
+    "total": 95,
 }
 DEFINITIONS = {
     "items": [
@@ -447,7 +447,7 @@ def test_admin_rejects_malformed_and_mismatched_success(cli):
             assert_failure(result, "invalid_api_response")
         for command, body in (
             ("permissions", PERMISSIONS | {"total": 81}),
-            ("permissions", PERMISSIONS | {"items": [PERMISSIONS["items"][0]] * 82}),
+            ("permissions", PERMISSIONS | {"items": [PERMISSIONS["items"][0]] * 95}),
             ("role-definitions", DEFINITIONS | {"items": DEFINITIONS["items"][:-1]}),
             (
                 "role-definitions",

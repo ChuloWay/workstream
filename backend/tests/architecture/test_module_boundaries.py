@@ -13,9 +13,7 @@ from scripts.authorization_boundary import AuthorizationBoundaryError
 ROOT = Path(__file__).resolve().parents[3]
 REGISTRY = ROOT / ".ci/module-boundaries/registry.v1.json"
 LEDGER = ROOT / ".ci/module-boundaries/private-edge-debt.v1.json"
-AUTH_LEDGER = (
-    ROOT / ".ci/auth-boundaries/IMPORT_LEDGER.md"
-)
+AUTH_LEDGER = ROOT / ".ci/auth-boundaries/IMPORT_LEDGER.md"
 
 
 def _write(path: Path, value: str) -> None:
@@ -32,14 +30,25 @@ def test_repository_matches_the_protected_module_boundary() -> None:
     boundary.validate(ROOT, REGISTRY, LEDGER, AUTH_LEDGER)
 
 
-def test_registry_names_exactly_nine_business_and_three_supporting_modules() -> None:
+def test_registry_names_exactly_ten_business_and_three_supporting_modules() -> None:
     """The canonical ownership map cannot silently grow or collapse."""
     registry = boundary.load_registry(REGISTRY)
-    assert len(registry.business) == 9
+    assert len(registry.business) == 10
     assert len(registry.supporting) == 3
     assert registry.names == {
-        "actors", "authorization", "projects", "tasks", "artifacts", "checkers",
-        "reviews", "contributions", "compensation", "audit", "outbox", "api_controls",
+        "actors",
+        "authorization",
+        "projects",
+        "tasks",
+        "artifacts",
+        "checkers",
+        "model_usage",
+        "reviews",
+        "contributions",
+        "compensation",
+        "audit",
+        "outbox",
+        "api_controls",
     }
     assert dict(registry.application_surfaces)["backend/app/interfaces"] == (
         "legacy-interface-debt-tracked"
@@ -58,9 +67,7 @@ def test_new_private_edge_fails_exact_ledger_comparison(
     )
     graph = {name: set() for name in boundary.load_registry(REGISTRY).names}
     monkeypatch.setattr(boundary.authorization_boundary, "validate", lambda *_: None)
-    monkeypatch.setattr(
-        boundary.authorization_boundary, "load_ledger", lambda *_: (set(), set())
-    )
+    monkeypatch.setattr(boundary.authorization_boundary, "load_ledger", lambda *_: (set(), set()))
     monkeypatch.setattr(boundary, "scan", lambda *_: ({edge}, graph, set()))
     monkeypatch.setattr(boundary, "load_ledger", lambda *_: set())
     monkeypatch.setattr(boundary, "_validate_public_apis", lambda *_: None)
@@ -78,9 +85,7 @@ def test_owner_adapter_may_bind_only_its_own_private_implementation(
         "from app.modules.tasks.repository import TaskRepository\n"
         "from app.modules.projects.repository import ProjectRepository\n",
     )
-    private, _, _ = boundary.scan(
-        tmp_path, boundary.load_registry(tmp_path / "registry.json")
-    )
+    private, _, _ = boundary.scan(tmp_path, boundary.load_registry(tmp_path / "registry.json"))
     assert private == {
         boundary.PrivateEdge(
             "backend/app/adapters/tasks/__init__.py",
@@ -100,9 +105,7 @@ def test_non_root_adapter_keeps_same_owner_private_debt_visible(
         tmp_path / "backend/app/adapters/tasks/worker.py",
         "from app.modules.tasks.repository import TaskRepository\n",
     )
-    private, _, _ = boundary.scan(
-        tmp_path, boundary.load_registry(tmp_path / "registry.json")
-    )
+    private, _, _ = boundary.scan(tmp_path, boundary.load_registry(tmp_path / "registry.json"))
     assert private == {
         boundary.PrivateEdge(
             "backend/app/adapters/tasks/worker.py",
@@ -205,16 +208,13 @@ def test_auth_view_contains_only_cross_boundary_private_edges(tmp_path: Path) ->
     _registry(tmp_path / "registry.json")
     _write(
         tmp_path / "backend/app/modules/authorization/service.py",
-        "from app.modules.authorization import repository\n"
-        "from app.modules.tasks import models\n",
+        "from app.modules.authorization import repository\nfrom app.modules.tasks import models\n",
     )
     _write(
         tmp_path / "backend/app/modules/tasks/service.py",
         "from app.modules.authorization import runtime\n",
     )
-    _, _, auth_edges = boundary.scan(
-        tmp_path, boundary.load_registry(tmp_path / "registry.json")
-    )
+    _, _, auth_edges = boundary.scan(tmp_path, boundary.load_registry(tmp_path / "registry.json"))
     assert auth_edges == {
         boundary.authorization_boundary.ImportEdge(
             "backend/app/modules/authorization/service.py", "app.modules.tasks"
@@ -250,8 +250,7 @@ def test_tasks_public_api_has_no_private_or_mutable_dependency() -> None:
         imports.update(boundary.exact_source_imports(path, ROOT))
     assert imports
     assert all(
-        not target.startswith("app.modules.")
-        or target.startswith("app.modules.tasks.api")
+        not target.startswith("app.modules.") or target.startswith("app.modules.tasks.api")
         for target in imports
     )
 
@@ -290,6 +289,7 @@ def test_checkers_public_api_has_no_private_or_mutable_dependency() -> None:
         not target.startswith("app.modules.")
         or target == "app.modules.checkers.api"
         or target.startswith("app.modules.checkers.api.")
+        or target == "app.modules.model_usage.api"
         for target in imports
     )
 
@@ -341,12 +341,14 @@ def test_general_ledger_rejects_copied_authorization_edges(tmp_path: Path) -> No
     """AUTH debt remains exclusively owned by the AUTH-003 ledger."""
     document = {
         "schema_version": 1,
-        "edges": [{
-            "source_file": "backend/app/modules/tasks/service.py",
-            "target_module": "authorization",
-            "imported_private_path": "app.modules.authorization.runtime",
-            "repair_owner": "security-triage-required",
-        }],
+        "edges": [
+            {
+                "source_file": "backend/app/modules/tasks/service.py",
+                "target_module": "authorization",
+                "imported_private_path": "app.modules.authorization.runtime",
+                "repair_owner": "security-triage-required",
+            }
+        ],
     }
     path = tmp_path / "ledger.json"
     path.write_text(json.dumps(document), encoding="utf-8")
@@ -358,12 +360,14 @@ def test_general_ledger_allows_non_auth_security_triage_owner(tmp_path: Path) ->
     """Unresolved authorization-affecting non-AUTH debt can block its capability."""
     document = {
         "schema_version": 1,
-        "edges": [{
-            "source_file": "backend/app/modules/tasks/service.py",
-            "target_module": "actors",
-            "imported_private_path": "app.modules.actors.models",
-            "repair_owner": "security-triage-required",
-        }],
+        "edges": [
+            {
+                "source_file": "backend/app/modules/tasks/service.py",
+                "target_module": "actors",
+                "imported_private_path": "app.modules.actors.models",
+                "repair_owner": "security-triage-required",
+            }
+        ],
     }
     path = tmp_path / "ledger.json"
     path.write_text(json.dumps(document), encoding="utf-8")
@@ -407,10 +411,13 @@ def test_initial_ledgers_capture_high_risk_application_edges() -> None:
         for source, target in actual
     )
     auth_inbound, _ = boundary.authorization_boundary.load_ledger(AUTH_LEDGER)
-    assert boundary.authorization_boundary.ImportEdge(
-        "backend/app/interfaces/artifact_operations.py",
-        "app.modules.authorization.prepared",
-    ) in auth_inbound
+    assert (
+        boundary.authorization_boundary.ImportEdge(
+            "backend/app/interfaces/artifact_operations.py",
+            "app.modules.authorization.prepared",
+        )
+        in auth_inbound
+    )
 
 
 def test_metadata_discovery_exception_is_exact_and_model_only(tmp_path: Path) -> None:
@@ -423,9 +430,7 @@ def test_metadata_discovery_exception_is_exact_and_model_only(tmp_path: Path) ->
     assert not edges
     _write(path, "from app.modules.tasks import repository\n")
     edges, _, _ = boundary.scan(tmp_path, registry)
-    assert {edge.imported_private_path for edge in edges} == {
-        "app.modules.tasks.repository"
-    }
+    assert {edge.imported_private_path for edge in edges} == {"app.modules.tasks.repository"}
 
 
 @pytest.mark.parametrize("mutation", ("missing", "additional"))
@@ -480,8 +485,7 @@ def test_exact_auth_adapter_root_uses_owner_parity_without_nested_exception(
     _registry(tmp_path / "registry.json")
     _write(
         tmp_path / "backend/app/adapters/auth/__init__.py",
-        "import app.modules.authorization.runtime\n"
-        "import app.modules.tasks.repository\n",
+        "import app.modules.authorization.runtime\nimport app.modules.tasks.repository\n",
     )
     nested = "backend/app/adapters/auth/adapter_bindings.py"
     _write(
@@ -515,9 +519,7 @@ def test_exact_auth_adapter_root_uses_owner_parity_without_nested_exception(
         "from app.modules.projects.repository import *\n",
     ),
 )
-def test_dynamic_and_wildcard_imports_fail_repository_wide(
-    tmp_path: Path, source: str
-) -> None:
+def test_dynamic_and_wildcard_imports_fail_repository_wide(tmp_path: Path, source: str) -> None:
     """The general scanner inherits AUTH's fail-closed AST parser."""
     _registry(tmp_path / "registry.json")
     _write(tmp_path / "backend/app/modules/tasks/service.py", source)

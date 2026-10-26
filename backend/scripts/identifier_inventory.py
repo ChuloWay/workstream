@@ -22,8 +22,14 @@ GENERATION_CLASSIFICATIONS = "identifier_generation_classifications.json"
 SEMANTIC_KEYS = {
     "submission_dispatches": ("submission-owned original dispatch receipt", ("submission_id",)),
     "submission_binding_receipts": ("admission-owned binding authority receipt", ("admission_id",)),
-    "review_packet_guide_items": ("packet-to-declared-source membership", ("packet_id", "source_item_id")),
-    "actor_profile_migration_state": ("seeded schema-state singleton, not a record sequence", ("id",)),
+    "review_packet_guide_items": (
+        "packet-to-declared-source membership",
+        ("packet_id", "source_item_id"),
+    ),
+    "actor_profile_migration_state": (
+        "seeded schema-state singleton, not a record sequence",
+        ("id",),
+    ),
     "api_rate_control_counters": ("rate-limit scope and digest", ("control_scope", "key_digest")),
     "artifact_admission_scopes": ("artifact quota scope", ("scope_type", "scope_id")),
     "artifact_put_attempt_charges": ("attempt-to-charge association", ("attempt_id", "charge_id")),
@@ -33,6 +39,14 @@ SEMANTIC_KEYS = {
     "guide_source_extraction_retry_budgets": ("binding-owned shared primary key", ("binding_id",)),
     "iso_4217_currency_codes": ("ISO currency code", ("code",)),
     "legacy_actor_identities": ("external legacy actor key", ("actor_id",)),
+    "model_usage_budget_accounts": (
+        "project-owned lifetime budget account",
+        ("project_id",),
+    ),
+    "checker_model_invocation_grant_calls": (
+        "grant call-index binding",
+        ("grant_id", "call_index"),
+    ),
     "outbox_delivery_attempts": ("event delivery generation", ("event_id", "claim_generation")),
     "project_compensation_units": (
         "project instrument and unit code",
@@ -204,9 +218,12 @@ def parse_orm_models(app_root: Path, report_root: Path | None = None) -> dict[st
                     for owner in [tables.get(target.rpartition(".")[0])]
                     if column["storage_type"] == "inferred" and owner
                     for target_column in [_columns(owner).get(target.rpartition(".")[2])]
-                    if target_column and target_column["storage_kind"] != "other"
-                    and (target_column["storage_type"] != "inferred"
-                         or target_column.get("storage_inferred_from_foreign_key"))
+                    if target_column
+                    and target_column["storage_kind"] != "other"
+                    and (
+                        target_column["storage_type"] != "inferred"
+                        or target_column.get("storage_inferred_from_foreign_key")
+                    )
                 }
                 if len(kinds) == 1 and column["storage_kind"] != next(iter(kinds)):
                     column["storage_kind"] = next(iter(kinds))
@@ -303,19 +320,26 @@ def parse_schema(backend_root: Path) -> dict[str, dict[str, Any]]:
             and ast.unparse(statement.value.func) == "op.drop_table"
         }
         downgrade_nodes = {
-            node for function in tree.body
+            node
+            for function in tree.body
             if isinstance(function, ast.FunctionDef) and function.name == "downgrade"
             for node in ast.walk(function)
         }
-        for item in sorted(ast.walk(tree), key=lambda node: (
-            getattr(node, "lineno", 0), getattr(node, "col_offset", 0),
-        )):
+        for item in sorted(
+            ast.walk(tree),
+            key=lambda node: (
+                getattr(node, "lineno", 0),
+                getattr(node, "col_offset", 0),
+            ),
+        ):
             if item in downgrade_nodes:
                 continue
             if item in drops and item.args and (table_name := _string(item.args[0])):
-                if all(keyword.arg is not None and (
-                    keyword.arg != "schema" or _string(keyword.value) == "public"
-                ) for keyword in item.keywords):
+                if all(
+                    keyword.arg is not None
+                    and (keyword.arg != "schema" or _string(keyword.value) == "public")
+                    for keyword in item.keywords
+                ):
                     tables.pop(table_name, None)
                 continue
             if (
@@ -331,14 +355,16 @@ def parse_schema(backend_root: Path) -> dict[str, dict[str, Any]]:
                 or not (table_name := _string(item.args[0]))
             ):
                 continue
-            primary_key = list(dict.fromkeys(
-                name
-                for argument in item.args[1:]
-                if isinstance(argument, ast.Call)
-                and _name(argument.func) == "PrimaryKeyConstraint"
-                for value in argument.args
-                if (name := _string(value))
-            ))
+            primary_key = list(
+                dict.fromkeys(
+                    name
+                    for argument in item.args[1:]
+                    if isinstance(argument, ast.Call)
+                    and _name(argument.func) == "PrimaryKeyConstraint"
+                    for value in argument.args
+                    if (name := _string(value))
+                )
+            )
             columns = []
             for argument in item.args[1:]:
                 if (
@@ -526,9 +552,7 @@ def scan_generation_sites(
                 continue
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             parents = {
-                child: parent
-                for parent in ast.walk(tree)
-                for child in ast.iter_child_nodes(parent)
+                child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)
             }
             direct, modules = _uuid_bindings(tree)
             occurrences = _uuid_occurrences(tree, parents, direct, modules)
@@ -565,7 +589,9 @@ def _key(table: dict[str, Any], orm_present: bool) -> dict[str, str]:
         )
     if not orm_present:
         return {"classification": "unresolved", "reason": "schema table has no ORM owner"}
-    if table["name"] == "task_post_submit_routing_requests" and table["primary_key"] == ["route_operation_id"]:
+    if table["name"] == "task_post_submit_routing_requests" and table["primary_key"] == [
+        "route_operation_id"
+    ]:
         return {
             "classification": "generated_surrogate",
             "reason": "TASK-owned generated routing operation record",
@@ -613,9 +639,7 @@ def _string_uuid_references(tables: list[dict[str, Any]]) -> list[dict[str, str]
                             "candidate": "convert relationship to native UUID",
                         }
                     )
-    return sorted(
-        references, key=lambda item: (item["table"], item["column"], item["target"])
-    )
+    return sorted(references, key=lambda item: (item["table"], item["column"], item["target"]))
 
 
 def _generation_inventory(backend_root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -680,15 +704,21 @@ def build_inventory(backend_root: Path) -> dict[str, Any]:
         if key["classification"] == "unresolved":
             unresolved.append({"kind": "table_key", "table": name, "reason": key["reason"]})
         if owner and not ddl:
-            unresolved.append({
-                "kind": "missing_schema_table", "table": name,
-                "reason": "ORM table is absent from the schema inventory",
-            })
+            unresolved.append(
+                {
+                    "kind": "missing_schema_table",
+                    "table": name,
+                    "reason": "ORM table is absent from the schema inventory",
+                }
+            )
         if owner and ddl and owner["primary_key"] != ddl["primary_key"]:
-            unresolved.append({
-                "kind": "primary_key_shape_mismatch", "table": name,
-                "reason": "ORM and schema primary keys differ",
-            })
+            unresolved.append(
+                {
+                    "kind": "primary_key_shape_mismatch",
+                    "table": name,
+                    "reason": "ORM and schema primary keys differ",
+                }
+            )
         if owner and ddl and owner["primary_key"] == ddl["primary_key"]:
             for column_name in owner["primary_key"]:
                 left, right = _columns(owner).get(column_name), _columns(ddl).get(column_name)

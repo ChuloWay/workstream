@@ -49,6 +49,7 @@ from botocore.utils import (
 from app.adapters.artifacts.aws_roles_anywhere import (
     create_roles_anywhere_credential_provider,
 )
+from app.core.cancellation import await_completion_preserving_cancellation
 from app.core.config import Settings
 from app.core.hashing import canonical_json_hash
 from app.core.s3_validation import (
@@ -573,19 +574,25 @@ class S3CompatibleArtifactStore:
             if commitment.byte_count == 0:
                 await body.validate_empty()
             request_body: object = b"" if commitment.byte_count == 0 else body
-            async with asyncio.timeout(self._operation_total_timeout_seconds):
-                async with asyncio.timeout(self._write_timeout_seconds):
-                    await self._require_activation_for_sdk_call(evidence)
-                    async with self._client() as client:
+            try:
+                async with asyncio.timeout(self._operation_total_timeout_seconds):
+                    async with asyncio.timeout(self._write_timeout_seconds):
                         await self._require_activation_for_sdk_call(evidence)
-                        await client.put_object(
-                            Bucket=self._bucket,
-                            Key=self._object_key(provider_object_ref),
-                            Body=request_body,
-                            ContentLength=commitment.byte_count,
-                            ContentType=commitment.media_type,
-                            IfNoneMatch="*",
-                        )
+                        async with self._client() as client:
+                            await self._require_activation_for_sdk_call(evidence)
+                            await client.put_object(
+                                Bucket=self._bucket,
+                                Key=self._object_key(provider_object_ref),
+                                Body=request_body,
+                                ContentLength=commitment.byte_count,
+                                ContentType=commitment.media_type,
+                                IfNoneMatch="*",
+                            )
+            finally:
+                # aiohttp streams async bodies in a separate writer task. Its
+                # cancellation is not joined by the request timeout path, so
+                # retain source ownership until that exact consumer is done.
+                await body.wait_for_consumer()
             if not body.complete:
                 raise ArtifactInputMismatchError(
                     "S3 provider did not consume the sealed artifact source"
@@ -809,6 +816,11 @@ class S3CompatibleArtifactStore:
         """Finish validating the sealed source before accepting any replay."""
         try:
             async with asyncio.timeout(self._operation_total_timeout_seconds):
+                await body.wait_for_consumer()
+                if body.consumer_started and not body.complete:
+                    raise ArtifactStoreUnavailableError(
+                        "S3 artifact operation failed"
+                    )
                 await body.validate_complete()
         except TimeoutError:
             raise ArtifactStoreUnavailableError("S3 artifact operation failed") from None
@@ -880,6 +892,10 @@ class _CommittedSourceBody:
         self._pending = bytearray()
         self._digest = hashlib.sha256()
         self._byte_count = 0
+        self._consumer_task: asyncio.Task[Any] | None = None
+        self._consumer_started = False
+        self._consumer_finished = False
+        self._consumer_error: ArtifactStoreError | None = None
 
     def __aiter__(self) -> AsyncIterator[bytes]:
         """Yield bounded bytes while checking the exact digest and count."""
@@ -889,8 +905,23 @@ class _CommittedSourceBody:
 
         async def iterate() -> AsyncIterator[bytes]:
             """Yield the source until its commitment and EOF are proven."""
-            while chunk := await self.read(self._buffer_bytes):
-                yield chunk
+            consumer = asyncio.current_task()
+            if consumer is None or (
+                self._consumer_task is not None and self._consumer_task is not consumer
+            ):
+                raise ArtifactInputMismatchError(
+                    "artifact source stream has multiple consumers"
+                )
+            self._consumer_task = consumer
+            self._consumer_started = True
+            try:
+                while chunk := await self.read(self._buffer_bytes):
+                    yield chunk
+            except ArtifactStoreError as error:
+                self._consumer_error = error
+                raise
+            finally:
+                self._consumer_finished = True
 
         return iterate()
 
@@ -898,6 +929,40 @@ class _CommittedSourceBody:
     def complete(self) -> bool:
         """Return whether the sealed second-pass stream was fully validated."""
         return self._complete
+
+    @property
+    def consumer_started(self) -> bool:
+        """Return whether the SDK scheduled a task to consume this source."""
+        return self._consumer_started
+
+    async def wait_for_consumer(self) -> None:
+        """Join the finite sealed-source consumer before releasing ownership.
+
+        The public put boundary accepts only ``CommittedArtifactSource``. Its
+        owner applies the scratch deadline to the complete stream and finishes
+        each regular-file read cancellation-resistently. An independent shorter
+        timeout here would abandon a live reader and violate scratch custody.
+        """
+        consumer = self._consumer_task
+        if consumer is asyncio.current_task() and not self._consumer_finished:
+            raise ArtifactInputMismatchError(
+                "artifact source consumer cannot join itself"
+            )
+        if consumer is not None and consumer is not asyncio.current_task():
+
+            async def join() -> None:
+                try:
+                    await consumer
+                except BaseException:
+                    # Cancellation and transport failure are classified by the
+                    # request owner; a source failure is retained separately.
+                    pass
+
+            await await_completion_preserving_cancellation(join())
+        if self._consumer_finished:
+            self._consumer_task = None
+        if self._consumer_error is not None:
+            raise self._consumer_error
 
     async def read(self, amount: int | None = -1) -> bytes:
         """Return one bounded async file-like chunk for the pinned SDK."""

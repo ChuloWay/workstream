@@ -1,0 +1,546 @@
+{
+  "canonical_sha256": "e7f1bb9a59affbbe855b6948fb3b9a20e2f5fddf54f3acbd38a0debc5ffe6084",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "PreparationFindingCounts": {
+        "additionalProperties": false,
+        "properties": {
+          "blocking": {
+            "minimum": 0.0,
+            "title": "Blocking",
+            "type": "integer"
+          },
+          "coverage_incomplete": {
+            "minimum": 0.0,
+            "title": "Coverage Incomplete",
+            "type": "integer"
+          },
+          "warning": {
+            "minimum": 0.0,
+            "title": "Warning",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "blocking",
+          "warning",
+          "coverage_incomplete"
+        ],
+        "title": "PreparationFindingCounts",
+        "type": "object"
+      },
+      "SubmissionBundlePreparationDetail": {
+        "additionalProperties": false,
+        "description": "A preparation with every contributor-visible intake finding.",
+        "properties": {
+          "admission_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admission Id"
+          },
+          "archive_byte_count": {
+            "exclusiveMinimum": 0.0,
+            "title": "Archive Byte Count",
+            "type": "integer"
+          },
+          "archive_sha256": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Archive Sha256",
+            "type": "string"
+          },
+          "assignment_id": {
+            "format": "uuid",
+            "title": "Assignment Id",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "finding_counts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreparationFindingCounts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "findings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "infrastructure_failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Infrastructure Failure Code"
+          },
+          "outcome": {
+            "enum": [
+              "pending",
+              "passed",
+              "failed",
+              "infrastructure_failed"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "preparation_id": {
+            "format": "uuid",
+            "title": "Preparation Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "checking",
+              "checks_failed",
+              "infrastructure_failed",
+              "storing",
+              "ready",
+              "submitted",
+              "stale"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "storage_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionBundlePreparationStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "submission_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submission Id"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preparation_id",
+          "task_id",
+          "assignment_id",
+          "outcome",
+          "state",
+          "storage_status",
+          "infrastructure_failure_code",
+          "archive_sha256",
+          "archive_byte_count",
+          "finding_counts",
+          "admission_id",
+          "submission_id",
+          "created_at",
+          "completed_at",
+          "findings"
+        ],
+        "title": "SubmissionBundlePreparationDetail",
+        "type": "object"
+      },
+      "SubmissionBundlePreparationStatus": {
+        "description": "Closed public state vocabulary for one ART preparation operation.",
+        "enum": [
+          "prepared",
+          "put_in_flight",
+          "object_confirmed",
+          "stored_pending_verification",
+          "observed_confirmed",
+          "acknowledgement_unknown",
+          "provider_unavailable",
+          "conflict",
+          "integrity_mismatch",
+          "missing",
+          "absent_replay_required",
+          "stale",
+          "ready"
+        ],
+        "title": "SubmissionBundlePreparationStatus",
+        "type": "string"
+      }
+    }
+  },
+  "operation": {
+    "description": "One of your preparations with every intake finding; others are not found.",
+    "operationId": "read_my_preparation_api_v1_tasks__task_id__submission_bundle_preparations__preparation_id__get",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "task_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "preparation_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Preparation Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SubmissionBundlePreparationDetail"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Not Found",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Unprocessable Entity",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Service Unavailable",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Read My Preparation",
+    "tags": [
+      "tasks"
+    ],
+    "x-workstream-action-id": "task.submission_bundle_preparation.read"
+  },
+  "schema_version": 1,
+  "source": {
+    "method": "GET",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/tasks/{task_id}/submission-bundle-preparations/{preparation_id}",
+    "repository_sha": "f0431385573eb53353c5ffc3c6cdb6a93d206b73"
+  }
+}

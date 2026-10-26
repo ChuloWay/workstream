@@ -30,6 +30,7 @@ from .contracts import CompilationAttemptIdentity
 from .repository import GuideCompilationIntegrityError, GuideCompilationRepository
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.core.identifiers import new_record_id
+from app.modules.model_usage.api import ModelProfileReaderPort
 
 
 @dataclass(frozen=True)
@@ -148,3 +149,26 @@ def automatic_request_selector(setup_run_id: UUID, generation: int) -> UUID:
 def new_compilation_request_operation_id() -> UUID:
     """Mint one persisted request-operation identity under its setup owner lock."""
     return new_record_id()
+
+
+async def select_model_runtime_configuration(
+    configuration: ProjectGuideRuntimeConfiguration,
+    profiles: ModelProfileReaderPort,
+    project_id: UUID,
+) -> ProjectGuideRuntimeConfiguration:
+    """Bind automatic and human setup requests to one immutable project profile."""
+    if not configuration.uses_inference:
+        return configuration
+    profile = await profiles.read_latest_matching(
+        project_id=project_id,
+        provider=configuration.model_provider,
+        api=configuration.model_api,
+        model_snapshot=configuration.model,
+    )
+    return configuration.model_copy(
+        update={
+            "model_profile_id": profile.profile_id,
+            "model_profile_version": profile.spec.profile_version,
+            "model_profile_digest": profile.profile_digest,
+        }
+    )

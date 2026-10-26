@@ -1,14 +1,14 @@
 """Local guide parsing must retain the same isolation boundary as deployment."""
 
-from contextlib import chdir
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
-from types import ModuleType
 import unittest
+from contextlib import chdir
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import patch
 
 import yaml
@@ -81,15 +81,23 @@ class LocalGuideRuntimeTests(unittest.TestCase):
         self.assertIn("size=64m", parser["tmpfs"][0])
         self.assertIn("--healthcheck", parser["healthcheck"]["test"])
 
-    def test_only_worker_receives_provider_keys_and_readonly_parser_socket(self):
-        for name in ("backend", "beat", "guide-document-parser"):
+    def test_only_model_proxy_receives_provider_keys(self):
+        for name in ("backend", "worker", "beat", "guide-document-parser"):
             service = self.services[name]
             self.assertFalse(
                 {"OPENAI_API_KEY", "OPENROUTER_API_KEY"} & set(service.get("environment", {})),
                 name,
             )
-            if name != "guide-document-parser":
+            if name in {"backend", "beat"}:
                 self.assertFalse(any("guide_parser_socket:" in mount for mount in service["volumes"]))
+        proxy = self.services["model-proxy"]
+        self.assertEqual(
+            {"OPENAI_API_KEY", "OPENROUTER_API_KEY"}
+            & set(proxy.get("environment", {})),
+            {"OPENAI_API_KEY", "OPENROUTER_API_KEY"},
+        )
+
+    def test_worker_receives_readonly_parser_socket(self):
         worker = self.services["worker"]
         self.assertIn("10001", worker["group_add"])
         self.assertIn("guide_parser_socket:/var/lib/workstream/guide-runtime:ro", worker["volumes"])

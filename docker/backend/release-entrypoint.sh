@@ -21,7 +21,12 @@ runtime="${WORKSTREAM_PROJECT_AGENT_RUNTIME:-}"
 provider="${WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER:-}"
 model_api="${WORKSTREAM_PROJECT_AGENT_MODEL_API:-}"
 model="${WORKSTREAM_PROJECT_AGENT_MODEL:-}"
-if [ "$role" != "parser" ]; then
+if [ "$role" = "model-proxy" ]; then
+    if [ "$sdk_environment" != "agents" ]; then
+        echo "model proxy requires the pinned agents SDK environment" >&2
+        exit 1
+    fi
+elif [ "$role" != "parser" ]; then
     case "$runtime:$sdk_environment" in
         openai_agents_sdk:agents|omnicore_agent:omnicore)
             ;;
@@ -96,22 +101,11 @@ case "$role" in
     worker)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
         load_required_secret WORKSTREAM_CELERY_BROKER_URL "${WORKSTREAM_CELERY_BROKER_URL_FILE:-}"
-        case "$runtime" in
-            manager_authored)
-                ;;
-            *) case "$provider" in
-            openrouter)
-                load_required_secret OPENROUTER_API_KEY "${WORKSTREAM_PROJECT_AGENT_API_KEY_FILE:-}"
-                ;;
-            openai)
-                load_required_secret OPENAI_API_KEY "${WORKSTREAM_PROJECT_AGENT_API_KEY_FILE:-}"
-                ;;
-            *)
-                echo "trusted project agent model provider is unavailable or unsupported" >&2
-                exit 1
-                ;;
-            esac ;;
-        esac
+        ;;
+    model-proxy)
+        load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
+        load_required_secret OPENAI_API_KEY "${WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE:-}"
+        load_required_secret OPENROUTER_API_KEY "${WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE:-}"
         ;;
     beat)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
@@ -134,7 +128,8 @@ unset WORKSTREAM_DATABASE_URL_FILE
 unset WORKSTREAM_CELERY_BROKER_URL_FILE
 unset WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE
 unset WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE
-unset WORKSTREAM_PROJECT_AGENT_API_KEY_FILE
+unset WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE
+unset WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE
 unset OPENAI_API_KEY_FILE
 unset AWS_SHARED_CREDENTIALS_FILE
 unset AWS_CONFIG_FILE

@@ -20,9 +20,11 @@ intake configuration; the intended production Flow/AWS deployment remains separa
 The Smol 1.31.4 qualification (PR #672) proves fresh VM overlap, real Python checker
 execution, cancellation/deadlines and request-process recovery, but not production
 resource parity, host/controller restart recovery, ART integration or deployment.
-The existing model-runtime worktree is independently owned and uncommitted; do
-not replace its gateway/budget ownership with arbitrary network access or secrets
-in a VM. Integrate its stable capability when available, preserving private grants.
+The merged model-runtime capability owns gateway, budget and private-grant
+custody. Its host Unix-socket relay currently supports Docker/runsc project
+execution; Smol rejects model-entitled project execution until that transport is
+qualified inside the guest. Trusted Smol intake remains independently available.
+Do not replace that ownership with arbitrary network access or secrets in a VM.
 
 ## Design
 

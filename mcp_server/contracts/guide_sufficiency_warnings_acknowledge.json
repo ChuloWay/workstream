@@ -1,0 +1,602 @@
+{
+  "canonical_sha256": "65e8d43f67919a264b07a21c335f88b471020b552fa14918808c01a23efc0079",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlation_id": {
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "GuideSufficiencyAcknowledgement": {
+        "additionalProperties": false,
+        "description": "Request schema for acknowledging non-blocking sufficiency warnings.",
+        "properties": {
+          "acknowledgement_note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "GuideSufficiencyReportResponse": {
+        "additionalProperties": false,
+        "description": "Response schema for guide sufficiency reports.",
+        "properties": {
+          "acknowledgement_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agent_material_byte_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agent_material_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agent_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "guide_id": {
+            "type": "string"
+          },
+          "guide_version": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "project_setup_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "setup_generation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_snapshot_hash": {
+            "type": "string"
+          },
+          "source_snapshot_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warnings_acknowledged_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warnings_acknowledged_by_actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warnings_acknowledged_by_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "guide_id",
+          "guide_version",
+          "source_snapshot_id",
+          "source_snapshot_hash",
+          "status",
+          "findings",
+          "summary",
+          "agent_name",
+          "agent_version",
+          "project_setup_run_id",
+          "setup_generation",
+          "agent_material_sha256",
+          "agent_material_byte_count",
+          "created_by",
+          "created_at",
+          "warnings_acknowledged_by_role",
+          "warnings_acknowledged_by_actor",
+          "warnings_acknowledged_at",
+          "acknowledgement_note"
+        ],
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "detail",
+          "error"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "operation": {
+    "description": "Acknowledge non-blocking guide sufficiency warnings.",
+    "operationId": "acknowledge_guide_sufficiency_warnings_api_v1_projects__project_id__guides__guide_id__sufficiency_reports__report_id__acknowledge_warnings_post",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "project_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "guide_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "report_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/GuideSufficiencyAcknowledgement"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/GuideSufficiencyReportResponse"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Resource not found.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Request conflict.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        },
+        "description": "Validation Error",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Identity verification unavailable.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Acknowledge Guide Sufficiency Warnings",
+    "tags": [
+      "projects"
+    ],
+    "x-workstream-action-id": "project.guide_sufficiency.warnings.acknowledge"
+  },
+  "source": {
+    "method": "POST",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports/{report_id}/acknowledge-warnings",
+    "repository_sha": "733c752f7c1ecbb74615d42b747dfbda8ff72df5"
+  }
+}
