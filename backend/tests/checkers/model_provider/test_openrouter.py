@@ -325,15 +325,21 @@ async def test_lost_dispatch_is_uncertain_and_never_retried() -> None:
         ("error", CheckerModelProviderStatus.FAILED),
     ],
 )
+@pytest.mark.parametrize("content_mode", ["text", "null", "absent"])
 async def test_known_terminal_failures_settle_with_complete_usage(
     finish_reason: str,
     status: CheckerModelProviderStatus,
+    content_mode: str,
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "GET":
             return httpx.Response(200, json=metadata())
         body = completion()
         body["choices"][0]["finish_reason"] = finish_reason
+        if content_mode == "null":
+            body["choices"][0]["message"]["content"] = None
+        elif content_mode == "absent":
+            del body["choices"][0]["message"]["content"]
         return httpx.Response(200, json=body)
 
     provider = adapter(handler)
@@ -342,6 +348,7 @@ async def test_known_terminal_failures_settle_with_complete_usage(
     assert result.outcome is CheckerModelCreateOutcome.ACCEPTED
     assert result.observation is not None
     assert result.observation.status is status
+    assert result.observation.output_text == ("verbatim output" if content_mode == "text" else None)
     assert result.observation.usage == CheckerModelUsage(8, 3, 5, 2, 13)
     await provider.aclose()
 
@@ -389,6 +396,22 @@ async def test_identity_choice_and_usage_substitution_cannot_settle(body: dict) 
             "finish_reason": "stop",
         },
         {
+            "index": 0,
+            "message": {"role": "assistant", "content": None},
+            "finish_reason": "stop",
+        },
+        {
+            "index": 0,
+            "message": {"role": "assistant"},
+            "finish_reason": "stop",
+        },
+        {
+            "index": 0,
+            "message": {"role": "assistant", "content": 0},
+            "finish_reason": "error",
+        },
+
+        {
             "message": {"role": "assistant", "content": "bounded"},
             "finish_reason": "stop",
         },
@@ -422,7 +445,11 @@ async def test_identity_choice_and_usage_substitution_cannot_settle(body: dict) 
             "finish_reason": "stop",
         },
     ],
-    ids=["boolean-index", "missing-index", "null-index", "malformed-tool-calls", "tool-call", "function-call"],
+    ids=[
+        "boolean-index", "null-completed-content", "missing-completed-content",
+        "malformed-failed-content", "missing-index", "null-index",
+        "malformed-tool-calls", "tool-call", "function-call",
+    ],
 )
 async def test_non_text_choice_payload_cannot_settle(choice: dict) -> None:
     def handler(request: httpx.Request) -> httpx.Response:

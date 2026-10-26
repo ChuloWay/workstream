@@ -208,12 +208,17 @@ class OpenRouterCheckerModelProvider:
                 raise ValueError("provider output exceeds profile bound")
             output_text = None
             status = CheckerModelProviderStatus.FAILED
-        elif refusal not in (None, "") or not isinstance(output_text, str):
+        elif refusal not in (None, ""):
             raise ValueError("provider output is invalid")
         else:
-            if len(output_text.encode("utf-8")) > self._profile.spec.maximum_output_bytes:
-                raise ValueError("provider output exceeds profile bound")
             status = _provider_status(finish_reason)
+            if output_text is None:
+                if status is CheckerModelProviderStatus.COMPLETED:
+                    raise ValueError("completed provider output is missing")
+            elif not isinstance(output_text, str):
+                raise ValueError("provider output is invalid")
+            elif len(output_text.encode("utf-8")) > self._profile.spec.maximum_output_bytes:
+                raise ValueError("provider output exceeds profile bound")
         normalized = openrouter_usage(value.get("usage"))
         if normalized.total_tokens is None:
             raise ValueError("provider usage is incomplete")

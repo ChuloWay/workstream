@@ -135,6 +135,9 @@ calls, while rejecting nonempty or malformed values. Every completion choice
 must carry integer index zero; missing, null and boolean indices are invalid.
 Focused HTTP regressions cover both boundaries, and the retained-ART replay
 case uses a valid empty tool-call list through real PostgreSQL custody.
+Authenticated failed/incomplete responses may omit text and still settle their
+known usage; completed responses must contain text. The terminal-status matrix
+covers text, null and absent content without turning malformed values into success.
 
 ## Reconciliation
 
