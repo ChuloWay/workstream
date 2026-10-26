@@ -1154,3 +1154,41 @@ owned baseline passed with fixture identity. It preserves pending active nested
 recovery, live-provider and full-project evidence.
 No disposition change, native rebuild or new qualification claim follows from
 these documentation edits.
+
+Recovery 020 stopped before the workload marker or fault injection because the
+test observer required readable `/proc/<vmm>/exe`. Pinned Smol 1.31.4
+`process::harden_self` sets non-dumpable before guest boot; a bounded no-VM
+same-UID control reproduced EACCES while status UID/GID, start ticks and cgroup
+remained readable. This is not an active recovery PASS. Its failed cleanup
+receipt is `c18b8757690c65a24d98e8e33e80948b0bd11571a1afb87923017314c93819fa`.
+It discloses exact manual removal of an unused owned relay socket/directory
+after process, lease and cgroup absence; this is not runtime cleanup evidence.
+
+The bounded correction permits only this record and `smol_recovery.py`: retain
+controller executable custody; bind VMM identity through exact pinned lease,
+read-only DB name/owner/network, all status UID/GID values, positive start ticks
+and the exact owned cgroup, before and after the marker and before signaling.
+Add a real non-dumpable positive control and foreign UID/GID, changed start-tick
+and cgroup rejection controls. No runtime, hardening, privilege, deadline or
+qualification-image changes are allowed. Root and independent frozen review
+precede another physical attempt; all three active recovery cases remain pending.
+
+The corrected observer also revalidates unchanged lease bytes/inode and a fresh
+read-only selected DB row after reaching the workload. All five focused nested
+observer tests pass (2.72 seconds), including an actual non-dumpable child and
+foreign UID/GID, changed start-time and wrong-cgroup refusals; existing bounded
+protocol, no-target-write, selected-owner and inventory controls remain green.
+The controller executable check is unchanged. Pinned upstream
+`internal_boot.rs` calls `process::harden_self` before VMM boot, while production
+`Lease::inventory` uses exact name/owner selection without a proc-exe read.
+
+The leftover relay is assessed separately: on the observer exception, Python
+cancels and drains its adapter task (which closes the request socket), then the
+composition's outer finally terminates the controller. Rust `TrialRelay` removes
+paths after its worker finishes or during Drop; this ordering can terminate that
+worker before asynchronous relay cleanup. The retained trace does not prove a
+production cleanup defect, and no physical cancellation result is claimed.
+
+Root and independent frozen-source review passed. A successful recovery still
+requires the composition's marker-only relay/scratch/home check before stopping
+the controller; manual failed-case cleanup cannot satisfy that assertion.
