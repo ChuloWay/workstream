@@ -710,8 +710,10 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
 ):
     """Prove the exact qualification boundary; no live model provider is used."""
     env = _required_environment()
-    root = Path(env["WORKSTREAM_TS_SMOL_ROOT"]).resolve(strict=True)
-    assert root.name == "terminal-systems-smol-composition"
+    configured_root = Path(env["WORKSTREAM_TS_SMOL_ROOT"])
+    assert configured_root.is_absolute() and not configured_root.is_symlink()
+    root = configured_root.resolve(strict=True)
+    assert root == configured_root and root.stat().st_mode & 0o077 == 0
     node, checker_image, builder_image, intake_image = _node_configuration(env)
     service_binary = Path(env["WORKSTREAM_TS_SMOL_SERVICE"])
     assert service_binary.is_absolute() and service_binary.is_file()
