@@ -136,6 +136,10 @@ class Terminal:
                         self.x = max(0, self.x - n)
                     elif command == "G":
                         self.x = min(self.columns - 1, n - 1)
+                    elif command == "P":
+                        deleted = min(n, self.columns - self.x)
+                        row = self.cells[self.y]
+                        row[self.x :] = row[self.x + deleted :] + [" "] * deleted
                     elif command == "J":
                         if values[0] in {2, 3}:
                             self.cells = [
@@ -155,7 +159,8 @@ class Terminal:
                         )
                         self.cells[self.y][start:end] = [" "] * (end - start)
                     elif command == "n" and params == "6":
-                        self._write(b"\x1b[1;1R")
+                        column = min(self.x + 1, self.columns)
+                        self._write(f"\x1b[{self.y + 1};{column}R".encode())
                     continue
                 if self.pending.startswith("\x1b]"):
                     match = re.match(r"\x1b\].*?(?:\x07|\x1b\\)", self.pending, re.S)
@@ -836,13 +841,19 @@ def socket_peer(respond):
             request = (self.command, self.path, self.headers.get("Authorization"))
             requests.append(request)
             try:
-                status, body = respond(*request)
+                result = respond(*request)
+                status, body = result[:2]
+                media_type = result[2] if len(result) == 3 else "application/json"
             except Exception as error:  # fixture errors must reach the test thread
                 failures.append(error)
-                status, body = 500, {"unexpected": True}
-            encoded = json.dumps(body, ensure_ascii=False).encode()
+                status, body, media_type = 500, {"unexpected": True}, "application/json"
+            encoded = (
+                body
+                if isinstance(body, bytes)
+                else json.dumps(body, ensure_ascii=False).encode()
+            )
             self.send_response(status)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", media_type)
             self.send_header("Content-Length", str(len(encoded)))
             self.end_headers()
             try:

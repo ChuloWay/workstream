@@ -150,3 +150,56 @@ func TestTransientProfileFailureRetriesBindingBeforeProjects(t *testing.T) {
 		})
 	}
 }
+
+func TestRefreshReplacesDelayedFirstFindingsRead(t *testing.T) {
+	calls := 0
+	f := &fakeClient{findings: func(context.Context, string, string, int, *string) (api.Result[api.SubmissionFindingsResult], error) {
+		calls++
+		page := api.SubmissionCheckerPage{Items: []api.SubmissionCheckerRun{{ID: runID, Task: taskID, Submission: submissionID, Current: calls == 1}}}
+		return api.Result[api.SubmissionFindingsResult]{Value: api.SubmissionFindingsResult{Page: &page}}, nil
+	}}
+	m := boot(t, f)
+	press(t, m, "enter")
+	press(t, m, "tab")
+	press(t, m, "tab")
+	press(t, m, "enter")
+	_, delayed := m.Update(keyMessage("tab"))
+	_, refreshed := m.Update(keyMessage("r"))
+	if delayed == nil || refreshed == nil {
+		t.Fatal("pending first findings read was not replaceable")
+	}
+	apply(t, m, refreshed)
+	m.Update(delayed())
+	if calls != 2 || m.findings == nil || !m.findings.Items[0].Current || m.loading || m.findingsPage != 1 {
+		t.Fatal("late first findings response replaced refresh", calls, m.findings, m.findingsPage)
+	}
+}
+
+func TestRefreshReplacesDelayedNextFindingsPageWithFirstPage(t *testing.T) {
+	cursor := "next-page"
+	calls := 0
+	f := &fakeClient{findings: func(_ context.Context, _ string, _ string, _ int, next *string) (api.Result[api.SubmissionFindingsResult], error) {
+		calls++
+		page := api.SubmissionCheckerPage{Items: []api.SubmissionCheckerRun{{ID: runID, Task: taskID, Submission: submissionID, Current: next == nil}}}
+		if next == nil {
+			page.Cursor = &cursor
+		}
+		return api.Result[api.SubmissionFindingsResult]{Value: api.SubmissionFindingsResult{Page: &page}}, nil
+	}}
+	m := boot(t, f)
+	press(t, m, "enter")
+	press(t, m, "tab")
+	press(t, m, "tab")
+	press(t, m, "enter")
+	press(t, m, "tab")
+	_, delayedNext := m.Update(keyMessage("n"))
+	_, refreshed := m.Update(keyMessage("r"))
+	if delayedNext == nil || refreshed == nil {
+		t.Fatal("pending continuation was not replaceable")
+	}
+	apply(t, m, refreshed)
+	m.Update(delayedNext())
+	if calls != 3 || m.findings == nil || !m.findings.Items[0].Current || m.findingsPage != 1 || m.findingsPageCursor != "" {
+		t.Fatal("late continuation replaced refreshed first page", calls, m.findings, m.findingsPage, m.findingsPageCursor)
+	}
+}
