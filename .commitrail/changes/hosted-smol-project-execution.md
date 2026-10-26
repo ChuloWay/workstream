@@ -80,7 +80,7 @@ only the existing authorized recovery rules may resolve an effect.
 | Current deployment and typed ownership | Inspect hosted Compose/preflight, existing systemd unit, typed execution/intake adapters and selected PRE/POST owners | Inspected | No hosted operation executed |
 | Provider overlap | Read PR #690 at `f3f818265`; reconcile main `fcd32057b` | Existing provider owner preserved | Live provider behavior remains separately qualified |
 | Smol callback transport | PR #677 implementation and qualification | Required dependency | Pending runtime integration and root-owned qualification |
-| Rendered topology and refusal paths | `python3 -m unittest scripts.test_hosted_release_config scripts.test_hosted_release_images` | 64 passed, exit 0 | Contract/image fixtures; no native VM or provider execution |
+| Rendered topology and refusal paths | `python3 -m unittest scripts.test_hosted_release_config scripts.test_hosted_release_images` | 69 passed, exit 0 | Contract/image fixtures; no native VM or provider execution |
 | Generated readiness client | Execute the actual generated script using pinned backend Python, real Settings, registered typed factory and a local framed Unix health server | Passed; exact typed health request observed | The responder is a local protocol fixture, not a Smol node |
 | Source hygiene | Ruff, Markdown links, stale wording and `git diff --check` | Passed | Does not replace runtime or independent review |
 | Public lifecycle and real model behavior | Root-owned public API/Celery journey and scoped live proof | Required before support claims | No EC2 or paid model work performed by this change |
@@ -96,6 +96,15 @@ The actual `docker/backend/release-entrypoint.sh` API role only loads its four r
 Controller-only tests were replaced by native custody/readiness and second-controller refusal proof; API/worker mount, secret isolation, parser and producer/worker drain guards are retained. The generated readiness script was exercised through real Settings and the registered typed factory: the material root requires the matching ART scratch setting, which is now supplied from the same derived path. This proof uses a local framed Unix responder and makes no VM or paid-provider claim.
 
 Exact-head implementation review follows this clean tested checkpoint; no passing implementation verdict is claimed here.
+
+The native-hosted image verifier proves both backend SDK images without requiring
+the separate ordinary Docker controller artifact. Its closed evidence explicitly
+names that scope; full native preflight still owns service/guest/cache readiness.
+The Docker artifact proof remains in CI for the existing local agent-loop owner.
+The existing wrapper exposes only exact worker stop/start for the public replay
+proof. Stop retains the configured warm-drain period; start revalidates private
+inputs and both native capabilities before reconciling that one worker container.
+Smol HOME limits use filesystem bytes, matching the pinned runtime socket layout.
 
 ## Reconciliation
 
