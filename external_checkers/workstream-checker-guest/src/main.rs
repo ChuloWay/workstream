@@ -363,6 +363,10 @@ fn serve_capability_session(
             .recv()?
             .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
         write_local_frame(&mut stream, &response, maximum)?;
+        if channel == GuestIoChannel::Execution {
+            // Trial transport requires one response followed by exact EOF.
+            return Ok(());
+        }
     }
     Ok(())
 }
@@ -372,11 +376,16 @@ fn accept_capability_session(
     channel: GuestIoChannel,
     accepted: &mut bool,
     exchanges: &Sender<CapabilityExchange>,
-    sessions: &mut Vec<thread::JoinHandle<bool>>,
+    sessions: &mut Vec<(GuestIoChannel, thread::JoinHandle<bool>)>,
 ) -> Result<bool> {
     let Some(listener) = listener else {
         return Ok(false);
     };
+    // Leave the next execution connection queued until its predecessor has
+    // closed and been reaped. Model keeps its one persistent session.
+    if channel == GuestIoChannel::Execution && *accepted {
+        return Ok(false);
+    }
     match listener.accept() {
         Ok((stream, _)) => {
             if *accepted {
@@ -384,14 +393,36 @@ fn accept_capability_session(
             }
             *accepted = true;
             let exchanges = exchanges.clone();
-            sessions.push(thread::spawn(move || {
-                serve_capability_session(stream, channel, exchanges).is_ok()
-            }));
+            sessions.push((
+                channel,
+                thread::spawn(move || serve_capability_session(stream, channel, exchanges).is_ok()),
+            ));
             Ok(true)
         }
         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => Ok(false),
         Err(error) => Err(error.into()),
     }
+}
+
+fn reap_capability_sessions(
+    sessions: &mut Vec<(GuestIoChannel, thread::JoinHandle<bool>)>,
+    execution_accepted: &mut bool,
+) -> Result<()> {
+    let mut index = 0;
+    while index < sessions.len() {
+        if sessions[index].1.is_finished() {
+            let (channel, session) = sessions.swap_remove(index);
+            if !matches!(session.join(), Ok(true)) {
+                return Err("guest capability session failed".into());
+            }
+            if channel == GuestIoChannel::Execution {
+                *execution_accepted = false;
+            }
+        } else {
+            index += 1;
+        }
+    }
+    Ok(())
 }
 
 fn forward_capability(
@@ -834,18 +865,10 @@ fn run_project(
                 return Err("guest capability workers unavailable".into())
             }
         }
-        let mut index = 0;
-        while index < sessions.len() {
-            if sessions[index].is_finished() {
-                let session = sessions.swap_remove(index);
-                if !matches!(session.join(), Ok(true)) {
-                    let _ = fs::write("/sys/fs/cgroup/workstream-checker/cgroup.kill", "1");
-                    let _ = unsafe { libc::waitpid(child, &mut status, 0) };
-                    return Err("guest capability session failed".into());
-                }
-            } else {
-                index += 1;
-            }
+        if let Err(error) = reap_capability_sessions(&mut sessions, &mut execution_accepted) {
+            let _ = fs::write("/sys/fs/cgroup/workstream-checker/cgroup.kill", "1");
+            let _ = unsafe { libc::waitpid(child, &mut status, 0) };
+            return Err(error);
         }
         if !handled {
             thread::sleep(Duration::from_millis(2));
@@ -856,7 +879,7 @@ fn run_project(
     let oom_kills = finish_workload_cgroup()?;
     drop(exchange_receiver);
     drop(exchange_sender);
-    for session in sessions {
+    for (_, session) in sessions {
         if !matches!(session.join(), Ok(true)) {
             return Err("guest capability session failed".into());
         }
@@ -898,6 +921,7 @@ fn run_project(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Instant;
     #[test]
     fn mount_targets_reject_image_symlinks_and_non_directories() {
         let root = std::env::temp_dir().join(format!("ws-guest-mounts-{}", std::process::id()));
@@ -1022,7 +1046,7 @@ mod tests {
     }
 
     #[test]
-    fn persistent_model_session_does_not_block_execution_or_second_model_call() {
+    fn sequential_execution_sessions_close_beside_one_persistent_model_session() {
         let unique = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -1038,6 +1062,9 @@ mod tests {
         execution_listener.set_nonblocking(true).unwrap();
         let mut model_client = UnixStream::connect(root.join("model.sock")).unwrap();
         let mut execution_client = UnixStream::connect(root.join("execution.sock")).unwrap();
+        execution_client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
         let (sender, receiver) = mpsc::channel();
         let mut sessions = Vec::new();
         let mut model_accepted = false;
@@ -1082,6 +1109,8 @@ mod tests {
             b"execute",
             b"execution-response",
         );
+        assert_eq!(execution_client.read(&mut [0_u8; 1]).unwrap(), 0);
+        drop(execution_client);
         exchange(
             &mut model_client,
             GuestIoChannel::Model,
@@ -1089,10 +1118,54 @@ mod tests {
             b"model-two-response",
         );
 
+        let mut next_execution = UnixStream::connect(root.join("execution.sock")).unwrap();
+        next_execution
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        // A queued second session cannot overlap the unreaped first session.
+        assert!(!accept_capability_session(
+            Some(&execution_listener),
+            GuestIoChannel::Execution,
+            &mut execution_accepted,
+            &sender,
+            &mut sessions,
+        )
+        .unwrap());
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while execution_accepted {
+            assert!(Instant::now() < deadline);
+            reap_capability_sessions(&mut sessions, &mut execution_accepted).unwrap();
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert!(accept_capability_session(
+            Some(&execution_listener),
+            GuestIoChannel::Execution,
+            &mut execution_accepted,
+            &sender,
+            &mut sessions,
+        )
+        .unwrap());
+        assert_eq!(sessions.len(), 2);
+        exchange(
+            &mut next_execution,
+            GuestIoChannel::Execution,
+            b"execute-two",
+            b"execution-two-response",
+        );
+        assert_eq!(next_execution.read(&mut [0_u8; 1]).unwrap(), 0);
+        exchange(
+            &mut model_client,
+            GuestIoChannel::Model,
+            b"model-three",
+            b"model-three-response",
+        );
+
         drop(model_client);
-        drop(execution_client);
+        drop(next_execution);
         drop(sender);
-        assert!(sessions.into_iter().all(|session| session.join().unwrap()));
+        assert!(sessions
+            .into_iter()
+            .all(|(_, session)| session.join().unwrap()));
         fs::remove_dir_all(root).unwrap();
     }
 }

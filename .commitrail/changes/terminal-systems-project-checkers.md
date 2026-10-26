@@ -808,3 +808,26 @@ that target passed all 26 cases when replayed serially. The changed guest and
 service tests passed in both runs. Independent root and guest reviews found no
 custody defect. Canonical KVM output transport and composed qualification remain
 required before declaring the runtime qualified.
+
+
+### Native execution session lifecycle
+
+Composition 007 completed the first trial reserve and verified ART publication
+callbacks, then the outer checker waited for a response EOF that the guest's
+shared persistent-session loop never emitted. Execution now uses its existing
+one-request/one-response/EOF contract end to end: the guest closes that session
+after its response; the host opens a fresh execution-relay socket per request
+and requires exact EOF under the same deadline and cancellation guard. The model
+connection remains persistent. Subsequent execution sockets stay queued while a
+handler is active; its channel-tagged JoinHandle is joined and removed before
+admitting the next session. This retains at most one worker per channel without
+retries, new callback grants or a growing completed-thread list. Discriminating
+socket regressions interleave two sequential trial sessions with the still-open
+model session, require EOF on both trials and fresh host-relay acceptance, and
+reject trailing response bytes, cancellation and elapsed deadlines. Canonical
+source composition must still complete both trials and replay before signoff.
+
+Validation: the lifecycle repair passed the full native workspace with 189 tests,
+zero failures and zero ignored cases using serial test threads. Focused guest
+and host socket regressions also passed. Root review found no lifecycle custody
+defect; canonical KVM composition remains required before runtime signoff.

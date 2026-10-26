@@ -227,14 +227,28 @@ fn channel_maximum(channel: GuestIoChannel) -> usize {
 #[derive(Default)]
 struct RelayConnections {
     model: Option<UnixStream>,
-    execution: Option<UnixStream>,
 }
 
-impl RelayConnections {
-    fn channel(&mut self, channel: GuestIoChannel) -> &mut Option<UnixStream> {
-        match channel {
-            GuestIoChannel::Model => &mut self.model,
-            GuestIoChannel::Execution => &mut self.execution,
+fn require_execution_eof(
+    stream: &mut UnixStream,
+    deadline: Instant,
+    cancelled: &AtomicBool,
+) -> Result<(), String> {
+    let guard = IoGuard {
+        deadline,
+        client: None,
+        cancelled: &[cancelled],
+    };
+    loop {
+        guard.check()?;
+        match stream.read(&mut [0_u8; 1]) {
+            Ok(0) => return Ok(()),
+            Ok(_) => return Err("guest execution relay contains trailing bytes".into()),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(2));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(_) => return Err("guest execution relay read failed".into()),
         }
     }
 }
@@ -250,7 +264,14 @@ fn bridge(
     let path = endpoint(endpoints, channel).ok_or("guest capability not entitled")?;
     validate_private_socket(path)?;
     let maximum = channel_maximum(channel);
-    let relay = connections.channel(channel);
+    if channel == GuestIoChannel::Execution {
+        let mut relay = connect_private(path, deadline, cancelled)?;
+        write_proxy_frame(&mut relay, request, maximum, deadline, cancelled)?;
+        let response = read_proxy_frame(&mut relay, maximum, deadline, cancelled)?;
+        require_execution_eof(&mut relay, deadline, cancelled)?;
+        return Ok(response);
+    }
+    let relay = &mut connections.model;
     if relay.is_none() {
         *relay = Some(connect_private(path, deadline, cancelled)?);
     }
@@ -497,7 +518,7 @@ mod tests {
     }
 
     #[test]
-    fn model_frames_reuse_the_single_entitled_relay_session() {
+    fn sequential_execution_relays_close_beside_one_persistent_model_relay() {
         let root = std::env::temp_dir().join(format!(
             "ws-smol-io-{}-{}",
             std::process::id(),
@@ -510,7 +531,10 @@ mod tests {
         let socket = root.join("model.sock");
         let listener = UnixListener::bind(&socket).unwrap();
         fs::set_permissions(&socket, fs::Permissions::from_mode(0o600)).unwrap();
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let execution_socket = root.join("execution.sock");
+        let execution_listener = UnixListener::bind(&execution_socket).unwrap();
+        fs::set_permissions(&execution_socket, fs::Permissions::from_mode(0o600)).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
         let server = thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
             let cancelled = AtomicBool::new(false);
@@ -519,15 +543,28 @@ mod tests {
                 b"first"
             );
             write_proxy_frame(&mut stream, b"one", 32, deadline, &cancelled).unwrap();
+            let (mut execution, _) = execution_listener.accept().unwrap();
+            assert_eq!(
+                read_proxy_frame(&mut execution, 32, deadline, &cancelled).unwrap(),
+                b"execute-one"
+            );
+            write_proxy_frame(&mut execution, b"execution-one", 32, deadline, &cancelled).unwrap();
+            drop(execution);
             assert_eq!(
                 read_proxy_frame(&mut stream, 32, deadline, &cancelled).unwrap(),
                 b"second"
             );
             write_proxy_frame(&mut stream, b"two", 32, deadline, &cancelled).unwrap();
+            let (mut execution, _) = execution_listener.accept().unwrap();
+            assert_eq!(
+                read_proxy_frame(&mut execution, 32, deadline, &cancelled).unwrap(),
+                b"execute-two"
+            );
+            write_proxy_frame(&mut execution, b"execution-two", 32, deadline, &cancelled).unwrap();
         });
         let endpoints = ProjectCallbacks {
             model: Some(socket.clone()),
-            execution: None,
+            execution: Some(execution_socket.clone()),
         };
         let cancelled = AtomicBool::new(false);
         let mut connections = RelayConnections::default();
@@ -547,6 +584,18 @@ mod tests {
             bridge(
                 &endpoints,
                 &mut connections,
+                GuestIoChannel::Execution,
+                b"execute-one",
+                deadline,
+                &cancelled,
+            )
+            .unwrap(),
+            b"execution-one"
+        );
+        assert_eq!(
+            bridge(
+                &endpoints,
+                &mut connections,
                 GuestIoChannel::Model,
                 b"second",
                 deadline,
@@ -555,9 +604,47 @@ mod tests {
             .unwrap(),
             b"two"
         );
+        assert_eq!(
+            bridge(
+                &endpoints,
+                &mut connections,
+                GuestIoChannel::Execution,
+                b"execute-two",
+                deadline,
+                &cancelled,
+            )
+            .unwrap(),
+            b"execution-two"
+        );
         drop(connections);
         server.join().unwrap();
         fs::remove_file(socket).unwrap();
+        fs::remove_file(execution_socket).unwrap();
         fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn execution_eof_rejects_trailing_bytes_and_obeys_cancellation_and_deadline() {
+        for fault in ["none", "trailing", "cancelled", "deadline"] {
+            let (mut reader, mut writer) = UnixStream::pair().unwrap();
+            reader.set_nonblocking(true).unwrap();
+            if fault == "trailing" {
+                writer.write_all(b"extra").unwrap();
+            }
+            if fault == "none" {
+                writer.shutdown(std::net::Shutdown::Write).unwrap();
+            }
+            let cancelled = AtomicBool::new(fault == "cancelled");
+            let deadline = if fault == "deadline" {
+                Instant::now()
+            } else {
+                Instant::now() + Duration::from_secs(1)
+            };
+            let result = require_execution_eof(&mut reader, deadline, &cancelled);
+            assert_eq!(result.is_ok(), fault == "none", "{fault}: {result:?}");
+            if fault == "deadline" {
+                assert!(cancelled.load(Ordering::Acquire));
+            }
+        }
     }
 }
