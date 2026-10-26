@@ -449,7 +449,13 @@ async def test_factory_registers_one_zero_retry_openai_provider(monkeypatch) -> 
         return FakeClient()
 
     monkeypatch.setattr("openai.AsyncOpenAI", client)
-    provider = create_checker_model_provider(settings())
+    from tests.checkers_model_calls.test_proxy_orchestration import Harness
+
+    profile = Harness().profile
+    profile = profile.model_copy(update={
+        "spec": profile.spec.model_copy(update={"deadline_ms": 3000})
+    })
+    provider = create_checker_model_provider(profile, api_key="secret-test-key")
 
     assert provider.identity.capability_key == CHECKER_MODEL_CAPABILITY_KEY
     assert provider.identity.provider_key == "openai_responses"

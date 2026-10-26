@@ -65,9 +65,11 @@ unavailable before spend.
 
 ## Supported provider boundaries
 
-POST model sessions currently use the closed `openai_responses` / `responses.v1`
-adapter. Setup preserves both native agent runtimes through a credential-free
-local transport:
+POST model sessions select either `openai_responses` / `responses.v1` or
+`openrouter` / `chat_completions` from the exact locked project profile. Ordinary
+POST images require neither a model profile nor provider credentials. Unsupported
+provider/API pairs deny without fallback. Setup preserves both native agent
+runtimes through a credential-free local transport:
 
 - OpenAI Agents SDK uses the approved `openai` / `responses` request shape;
 - OmniCoreAgent uses the approved `openrouter` / `chat_completions` shape.
@@ -81,7 +83,11 @@ the exact non-alias model metadata endpoint before dispatch and requires current
 context, completion, parameter and pricing metadata to fit the immutable profile;
 unknown or unsupported non-token fees fail before spend. Metadata-to-dispatch
 consistency remains an external provider assumption that must be requalified for
-the selected account and model.
+the selected account and model. OpenRouter reserves the full qualified context
+window; it does not count each prompt locally. An over-context request can still
+reach the provider and be rejected, entering the conservative uncertain/held
+path. This availability limitation must not be described as exact pre-dispatch
+prompt-token validation or proof that every failed request is unbilled.
 
 Setup's fixed `read_document` and `search_document` capability retains its own
 owner-side actual call/output counters. A model session opens only when those
@@ -100,9 +106,12 @@ Hosted inference uses a dedicated digest-pinned `agents` backend image for the
 proxy even when the setup worker uses the mutually exclusive `omnicore` image.
 The proxy image contains the pinned OpenAI input-count/Responses dependencies and
 the OpenRouter HTTP adapter. Its entrypoint validates the root-owned SDK marker
-before reading the two closed proxy-only provider secrets. Proxy enablement is
-independent of setup runtime selection, so `manager_authored` setup can coexist
-with model-backed POST checks and OpenRouter setup can coexist with OpenAI POST.
+before reading only the configured proxy-only provider secrets. An OpenRouter-only
+deployment needs no OpenAI key. Nonempty provider secret-file paths select the
+corresponding hosted overlays; inference setup requires its selected provider,
+while enabled `manager_authored` composition requires at least one provider for
+POST. A missing credential for the locked POST profile fails before paid dispatch.
+Proxy enablement is independent of setup runtime selection.
 See
 [`deploy/hosted/README.md`](../deploy/hosted/README.md).
 
@@ -163,6 +172,11 @@ like an ID-less genuinely ambiguous response, remains uncertain with its reserva
 held until authenticated evidence can establish a safe terminal outcome. The exact
 Operator read provides visibility but cannot assert no effect, release money or
 create a replacement.
+
+OpenRouter POST likewise cannot retrieve completion text from a response ID:
+recovery performs no provider I/O. Retained, verified response ART can replay;
+otherwise an ambiguous response keeps its reservation without another paid call.
+OpenAI POST retains its existing stored-Responses retrieval contract.
 
 For POST, budget exhaustion, provider outage, unavailable runtime and invalid
 provider output remain infrastructure failure on the original Submission. They do

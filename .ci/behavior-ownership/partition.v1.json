@@ -77,6 +77,10 @@
       "target": "backend/app/adapters/checkers/model_runtime.py"
     },
     {
+      "group": "artifacts",
+      "target": "backend/app/adapters/checkers/openrouter_model_provider.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/adapters/github/app_facts.py"
     },
@@ -103,6 +107,10 @@
     {
       "group": "shared",
       "target": "backend/app/adapters/guide_document_tools/service.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/adapters/model_usage/openrouter.py"
     },
     {
       "group": "shared",
@@ -135,10 +143,6 @@
     {
       "group": "lifecycle",
       "target": "backend/app/adapters/project_agents/openai_workspace.py"
-    },
-    {
-      "group": "lifecycle",
-      "target": "backend/app/adapters/project_agents/openrouter_policy.py"
     },
     {
       "group": "lifecycle",
@@ -2533,7 +2537,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "75e9af95d5cd0ca50daa68772cfce8a5e166c2147a1ce2611d4d2e1ac40b469a",
+  "authority_digest": "6822cec6baeab801bdfdc9a21bb901d68e84d3e2de91736e6d2786591ed4a3e1",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

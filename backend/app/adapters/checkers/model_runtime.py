@@ -27,9 +27,6 @@ from app.adapters.checkers import (
     model_invocation_grants,
     model_profile_reader,
 )
-from app.adapters.checkers.model_provider import (
-    OpenAIResponsesSettings,
-)
 from app.adapters.checkers.model_proxy_transport import ModelProxyTransport
 from app.adapters.model_usage import setup_model_usage_service
 from app.adapters.project_agents.setup_model_handler import (
@@ -44,24 +41,16 @@ from app.modules.model_usage.api import ModelCallUnavailable, ProjectModelProfil
 async def configured_model_provider(profile: ProjectModelProfile):
     """Construct exactly the provider selected by a trusted immutable profile."""
     spec = profile.spec
-    if (spec.provider, spec.api) != ("openai_responses", "responses.v1"):
+    credential = {
+        ("openai_responses", "responses.v1"): "OPENAI_API_KEY",
+        ("openrouter", "chat_completions"): "OPENROUTER_API_KEY",
+    }.get((spec.provider, spec.api))
+    if credential is None:
         raise ModelCallUnavailable("model_profile_provider_unavailable")
-    key = os.environ.get("OPENAI_API_KEY", "")
+    key = os.environ.get(credential, "")
     if not key:
         raise ModelCallUnavailable("model_provider_credentials_unavailable")
-    provider = create_checker_model_provider(
-        OpenAIResponsesSettings(
-            api_key=key,
-            model=spec.model_snapshot,
-            maximum_request_bytes=spec.maximum_request_bytes,
-            maximum_input_tokens=spec.maximum_input_tokens,
-            maximum_output_tokens=spec.maximum_output_tokens,
-            maximum_output_bytes=spec.maximum_output_bytes,
-            request_timeout_seconds=float(spec.deadline_ms / 1000),
-            reasoning_effort=spec.settings.reasoning_effort,
-            text_verbosity=spec.settings.text_verbosity,
-        )
-    )
+    provider = create_checker_model_provider(profile, api_key=key)
     try:
         yield provider
     finally:

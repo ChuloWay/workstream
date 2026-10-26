@@ -20,6 +20,8 @@ from uuid import UUID
 
 COMPOSE_PATH = Path(__file__).with_name("compose.yml")
 INFERENCE_COMPOSE_PATH = Path(__file__).with_name("compose.inference.yml")
+MODEL_OPENAI_COMPOSE_PATH = Path(__file__).with_name("compose.model-openai.yml")
+MODEL_OPENROUTER_COMPOSE_PATH = Path(__file__).with_name("compose.model-openrouter.yml")
 SCRATCH_ROOT = Path("/var/lib/workstream/scratch")
 SOCKET_ROOT = Path("/var/lib/workstream/checker-runtime")
 SOCKET_PATH = SOCKET_ROOT / "checker.sock"
@@ -54,6 +56,14 @@ MODEL_PROXY_SECRET_FILE_KEYS = (
     "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE",
     "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE",
 )
+MODEL_PROVIDER_SECRET_FILE_KEYS = {
+    "openai": "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE",
+    "openrouter": "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE",
+}
+MODEL_PROVIDER_COMPOSE_PATHS = {
+    "openai": MODEL_OPENAI_COMPOSE_PATH,
+    "openrouter": MODEL_OPENROUTER_COMPOSE_PATH,
+}
 SECRET_FILE_KEYS = (*BASE_SECRET_FILE_KEYS, *MODEL_PROXY_SECRET_FILE_KEYS)
 SECRET_FILE_TARGETS = {
     "WORKSTREAM_DATABASE_URL_FILE": ("database_url", "/run/secrets/database_url"),
@@ -372,8 +382,20 @@ def validate_environment(values: dict[str, str]) -> None:
     if runtime != "manager_authored" and not model_proxy_enabled:
         raise PreflightError("inference setup requires the trusted model proxy")
     if model_proxy_enabled:
-        for key in MODEL_PROXY_SECRET_FILE_KEYS:
-            _required(values, key)
+        configured_provider_keys = {
+            key for key in MODEL_PROXY_SECRET_FILE_KEYS if values.get(key)
+        }
+        if runtime == "manager_authored":
+            if not configured_provider_keys:
+                raise PreflightError(
+                    "enabled model proxy requires at least one provider credential"
+                )
+        else:
+            selected_provider_key = MODEL_PROVIDER_SECRET_FILE_KEYS[provider]
+            if selected_provider_key not in configured_provider_keys:
+                raise PreflightError(
+                    "inference setup requires its selected provider credential"
+                )
     elif any(values.get(key) for key in MODEL_PROXY_SECRET_FILE_KEYS):
         raise PreflightError("disabled model proxy cannot select provider credentials")
     try:
@@ -512,14 +534,20 @@ def _private_metadata(path: Path, *, kind: str, uid: int, gid: int, mode: int) -
 
 def _secret_file_keys(values: dict[str, str]) -> tuple[str, ...]:
     if values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true":
-        return SECRET_FILE_KEYS
+        return (
+            *BASE_SECRET_FILE_KEYS,
+            *(key for key in MODEL_PROXY_SECRET_FILE_KEYS if values.get(key)),
+        )
     return BASE_SECRET_FILE_KEYS
 
 
 def _role_secret_file_keys(role: str, values: dict[str, str]) -> tuple[str, ...]:
     keys = ROLE_SECRET_FILE_KEYS[role]
     if role == "model-proxy" and values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true":
-        return (*keys, *MODEL_PROXY_SECRET_FILE_KEYS)
+        return (
+            *keys,
+            *(key for key in MODEL_PROXY_SECRET_FILE_KEYS if values.get(key)),
+        )
     return keys
 
 
@@ -658,6 +686,11 @@ def _compose_file_arguments(values: dict[str, str]) -> list[str]:
     arguments = ["--file", str(COMPOSE_PATH)]
     if values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true":
         arguments.extend(("--file", str(INFERENCE_COMPOSE_PATH)))
+        for provider, key in MODEL_PROVIDER_SECRET_FILE_KEYS.items():
+            if values.get(key):
+                arguments.extend(
+                    ("--file", str(MODEL_PROVIDER_COMPOSE_PATHS[provider]))
+                )
         arguments.extend(("--profile", "model-proxy"))
     return arguments
 

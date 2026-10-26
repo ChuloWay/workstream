@@ -23,25 +23,3 @@ services:
     depends_on:
       model-proxy:
         condition: service_healthy
-
-  model-proxy:
-    environment:
-      WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE: /run/secrets/model_proxy_openai_api_key
-      WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE: /run/secrets/model_proxy_openrouter_api_key
-    secrets:
-      - source: model_proxy_openai_api_key
-        target: model_proxy_openai_api_key
-        uid: "${WORKSTREAM_RUNTIME_UID}"
-        gid: "${WORKSTREAM_RUNTIME_GID}"
-        mode: 0400
-      - source: model_proxy_openrouter_api_key
-        target: model_proxy_openrouter_api_key
-        uid: "${WORKSTREAM_RUNTIME_UID}"
-        gid: "${WORKSTREAM_RUNTIME_GID}"
-        mode: 0400
-
-secrets:
-  model_proxy_openai_api_key:
-    file: ${WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE:?set the private model-proxy OpenAI key file}
-  model_proxy_openrouter_api_key:
-    file: ${WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE:?set the private model-proxy OpenRouter key file}
