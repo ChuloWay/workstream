@@ -1092,3 +1092,22 @@ will retain bounded whitelisted inventory identities and a raw-inventory hash
 before the unchanged strict rejection; no unobserved inventory normalization
 or runtime change is justified. All three active nested recovery cases remain
 pending actual marker/fault/custody/capacity evidence.
+
+The next offline observer-only correction is grounded in the canonical
+Lease::inventory/verify_network_disabled owner: select one exact lease name from
+an array or a wrapped machines array, treat no match as bounded pending work,
+and reject duplicate exact names. The selected owner, network, PID/start-time,
+executable, cgroup and workload checks remain required. Allowed files are the
+existing tests/smol_recovery.py helper and this record. Bounded whitelisted row
+facts and the raw-inventory digest must be retained at the workload marker and
+on failure. Focused mixed/absent/duplicate/wrapped/malformed and selected
+wrong-owner/network controls precede independent review. This canonical parity
+change is not a diagnosis of the unretained 010/014 inventories, and no new VM
+run is authorized before the hosted baseline and paid-stage handoff.
+
+The two focused helper tests passed: mixed/absent/duplicate/wrapped/malformed
+inventory selection, selected owner/network refusal, and bounded evidence
+retention including a real exclusive 0600 failure file. The opt-in physical
+wrapper still collects exactly one case with the qualification plugins. Python
+compilation and diff checks passed, and independent frozen-source review found
+no defect. Actual nested marker/fault/cleanup/capacity results are still pending.

@@ -48,14 +48,57 @@ class NestedTrialRecovery:
         self.killed_controller = None
         self.pending_create_observations = 0
         self.cache_lock_identity = None
+        self.last_inventory = None
 
     @staticmethod
-    def child_inventory(rows, name):
-        assert isinstance(rows, list)
-        if not rows:
-            return None  # Durable lease publication precedes machine creation.
-        assert len(rows) == 1 and rows[0]["name"] == name, "unexpected child VM inventory"
-        return rows[0]
+    def inventory_rows(value):
+        rows = value.get("machines") if isinstance(value, dict) else value
+        assert isinstance(rows, list), "invalid child VM inventory shape"
+        return rows
+
+    @classmethod
+    def child_inventory(cls, value, name):
+        matches = [row for row in cls.inventory_rows(value)
+                   if isinstance(row, dict) and row.get("name") == name]
+        assert len(matches) <= 1, "duplicate exact child VM identity"
+        return matches[0] if matches else None
+
+    @staticmethod
+    def validate_child(machine, owner):
+        assert machine["labels"]["workstream.external-checker-owner"] == owner
+        assert machine["network"] is False
+
+    @staticmethod
+    def inventory_facts(value, name, owner, home, home_identity, raw):
+        # Fixed field/row/string bounds; never retain argv or guest payloads.
+        def fact(item):
+            if isinstance(item, str):
+                return item[:256]
+            return item if item is None or type(item) in (int, bool) else type(item).__name__
+        rows = value.get("machines") if isinstance(value, dict) else value
+        observed = []
+        for row in rows[:8] if isinstance(rows, list) else ():
+            if not isinstance(row, dict):
+                observed.append({"row_type": type(row).__name__})
+                continue
+            labels = row.get("labels")
+            observed.append({key: fact(row.get(key)) for key in ("name", "state", "pid", "network")} | {
+                "owner": fact(labels.get("workstream.external-checker-owner")) if isinstance(labels, dict) else None,
+            })
+        return {"expected_name": name, "expected_owner": owner,
+                "child_home": str(home), "child_home_identity": home_identity,
+                "row_count": len(rows) if isinstance(rows, list) else None,
+                "inventory_type": type(value).__name__, "rows_type": type(rows).__name__,
+                "observed_rows": observed,
+                "raw_inventory_sha256": "sha256:" + hashlib.sha256(raw).hexdigest()}
+
+    def retain_inventory_failure(self):
+        if self.last_inventory is None:
+            return
+        destination = self.service_root.parent / "inventory-failure.json"
+        descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "w") as output:
+            json.dump(self.last_inventory, output, sort_keys=True)
 
     def archive_factory(self, original):
         def archive(evidence_path, project_id):
@@ -144,39 +187,14 @@ class NestedTrialRecovery:
                 if not path.exists():
                     continue  # Only an already-removed exact lease may disappear.
                 raise
-            try:
-                machine = self.child_inventory(rows, name)
-            except AssertionError:
-                # Preserve the exact discriminator before failing closed. These
-                # are bounded owned-VM identity facts, never argv or payloads.
-                def fact(value):
-                    if isinstance(value, str):
-                        return value[:256]
-                    return value if value is None or type(value) in (int, bool) else type(value).__name__
-                observed = []
-                for row in rows[:8] if isinstance(rows, list) else ():
-                    if not isinstance(row, dict):
-                        observed.append({"row_type": type(row).__name__})
-                        continue
-                    labels = row.get("labels")
-                    observed.append({key: fact(row.get(key)) for key in ("name", "state", "pid", "network")} | {
-                        "owner": fact(labels.get("workstream.external-checker-owner")) if isinstance(labels, dict) else None,
-                    })
-                diagnostic = {"expected_name": name, "expected_owner": owner,
-                              "child_home": str(home), "child_home_identity": home_identity,
-                              "row_count": len(rows) if isinstance(rows, list) else None,
-                              "inventory_type": type(rows).__name__, "observed_rows": observed,
-                              "raw_inventory_sha256": "sha256:" + hashlib.sha256(inventory_bytes).hexdigest()}
-                destination = self.service_root.parent / "inventory-failure.json"
-                descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-                with os.fdopen(descriptor, "w") as output:
-                    json.dump(diagnostic, output, sort_keys=True)
-                raise
+            self.last_inventory = self.inventory_facts(
+                rows, name, owner, home, home_identity, inventory_bytes,
+            )
+            machine = self.child_inventory(rows, name)
             if machine is None:
                 self.pending_create_observations += 1
                 continue
-            assert machine["labels"]["workstream.external-checker-owner"] == owner
-            assert machine["network"] is False
+            self.validate_child(machine, owner)
             if machine["state"] != "running":
                 continue
             # This is trusted observation of our exact VM, never an untrusted
@@ -211,7 +229,7 @@ class NestedTrialRecovery:
                 "child_home": str(home), "child_home_identity": home_identity,
                 "vmm": vmm, "workload_pid_in_guest": workload_pid,
                 "marker_sha256": "sha256:" + hashlib.sha256(self.MARKER).hexdigest(),
-                "workload_seccomp_mode": 2,
+                "workload_seccomp_mode": 2, "inventory": self.last_inventory,
             }
             return True
         return False
@@ -346,6 +364,9 @@ class NestedTrialRecovery:
             path.write_text(json.dumps(summary, sort_keys=True, indent=2) + "\n")
             path.chmod(0o400)
             self.completed = True
+        except BaseException:
+            self.retain_inventory_failure()
+            raise
         finally:
             if not self.execution.done():
                 self.execution.cancel()
@@ -386,6 +407,42 @@ class NestedTrialRecovery:
             except subprocess.TimeoutExpired:
                 self.replacement.kill()
                 self.replacement.wait(timeout=15)
+
+
+def test_nested_inventory_uses_unique_exact_name_and_selected_authority():
+    import pytest
+
+    owner = "a" * 64
+    expected = {"name": "owned", "labels": {"workstream.external-checker-owner": owner}, "network": False}
+    other = {"name": "other", "labels": {"workstream.external-checker-owner": "foreign"}, "network": True}
+    select = NestedTrialRecovery.child_inventory
+    assert select([other, expected], "owned") is expected
+    assert select([other], "owned") is None
+    assert select({"machines": [other, expected]}, "owned") is expected
+    for invalid in ([expected, expected], {"machines": "invalid"}, {}, "invalid"):
+        with pytest.raises(AssertionError):
+            select(invalid, "owned")
+    NestedTrialRecovery.validate_child(expected, owner)
+    for invalid in (expected | {"network": True}, expected | {"labels": other["labels"]}):
+        with pytest.raises(AssertionError):
+            NestedTrialRecovery.validate_child(invalid, owner)
+
+
+def test_nested_inventory_evidence_is_bounded_and_retained_before_failure(tmp_path):
+    rows = {"machines": [{"name": "x" * 1024, "state": "running", "argv": "unretained"}] * 12}
+    raw = json.dumps(rows).encode()
+    facts = NestedTrialRecovery.inventory_facts(rows, "owned", "a" * 64, tmp_path, {}, raw)
+    assert facts["row_count"] == 12 and len(facts["observed_rows"]) == 8
+    assert len(facts["observed_rows"][0]["name"]) == 256
+    assert "unretained" not in json.dumps(facts)
+    assert facts["raw_inventory_sha256"] == "sha256:" + hashlib.sha256(raw).hexdigest()
+    recovery = NestedTrialRecovery("caller_disconnect")
+    recovery.service_root = tmp_path / "service"
+    recovery.last_inventory = facts
+    recovery.retain_inventory_failure()
+    path = tmp_path / "inventory-failure.json"
+    assert json.loads(path.read_text()) == facts
+    assert stat.S_IMODE(path.lstat().st_mode) == 0o600
 
 
 class Recovery:
