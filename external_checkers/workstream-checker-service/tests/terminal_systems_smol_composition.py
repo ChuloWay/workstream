@@ -853,9 +853,12 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
         tmp_path,
         isolated_database_env,
         provider="minio",
-        storage_settings=minio_settings(private_prefix=f"smol/{uuid4()}").model_copy(
+        storage_settings=minio_settings(
+            private_prefix=f"{os.environ['WORKSTREAM_TEST_MINIO_PREFIX']}/smol/{uuid4()}"
+        ).model_copy(
             update={
                 **artifact_admission_limit_settings(1024 * 1024),
+                "artifact_s3_bucket": os.environ["WORKSTREAM_TEST_MINIO_BUCKET"],
                 "artifact_scratch_root": tmp_path / "intake-scratch",
                 "artifact_scratch_minimum_free_bytes": 0,
                 # Exercise the deployed buffer, not the two-byte boundary-test fixture.
@@ -1159,7 +1162,7 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
                     execution["offline_cache_digest"]
                     == env["WORKSTREAM_TS_SMOL_CACHE_DIGEST"]
                 )
-                assert execution["base_image_digests"] == [ALPINE_DIGEST]
+                assert execution["approved_base_digests"] == [ALPINE_DIGEST]
                 assert execution["build"]["outcome"] == "succeeded"
                 assert execution["build"]["candidate_image_digest"].startswith(
                     "sha256:"
@@ -1261,7 +1264,7 @@ async def test_production_service_executes_project_trial_under_smol_with_real_cu
             "builder_image_id": builder_image["config_image_id"],
             "builder_manifest": builder_image["platform_manifest_digest"],
             "offline_cache_digest": env["WORKSTREAM_TS_SMOL_CACHE_DIGEST"],
-            "base_image_digests": list(profile.approved_base_digests),
+            "approved_base_digests": list(profile.approved_base_digests),
             "maximum_disk_bytes": profile.limits.maximum_disk_bytes,
         },
         "model_effects": model_summary,
