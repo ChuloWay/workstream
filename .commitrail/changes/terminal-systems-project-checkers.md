@@ -1023,3 +1023,32 @@ source was restored and the complete serial native workspace then passed 193
 tests with zero failures or ignored cases. Independent test review found no
 defect; formatting and diff checks passed. This test-only change does not alter
 the static runtime artifacts qualified by direct 35 and composition 009.
+
+The separate active nested recovery test scope is the existing
+`workstream-checker-service/tests/smol_recovery.py` helper,
+`tests/terminal_systems_smol_composition.py` optional observer hooks, the opt-in
+`tests/terminal_systems_smol_recovery.py` wrapper, and this record. Exactly three
+physical cases cover caller disconnect, exact owned child VMM death (including
+reverse cancellation), and exact controller death followed by guardian cleanup
+and restart. Only the recovery submission replaces qualification-status with a
+fixed workspace marker and bounded wait; the ordinary package and production
+images remain unchanged. Faults require observed untrusted workload reach and
+typed owner/lease/process custody. No-receipt/no-false-completion, controlled
+effect counts, owned cleanup and post-recovery capacity reuse are required.
+The hosted baseline retains priority over the VM window while these hooks are
+prepared and independently reviewed.
+
+Preparation validation: the opt-in recovery wrapper collects exactly one case
+with the native qualification's Python path and plugins; Python compilation,
+fixture shell syntax and diff checks passed. The recovery archive audit changes
+only tools/qualification-status; its bounded marker/wait script digest is
+`sha256:fe2440b914312fede5f51ff64c1c272e5a8cf1b49d4894e7de10d8a429e306e2`.
+Independent review corrected one-versus-two policy assertions and made marker
+observation select the filtered untrusted PID rather than the intentionally
+unfiltered trusted launcher. Explicit task observation/drain deadlines precede
+exact-controller teardown on timeout. The negative custody assertion preserves
+the authorized reserved trial address with NULL content, while requiring zero
+receipt callbacks, trial ART put attempts and bindings. Two simultaneous real
+trusted-intake preparations must demonstrate full admission capacity reuse and
+then close/drain. Final independent source review passed; all three physical
+recovery cases remain pending the exclusive VM handoff.
