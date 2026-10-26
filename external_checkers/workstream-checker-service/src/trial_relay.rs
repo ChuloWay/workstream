@@ -66,10 +66,12 @@ pub(crate) struct TrialProfile {
     pub(crate) checker_image_digest: String,
     pub(crate) configuration_sha256: String,
     pub(crate) engine_identity_digest: String,
+    pub(crate) guest_binary_digest: String,
+    pub(crate) filesystem_tool_digest: String,
     pub(crate) outer_runtime_config_digest: String,
     pub(crate) child_runtime: String,
     pub(crate) child_runtime_config_digest: String,
-    pub(crate) child_host_uds: String,
+    pub(crate) child_transport: String,
     pub(crate) platform: String,
     pub(crate) platform_identity_digest: String,
     pub(crate) builder_image_digest: String,
@@ -654,7 +656,6 @@ impl TrialRelay {
         )
     }
 
-    #[cfg(test)]
     pub(crate) fn socket_path(&self) -> &Path {
         &self.paths.socket
     }
@@ -779,10 +780,12 @@ pub(crate) fn valid_profile(profile: &TrialProfile) -> bool {
         && valid_sha256(&profile.checker_image_digest)
         && valid_sha256(&profile.configuration_sha256)
         && valid_sha256(&profile.engine_identity_digest)
+        && valid_sha256(&profile.guest_binary_digest)
+        && valid_sha256(&profile.filesystem_tool_digest)
         && valid_sha256(&profile.outer_runtime_config_digest)
-        && profile.child_runtime == "runsc"
+        && profile.child_runtime == "smolvm"
         && valid_sha256(&profile.child_runtime_config_digest)
-        && profile.child_host_uds == "none"
+        && profile.child_transport == "workstream.smol_guest_io.v1"
         && valid_sha256(&profile.platform_identity_digest)
         && valid_sha256(&profile.builder_image_digest)
         && valid_sha256(&profile.trusted_launcher_digest)

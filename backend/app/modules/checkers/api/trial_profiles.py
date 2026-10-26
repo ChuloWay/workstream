@@ -81,7 +81,6 @@ class TrialResourceCeilings:
     maximum_wall_time_overrun_ms: int
     maximum_cpu_time_overrun_ms: int
     maximum_memory_bytes: int
-    maximum_swap_bytes: int
     maximum_memory_overrun_bytes: int
     maximum_pids: int
     maximum_pids_overrun: int
@@ -96,7 +95,7 @@ class TrialResourceCeilings:
     maximum_response_bytes: int
 
     def __post_init__(self) -> None:
-        """Enforce positive finite ceilings, disabled swap and bounded protocol payloads."""
+        """Enforce positive finite ceilings and bounded protocol payloads."""
         values = asdict(self)
         if any(type(value) is not int or value < 1 for value in values.values()):
             raise TrialProfileError("trial resource ceiling is invalid")
@@ -104,8 +103,6 @@ class TrialResourceCeilings:
             self.maximum_step_timeout_ms > self.maximum_total_timeout_ms
         ):
             raise TrialProfileError("trial timeout ceiling is invalid")
-        if self.maximum_memory_bytes != self.maximum_swap_bytes:
-            raise TrialProfileError("trial swap must be disabled")
         if self.maximum_pids < 2:
             raise TrialProfileError("trial PID ceiling cannot host the trusted launcher and child")
         if (
@@ -129,13 +126,15 @@ class TrialExecutionProfile:
 
     schema_version: Literal["workstream.trial_execution_profile.v1"]
     selector: TrialProfileSelector
-    runtime: Literal["runsc"]
-    isolation_mode: Literal["gvisor"]
-    outer_host_uds: Literal["open"]
-    child_host_uds: Literal["none"]
+    runtime: Literal["smolvm"]
+    isolation_mode: Literal["smol-microvm"]
+    outer_transport: Literal["workstream.smol_guest_io.v1"]
+    child_transport: Literal["workstream.smol_guest_io.v1"]
     outer_runtime_config_digest: Sha256
     child_runtime_config_digest: Sha256
     engine_identity_digest: Sha256
+    guest_binary_digest: Sha256
+    filesystem_tool_digest: Sha256
     platform: str
     platform_identity_digest: Sha256
     builder_image_digest: Sha256
@@ -172,10 +171,10 @@ class TrialExecutionProfile:
         """Validate isolated runtime controls and recompute the immutable profile digest."""
         if (
             self.schema_version != "workstream.trial_execution_profile.v1"
-            or self.runtime != "runsc"
-            or self.isolation_mode != "gvisor"
-            or self.outer_host_uds != "open"
-            or self.child_host_uds != "none"
+            or self.runtime != "smolvm"
+            or self.isolation_mode != "smol-microvm"
+            or self.outer_transport != "workstream.smol_guest_io.v1"
+            or self.child_transport != "workstream.smol_guest_io.v1"
             or self.child_network != "none"
             or self.child_runs_as_non_root is not True
             or self.child_capabilities != ()
@@ -205,6 +204,8 @@ class TrialExecutionProfile:
             self.outer_runtime_config_digest,
             self.child_runtime_config_digest,
             self.engine_identity_digest,
+            self.guest_binary_digest,
+            self.filesystem_tool_digest,
             self.platform_identity_digest,
             self.builder_image_digest,
             self.trusted_launcher_digest,

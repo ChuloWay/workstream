@@ -42,13 +42,15 @@ def profile():
     return make_trial_execution_profile(
         schema_version="workstream.trial_execution_profile.v1",
         selector=TrialProfileSelector(PROFILE_ID, 1, digest("0")),
-        runtime="runsc",
-        isolation_mode="gvisor",
-        outer_host_uds="open",
-        child_host_uds="none",
+        runtime="smolvm",
+        isolation_mode="smol-microvm",
+        outer_transport="workstream.smol_guest_io.v1",
+        child_transport="workstream.smol_guest_io.v1",
         outer_runtime_config_digest=digest("1"),
         child_runtime_config_digest=digest("2"),
         engine_identity_digest=digest("3"),
+        guest_binary_digest=digest("a"),
+        filesystem_tool_digest=digest("c"),
         platform="linux/amd64",
         platform_identity_digest=digest("4"),
         builder_image_digest=digest("5"),
@@ -88,7 +90,6 @@ def profile():
             maximum_wall_time_overrun_ms=100,
             maximum_cpu_time_overrun_ms=250,
             maximum_memory_bytes=128 * 1024 * 1024,
-            maximum_swap_bytes=128 * 1024 * 1024,
             maximum_memory_overrun_bytes=1024 * 1024,
             maximum_pids=32,
             maximum_pids_overrun=2,
@@ -173,15 +174,20 @@ def test_profile_digest_is_derived_and_catalog_requires_exact_selector():
         PinnedTrialProfileCatalog((selected, selected))
 
 
-def test_runtime_split_and_no_swap_are_closed_trusted_profile_rules():
+def test_smol_transport_and_privileges_are_closed_trusted_profile_rules():
     selected = profile()
     with pytest.raises(TrialProfileError, match="invalid"):
-        replace(selected, child_host_uds="open")
-    with pytest.raises(TrialProfileError, match="swap"):
-        replace(
-            selected.limits,
-            maximum_swap_bytes=selected.limits.maximum_memory_bytes * 2,
-        )
+        replace(selected, runtime="runsc", isolation_mode="gvisor")
+    with pytest.raises(TrialProfileError, match="invalid"):
+        replace(selected, outer_transport="host_uds")
+    with pytest.raises(TrialProfileError, match="digest"):
+        replace(selected, guest_binary_digest="unverified")
+    with pytest.raises(TrialProfileError, match="digest"):
+        replace(selected, guest_binary_digest=digest("b"))
+    with pytest.raises(TrialProfileError, match="digest"):
+        replace(selected, filesystem_tool_digest=digest("b"))
+    with pytest.raises(TrialProfileError, match="invalid"):
+        replace(selected, child_transport="open")
     with pytest.raises(TrialProfileError, match="invalid"):
         replace(selected, child_capabilities=("SYS_ADMIN",))
     with pytest.raises(TrialProfileError, match="invalid"):

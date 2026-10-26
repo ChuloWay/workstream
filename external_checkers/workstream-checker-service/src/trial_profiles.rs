@@ -37,11 +37,13 @@ struct RuntimeProfile {
     selector: ProfileSelector,
     runtime: String,
     isolation_mode: String,
-    outer_host_uds: String,
-    child_host_uds: String,
+    outer_transport: String,
+    child_transport: String,
     outer_runtime_config_digest: String,
     child_runtime_config_digest: String,
     engine_identity_digest: String,
+    guest_binary_digest: String,
+    filesystem_tool_digest: String,
     platform: String,
     platform_identity_digest: String,
     builder_image_digest: String,
@@ -80,7 +82,6 @@ struct RuntimeLimits {
     maximum_wall_time_overrun_ms: u64,
     maximum_cpu_time_overrun_ms: u64,
     maximum_memory_bytes: u64,
-    maximum_swap_bytes: u64,
     maximum_memory_overrun_bytes: u64,
     maximum_pids: u64,
     maximum_pids_overrun: u64,
@@ -130,10 +131,10 @@ impl TrialAuthorityEntry {
         let projection_digest = payload_digest(&self.projection, "projection_digest")?;
         let limits = self.profile.limits.clone();
         if self.profile.schema_version != "workstream.trial_execution_profile.v1"
-            || self.profile.runtime != "runsc"
-            || self.profile.isolation_mode != "gvisor"
-            || self.profile.outer_host_uds != "open"
-            || self.profile.child_host_uds != "none"
+            || self.profile.runtime != "smolvm"
+            || self.profile.isolation_mode != "smol-microvm"
+            || self.profile.outer_transport != "workstream.smol_guest_io.v1"
+            || self.profile.child_transport != "workstream.smol_guest_io.v1"
             || self.profile.child_network != "none"
             || !self.profile.child_runs_as_non_root
             || self.profile.trusted_launcher_capabilities
@@ -153,7 +154,6 @@ impl TrialAuthorityEntry {
             || self.profile.permitted_operations != ["run"]
             || profile_digest != self.profile.selector.profile_digest
             || projection_digest != self.projection.selector.projection_digest
-            || limits.maximum_memory_bytes != limits.maximum_swap_bytes
             || limits.maximum_build_timeout_ms > limits.maximum_total_timeout_ms
             || limits.maximum_step_timeout_ms > limits.maximum_total_timeout_ms
             || limits.maximum_receipt_bytes > 1024 * 1024
@@ -182,6 +182,8 @@ impl TrialAuthorityEntry {
             || !valid_sha256(&self.checker_image_digest)
             || !valid_sha256(&self.configuration_sha256)
             || !valid_sha256(&self.profile.outer_runtime_config_digest)
+            || !valid_sha256(&self.profile.guest_binary_digest)
+            || !valid_sha256(&self.profile.filesystem_tool_digest)
         {
             return Err("trial authority manifest entry invalid");
         }
@@ -198,10 +200,12 @@ impl TrialAuthorityEntry {
             checker_image_digest: self.checker_image_digest,
             configuration_sha256: self.configuration_sha256,
             engine_identity_digest: self.profile.engine_identity_digest,
+            guest_binary_digest: self.profile.guest_binary_digest,
+            filesystem_tool_digest: self.profile.filesystem_tool_digest,
             outer_runtime_config_digest: self.profile.outer_runtime_config_digest,
             child_runtime: self.profile.runtime,
             child_runtime_config_digest: self.profile.child_runtime_config_digest,
-            child_host_uds: self.profile.child_host_uds,
+            child_transport: self.profile.child_transport,
             platform: self.profile.platform,
             platform_identity_digest: self.profile.platform_identity_digest,
             builder_image_digest: self.profile.builder_image_digest,
@@ -423,13 +427,15 @@ mod tests {
                 profile_version: 1,
                 profile_digest: digest('0'),
             },
-            runtime: "runsc".into(),
-            isolation_mode: "gvisor".into(),
-            outer_host_uds: "open".into(),
-            child_host_uds: "none".into(),
+            runtime: "smolvm".into(),
+            isolation_mode: "smol-microvm".into(),
+            outer_transport: "workstream.smol_guest_io.v1".into(),
+            child_transport: "workstream.smol_guest_io.v1".into(),
             outer_runtime_config_digest: digest('1'),
             child_runtime_config_digest: digest('2'),
             engine_identity_digest: digest('3'),
+            guest_binary_digest: digest('3'),
+            filesystem_tool_digest: digest('3'),
             platform: "linux/amd64".into(),
             platform_identity_digest: digest('4'),
             builder_image_digest: digest('5'),
@@ -465,7 +471,6 @@ mod tests {
                 maximum_wall_time_overrun_ms: 100,
                 maximum_cpu_time_overrun_ms: 250,
                 maximum_memory_bytes: 134_217_728,
-                maximum_swap_bytes: 134_217_728,
                 maximum_memory_overrun_bytes: 1_048_576,
                 maximum_pids: 32,
                 maximum_pids_overrun: 2,

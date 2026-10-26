@@ -3,11 +3,11 @@
 mod model_relay;
 mod proxy_transport;
 mod smol;
-mod trial_docker;
 mod trial_engine;
 mod trial_evidence_proxy;
 mod trial_profiles;
 mod trial_relay;
+mod trial_smol;
 
 use model_relay::{
     deserialize_required_model_grant, valid_model_grant, validate_proxy_socket,
@@ -29,14 +29,13 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use trial_docker::DockerRuntimeControl;
-use trial_docker::{DockerTrialBackend, DockerTrialConfiguration};
 use trial_engine::{GenericTrialEngine, SandboxBackendIdentity};
 use trial_evidence_proxy::{
     DurableTrialReceiptPublisher, InvocationReceiptRegistrar, TrialEvidenceProxyClient,
 };
 use trial_profiles::TrialProfileCatalog;
 use trial_relay::{TrialEngine, TrialProfile, TrialRelay, TrialRequestIdentity};
+use trial_smol::{SmolTrialBackend, SmolTrialConfiguration};
 use workstream_checker_sdk::{
     canonical_hash, infrastructure_result, parse_request, validate_result, ValidatedRequest,
     MAX_REQUEST_BYTES,
@@ -75,8 +74,6 @@ struct ServiceConfig {
     trial_profiles: Option<TrialProfileCatalog>,
     #[serde(default)]
     trial_runtime: Option<TrialRuntimeConfiguration>,
-    #[serde(skip)]
-    trial_control: Option<Arc<DockerRuntimeControl>>,
     material_root: PathBuf,
     #[serde(default)]
     docker_binary: PathBuf,
@@ -98,15 +95,15 @@ struct ServiceConfig {
 struct TrialRuntimeConfiguration {
     relay_root: PathBuf,
     scratch_root: PathBuf,
-    runtime_root: PathBuf,
-    runtime_configuration: PathBuf,
+    child_home_root: PathBuf,
     outer_runtime_config_digest: String,
     offline_cache_root: PathBuf,
     deployment_owner: String,
-    runtime_key: String,
     builder_image_id: String,
     trusted_launcher_path: PathBuf,
     trusted_launcher_digest: String,
+    filesystem_tool_path: PathBuf,
+    filesystem_tool_digest: String,
     maximum_candidate_archive_bytes: u64,
 }
 
@@ -528,22 +525,27 @@ fn load_trial_runtime(config: &mut ServiceConfig) -> Result<(), String> {
                 || !valid_digest(&runtime.outer_runtime_config_digest)
                 || !valid_digest(&runtime.trusted_launcher_digest)
                 || !runtime.trusted_launcher_path.is_absolute()
-                || config.runtime != "runsc"
-                || config.isolation_mode != "gvisor"
+                || !runtime.filesystem_tool_path.is_absolute()
+                || !valid_digest(&runtime.filesystem_tool_digest)
+                || config.runtime != "smolvm"
+                || config.isolation_mode != "smol-microvm"
                 || config.model_proxy_socket.is_none()
             {
                 return Err("trial runtime configuration invalid".into());
             }
-            let control = DockerRuntimeControl::new(
-                config.docker_binary.clone(),
-                runtime.runtime_root.clone(),
-                runtime.runtime_configuration.clone(),
-            )
-            .map_err(|_| "trial runtime configuration invalid")?;
-            control
-                .recover_deployment(&runtime.deployment_owner, Instant::now() + CLEANUP_TIMEOUT)
-                .map_err(|_| UNSETTLED_RESOURCE_ERROR.to_owned())?;
-            config.trial_control = Some(Arc::new(control));
+            for directory in [
+                &runtime.relay_root,
+                &runtime.scratch_root,
+                &runtime.child_home_root,
+            ] {
+                validate_relay_root(directory)?;
+            }
+            if runtime.relay_root == runtime.scratch_root
+                || runtime.child_home_root == runtime.scratch_root
+                || runtime.child_home_root == runtime.relay_root
+            {
+                return Err("trial directories must be distinct".into());
+            }
             Ok(())
         }
         _ => Err("trial authority/runtime configuration incomplete".into()),
@@ -554,38 +556,48 @@ fn trial_engine(
     config: &ServiceConfig,
     request: &ValidatedRequest,
     profile: &TrialProfile,
+    reservation: Arc<smol::Reservation>,
+    client: &UnixStream,
+    deadline: Instant,
+    invocation_cancelled: Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<Arc<dyn TrialEngine>, String> {
-    // SAFETY: effective process IDs are read-only process attributes and name
-    // the service account that owns all engine-created export directories.
-    let (export_uid, export_gid) = unsafe { (libc::geteuid(), libc::getegid()) };
     let runtime = config
         .trial_runtime
         .as_ref()
         .ok_or("trial runtime unavailable")?;
-    let control = config
-        .trial_control
-        .as_ref()
-        .ok_or("trial runtime unavailable")?
-        .clone();
-    if runtime.outer_runtime_config_digest != profile.outer_runtime_config_digest {
-        return Err("trial outer runtime identity invalid".into());
+    let smol = config.smol.as_ref().ok_or("Smol runtime unavailable")?;
+    if runtime.outer_runtime_config_digest != profile.outer_runtime_config_digest
+        || smol.binary_sha256 != profile.engine_identity_digest
+        || smol.guest_sha256 != profile.guest_binary_digest
+        || runtime.trusted_launcher_digest != profile.trusted_launcher_digest
+        || runtime.filesystem_tool_digest != profile.filesystem_tool_digest
+    {
+        return Err("trial runtime identity invalid".into());
     }
-    let identity = request
+    let attempt_id = request
         .value
         .get("identity")
-        .and_then(Value::as_object)
-        .ok_or("trial request identity invalid")?;
-    let attempt_id = identity
-        .get("attempt_id")
+        .and_then(|v| v.get("attempt_id"))
         .and_then(Value::as_str)
         .ok_or("trial request identity invalid")?;
-    let backend = DockerTrialBackend::new(
-        DockerTrialConfiguration {
+    let control = smol::trial::Runtime::new(
+        config.clone(),
+        runtime.clone(),
+        profile.clone(),
+        client.try_clone().map_err(|_| "trial client unavailable")?,
+        Arc::clone(&reservation),
+        deadline,
+        invocation_cancelled,
+    )?;
+    let backend = SmolTrialBackend::new(
+        SmolTrialConfiguration {
             identity: SandboxBackendIdentity {
                 engine_identity_digest: profile.engine_identity_digest.clone(),
+                guest_binary_digest: profile.guest_binary_digest.clone(),
+                filesystem_tool_digest: profile.filesystem_tool_digest.clone(),
                 child_runtime: profile.child_runtime.clone(),
                 child_runtime_config_digest: profile.child_runtime_config_digest.clone(),
-                child_host_uds: profile.child_host_uds.clone(),
+                child_transport: profile.child_transport.clone(),
                 platform: profile.platform.clone(),
                 platform_identity_digest: profile.platform_identity_digest.clone(),
                 builder_image_digest: profile.builder_image_digest.clone(),
@@ -596,18 +608,12 @@ fn trial_engine(
             deployment_owner: runtime.deployment_owner.clone(),
             request_digest: request.request_digest.clone(),
             attempt_id: attempt_id.to_owned(),
-            runtime_key: runtime.runtime_key.clone(),
-            builder_image_id: runtime.builder_image_id.clone(),
-            trusted_launcher_path: runtime.trusted_launcher_path.clone(),
-            trusted_launcher_digest: runtime.trusted_launcher_digest.clone(),
-            offline_cache_root: runtime.offline_cache_root.clone(),
             maximum_candidate_archive_bytes: runtime.maximum_candidate_archive_bytes,
             candidate_uid: config.sandbox_uid,
             candidate_gid: config.sandbox_gid,
-            export_uid,
-            export_gid,
+            reservation,
         },
-        control,
+        Arc::new(control),
     )
     .map_err(|_| "trial runtime unavailable")?;
     Ok(Arc::new(GenericTrialEngine::new(backend)))
@@ -774,8 +780,8 @@ fn prepare_listener(config: &mut ServiceConfig) -> Result<OwnedSocketListener, S
     } else {
         cleanup_stale_checker_containers(config)?;
     }
-    // Trial recovery uses the same settled socket-parent custody. Smol nodes
-    // cannot admit trial configuration through this Docker/runsc capability.
+    // Trial configuration is admitted only after the same socket-parent custody
+    // has settled ordinary and child Smol lease recovery.
     load_trial_runtime(config)?;
     Ok(listener)
 }
@@ -931,7 +937,7 @@ fn validate_config(config: &ServiceConfig) -> Result<(), String> {
         return Err("socket parent is not private".into());
     }
     match (&config.model_proxy_socket, &config.model_relay_root) {
-        (Some(model_proxy_socket), Some(model_relay_root)) if config.runtime != "smolvm" => {
+        (Some(model_proxy_socket), Some(model_relay_root)) => {
             validate_proxy_socket(model_proxy_socket)?;
             validate_relay_root(model_relay_root)?;
             if (config.sandbox_uid, config.sandbox_gid) != (effective_uid, effective_gid) {
@@ -1032,31 +1038,10 @@ fn handle_frame(
         if !valid_model_grant(model_grant, &request.request_digest, &request.phase) {
             return Err("model grant invalid".into());
         }
-        if config.runtime == "smolvm" {
-            return encode_response(
-                infrastructure_result(&request, "implementation_unavailable")
-                    .map_err(|_| "result construction failed")?,
-                None,
-            );
-        }
         if config.model_proxy_socket.is_none() || config.model_relay_root.is_none() {
             return Err("model grant invalid".into());
         }
     }
-    let _reservation = if config.runtime == "smolvm" {
-        match smol::reserve(config, &request) {
-            Ok(reservation) => Some(reservation),
-            Err(_) => {
-                return encode_response(
-                    infrastructure_result(&request, "implementation_unavailable")
-                        .map_err(|_| "result construction failed")?,
-                    None,
-                )
-            }
-        }
-    } else {
-        None
-    };
     let Some(cache) = config
         .cache
         .iter()
@@ -1992,6 +1977,9 @@ fn execute_container(
 ) -> Result<ExecutedChecker, ExecutionFailure> {
     container_owner(config)
         .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
+    if grant.predecessor.is_some() != grant.predecessor_inventory.is_some() {
+        return Err(ExecutionFailure::ordinary("material_unavailable", false));
+    }
     let selected_trial = match config.trial_profiles.as_ref() {
         Some(catalog) => catalog
             .resolve(request)
@@ -2013,6 +2001,18 @@ fn execute_container(
             None
         }
     };
+    let reservation = if config.runtime == "smolvm" {
+        let result = match selected_trial {
+            Some(profile) => {
+                smol::trial_capacity(profile.maximum_memory_bytes, profile.maximum_disk_bytes)
+                    .and_then(|child| smol::reserve_invocation(config, request, child))
+            }
+            None => smol::reserve(config, request),
+        };
+        Some(result.map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?)
+    } else {
+        None
+    };
     let receipt_registry = Arc::new(InvocationReceiptRegistry::default());
     let invocation_cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let mut trial_relay =
@@ -2026,8 +2026,19 @@ fn execute_container(
                 })?;
                 let identity = trial_request_identity(request, &grant.binding_digest)
                     .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
-                let engine = trial_engine(config, request, profile)
-                    .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
+                let held = reservation.as_ref().ok_or_else(|| {
+                    ExecutionFailure::ordinary("implementation_unavailable", false)
+                })?;
+                let engine = trial_engine(
+                    config,
+                    request,
+                    profile,
+                    Arc::clone(held),
+                    client,
+                    budget.deadline,
+                    Arc::clone(&invocation_cancelled),
+                )
+                .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
                 let publisher = DurableTrialReceiptPublisher::new(
                     TrialEvidenceProxyClient::new(proxy_path.clone(), request.value.clone()),
                     Arc::clone(&receipt_registry),
@@ -2107,16 +2118,43 @@ fn execute_container(
     };
     let model_mount = model_relay.as_ref().map(InvocationRelay::mount_spec);
     let trial_mount = trial_relay.as_ref().map(TrialRelay::mount_spec);
-    let result = execute_container_inner(
-        config,
-        cache,
-        request,
-        grant,
-        model_mount.as_deref(),
-        trial_mount.as_deref(),
-        client,
-        budget,
-    );
+    let result = if config.runtime == "smolvm" {
+        smol::execute(
+            config,
+            cache,
+            request,
+            smol::ProjectMaterials {
+                current: (&grant.input, &grant.input_inventory),
+                predecessor: grant
+                    .predecessor
+                    .as_ref()
+                    .zip(grant.predecessor_inventory.as_ref())
+                    .map(|(root, inventory)| (root.as_path(), inventory)),
+            },
+            &smol::ProjectCallbacks {
+                model: model_relay
+                    .as_ref()
+                    .map(|relay| relay.socket_path().to_owned()),
+                execution: trial_relay
+                    .as_ref()
+                    .map(|relay| relay.socket_path().to_owned()),
+            },
+            client,
+            budget,
+            invocation_cancelled.as_ref(),
+        )
+    } else {
+        execute_container_inner(
+            config,
+            cache,
+            request,
+            grant,
+            model_mount.as_deref(),
+            trial_mount.as_deref(),
+            client,
+            budget,
+        )
+    };
     let launched = match &result {
         Ok(_) => true,
         Err(failure) => failure.launched,
@@ -2162,15 +2200,6 @@ fn execute_container_inner(
         .map_err(|_| ExecutionFailure::ordinary("material_unavailable", false))?;
     if observed_input != grant.input_inventory {
         return Err(ExecutionFailure::ordinary("material_unavailable", false));
-    }
-    if config.runtime == "smolvm" {
-        if grant.predecessor.is_some() || model_mount.is_some() || trial_mount.is_some() {
-            return Err(ExecutionFailure::ordinary(
-                "implementation_unavailable",
-                false,
-            ));
-        }
-        return smol::execute(config, cache, request, &grant.input, client, budget);
     }
     if let (Some(predecessor), Some(expected)) = (&grant.predecessor, &grant.predecessor_inventory)
     {
@@ -3044,7 +3073,6 @@ mod tests {
             trial_authority_manifest_digest: None,
             trial_profiles: None,
             trial_runtime: None,
-            trial_control: None,
             material_root,
             docker_binary: docker,
             runtime: "runc".into(),
@@ -3336,85 +3364,32 @@ mod tests {
     }
 
     #[test]
-    fn losing_startup_cannot_recover_live_trial_resources() {
+    fn losing_startup_cannot_enter_smol_recovery_or_touch_live_trial_resources() {
         let (root, mut config) = test_config();
-        let proxy_root = root.join("proxy");
-        let relay_root = root.join("relay");
-        let runtime_root = root.join("trial-runtime");
-        let trial_relay_root = root.join("trial-relay");
-        let scratch_root = root.join("trial-scratch");
-        let cache_root = root.join("offline-cache");
-        for directory in [
-            &proxy_root,
-            &relay_root,
-            &runtime_root,
-            &trial_relay_root,
-            &scratch_root,
-            &cache_root,
-        ] {
-            fs::create_dir(directory).unwrap();
-            fs::set_permissions(directory, fs::Permissions::from_mode(0o700)).unwrap();
-        }
-        let proxy_path = proxy_root.join("proxy.sock");
-        let _proxy = UnixListener::bind(&proxy_path).unwrap();
-        fs::set_permissions(&proxy_path, fs::Permissions::from_mode(0o600)).unwrap();
-        let runtime_configuration = root.join("runsc-trial.toml");
-        fs::write(&runtime_configuration, b"rootless = false\n").unwrap();
-        fs::write(
-            &config.docker_binary,
-            b"#!/bin/sh\ncase \"$1 $2\" in\n  \"container ls\") exit 0;;\n  \"info --format\") printf '{\"runsc\":{}}'; exit 0;;\nesac\nexit 2\n",
-        )
-        .unwrap();
-        config.runtime = "runsc".into();
-        config.isolation_mode = "gvisor".into();
-        config.model_proxy_socket = Some(proxy_path);
-        config.model_relay_root = Some(relay_root);
+        let first = OwnedSocketListener::bind(&config.socket_path).unwrap();
+        let lease_root = config.socket_path.parent().unwrap().join("smol-leases");
+        fs::create_dir(&lease_root).unwrap();
+        let lease = lease_root.join("live-trial.json");
+        let candidate_home = root.join("trial-home");
+        fs::create_dir(&candidate_home).unwrap();
+        let retained_candidate = candidate_home.join("candidate.tar");
+        fs::write(&lease, b"winner-owned lease").unwrap();
+        fs::write(&retained_candidate, b"winner-owned candidate").unwrap();
+        config.runtime = "smolvm".into();
+        config.isolation_mode = "smol-microvm".into();
+        // Deliberately invalid runtime settings distinguish socket custody
+        // before validation/recovery from a later refusal of runtime setup.
+        config.smol = None;
         config.trial_profiles = Some(TrialProfileCatalog::empty_for_test());
-        config.trial_runtime = Some(TrialRuntimeConfiguration {
-            relay_root: trial_relay_root,
-            scratch_root,
-            runtime_root: runtime_root.clone(),
-            runtime_configuration,
-            outer_runtime_config_digest: format!("sha256:{}", "1".repeat(64)),
-            offline_cache_root: cache_root,
-            deployment_owner: "deployment_a".into(),
-            runtime_key: "runsc-trial".into(),
-            builder_image_id: format!("sha256:{}", "2".repeat(64)),
-            trusted_launcher_path: config.docker_binary.clone(),
-            trusted_launcher_digest: format!("sha256:{}", "3".repeat(64)),
-            maximum_candidate_archive_bytes: 1024,
-        });
-
-        let first = prepare_listener(&mut config).unwrap();
-        let first_control = config.trial_control.as_ref().unwrap().clone();
-        let journal =
-            trial_docker::persist_runtime_journal_for_test(&runtime_root, "deployment_a").unwrap();
-        let journal_before = fs::read(&journal).unwrap();
-        let live_resource = root.join("live-trial-resource");
-        let docker_called = root.join("docker-called-by-loser");
-        fs::write(&live_resource, b"live").unwrap();
-        fs::write(
-            &config.docker_binary,
-            format!(
-                "#!/bin/sh\ntouch '{}'\nrm -f '{}'\nexit 2\n",
-                docker_called.display(),
-                live_resource.display(),
-            ),
-        )
-        .unwrap();
-
         assert_eq!(
             prepare_listener(&mut config).unwrap_err(),
             "socket custody unavailable"
         );
-        assert!(Arc::ptr_eq(
-            config.trial_control.as_ref().unwrap(),
-            &first_control
-        ));
-        assert!(!docker_called.exists());
-        assert_eq!(fs::read(&journal).unwrap(), journal_before);
-        assert_eq!(fs::read(&live_resource).unwrap(), b"live");
-
+        assert_eq!(fs::read(&lease).unwrap(), b"winner-owned lease");
+        assert_eq!(
+            fs::read(&retained_candidate).unwrap(),
+            b"winner-owned candidate"
+        );
         drop(first);
         fs::remove_dir_all(root).unwrap();
     }
@@ -3788,13 +3763,13 @@ exit 2
     }
 
     #[test]
-    fn smol_configuration_rejects_the_unprojected_host_model_relay() {
+    fn smol_configuration_requires_a_complete_private_model_relay() {
         let (root, mut config) = test_config();
         config.runtime = "smolvm".into();
         config.isolation_mode = "smol-microvm".into();
         config.docker_binary = PathBuf::new();
         config.model_proxy_socket = Some(root.join("private/model-proxy.sock"));
-        config.model_relay_root = Some(root.join("private/model-relays"));
+        config.model_relay_root = None;
 
         assert_eq!(
             validate_config(&config),
@@ -4889,26 +4864,6 @@ exit 2
         let arguments = fs::read_to_string(root.join("args")).unwrap();
         assert!(arguments.contains("dst=/work/input,readonly"));
         assert!(arguments.contains("dst=/work/context/predecessor,readonly"));
-        // Smol has no predecessor projection yet: reject before VM admission.
-        // Without this guard, missing Smol setup reaches Machine::create and
-        // returns cleanup-unsettled, distinguishing a mere incidental failure.
-        config.runtime = "smolvm".into();
-        assert_eq!(
-            execute_container_inner(
-                &config,
-                &config.cache[0],
-                &request,
-                &visible,
-                None,
-                None,
-                &client,
-                &mut budget,
-            ),
-            Err(ExecutionFailure::ordinary(
-                "implementation_unavailable",
-                false
-            ))
-        );
         fs::set_permissions(&current, fs::Permissions::from_mode(0o700)).unwrap();
         fs::set_permissions(&prior, fs::Permissions::from_mode(0o700)).unwrap();
         fs::remove_dir_all(root).unwrap();

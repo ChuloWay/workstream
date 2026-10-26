@@ -163,13 +163,14 @@ deployment must separately enable `host-uds=open` before a mounted host Unix
 socket can work. This repository does not claim that the model relay has been
 qualified under gVisor.
 
-The Smol engine does not currently project host Unix sockets into its guest.
-Its service configuration therefore rejects the model-proxy/relay pair, and a
-model-entitled request sent to a Smol-only node returns
-`implementation_unavailable` before VM admission. Model-enabled POST remains a
-`runsc`/`gvisor` deployment capability until a separately reviewed guest-native
-transport preserves the same invocation-local custody; this merge does not
-claim such support.
+Smol exposes guest-local model and execution sockets through its trusted guest
+stream. The host forwards only the capabilities granted to that invocation to
+the existing relays. A persistent model connection can remain open while an
+execution request runs; workload stdout never carries control frames. No host
+socket or provider credential is mounted into the microVM. Trials use fresh
+Smol sibling VMs and have no Docker/runsc fallback. Real KVM composition
+qualification is required before this path is ready for deployment; historical
+Docker/runsc results do not qualify it.
 
 The opt-in
 [`model_relay_docker.py`](workstream-checker-service/tests/model_relay_docker.py)
@@ -255,9 +256,9 @@ if that capability still exists.
 
 The node also accepts the deployment pair `smolvm` / `smol-microvm`. Python still
 uses the single `external_checker_execution/unix_socket` provider; neither a
-project policy nor a checker request can choose the engine. Smol currently
-rejects model/trial callbacks and predecessor-material requests before VM
-admission; those capabilities require the configured Docker/runsc node. Each execution gets
+project policy nor a checker request can choose the engine. The trusted guest
+receives typed current and optional predecessor material roots and the authorized
+callback capabilities. Each execution gets
 a fresh VM and the same verified ART grant and JSON result contract. The native
 bootstrap has no Python or shell dependency in a project image.
 
@@ -273,7 +274,7 @@ capacity; individual registered checker limits remain unchanged.
 
 For this engine omit `docker_binary`, and configure `smol` with absolute `binary`,
 `home`, `guest_binary`, `cgroup_root` paths; `binary_sha256` and `guest_sha256`;
-and `maximum_parallel`. Install the verified Smol release bundle together and
+and required positive `maximum_parallel` and `maximum_storage_bytes`. Install the verified Smol release bundle together and
 keep it operator-controlled. Build `workstream-checker-guest` for
 `x86_64-unknown-linux-musl`; the node and bootstrap must come from the same source.
 Each existing cache entry additionally has `smol.archive`,
@@ -287,7 +288,10 @@ policy. Runtime execution needs no Docker daemon, registry credentials or image
 pull. Smol retains private hard links to imported archives; link count alone is
 not an image-integrity check.
 
-The node reserves aggregate memory and concurrent slots before launch. A guest
+The node reserves aggregate memory, disk and concurrent slots before launch.
+A trial invocation reserves the outer checker plus one sequential child VM
+atomically, before either VM launch or model spend. A one-slot node rejects such
+an invocation instead of waiting for capacity while holding its only slot. A guest
 supervisor applies the exact requested CPU and memory controls, a bounded PID
 limit, non-root IDs, no capabilities, read-only root/material, a 16 MiB `/tmp`,
 and denied management syscalls and network access. Image-owned `/work` and `/tmp`

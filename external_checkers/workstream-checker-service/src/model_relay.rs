@@ -420,7 +420,6 @@ impl InvocationRelay {
         )
     }
 
-    #[cfg(test)]
     pub(crate) fn socket_path(&self) -> &Path {
         &self.paths.socket
     }

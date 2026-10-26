@@ -85,22 +85,29 @@ The concrete generic offline implementation is isolated in
 classification, resource, role-projection and cleanup tests. It consumes only
 trusted digest-pinned engine inputs and the relay's generic plan; it contains no
 Terminal Systems paths, task names, commands or findings.
-`external_checkers/workstream-checker-service/src/trial_docker.rs` and
-`external_checkers/workstream-checker-service/tests/trial_docker.rs` own the
-generic offline Kaniko/descendant-runsc launch policy and a narrow
-module-neutral runtime-control seam. This change owns its concrete bounded
-command, ownership journal, observation and recovery implementation. The
-listed trial-profile, relay and engine files also replace exact fixed slots with
-finite ordered slot templates (minimum/maximum occurrences, roles, fresh state
-and retainable work outcomes), so source-cited documented procedures remain
-variable without becoming an unbounded or project-named shared allowlist.
-Composition in `main.rs` is serialized with the shared model transport changes;
-this change delivers its own trial engine and callback. The explicit real-engine
-qualification entrypoint is
-`external_checkers/workstream-checker-service/scripts/qualify_trial_docker.sh`,
-backed by the non-production binary
-`external_checkers/workstream-checker-service/src/bin/qualify_trial_docker.rs`;
-it must exercise the real target with zero silently skipped proof cases.
+The concrete backend is
+`external_checkers/workstream-checker-service/src/trial_smol.rs`, with its
+production host adapter in `src/smol/trial.rs` and bounded export protocol in
+`src/smol/trial_io.rs`. Generic archive/cache validators live under
+`src/trial_engine/`. The existing Smol lease/guardian and guest bootstrap own
+fresh sibling VMs, current/predecessor material and invocation-bound callbacks.
+`src/smol/admission.rs` reserves the checker plus one sequential trial before
+launch or model spend. Guest `src/trial.rs` and the existing trusted launcher
+apply the approved trial limits using disk-backed ext4, without a tmpfs fallback.
+The profile pins the guest and filesystem formatter alongside the existing
+engine, launcher, platform, builder and cache identities. The generic
+`scripts/build_smol_filesystem_tool.sh` builds the pinned static formatter from
+clean upstream source; it contains no project rules. Runtime swap is disabled.
+The superseded Docker trial implementation, tests, feature and qualification
+binary are removed; portable archive, cache, accounting and confinement
+assertions are retained in the corresponding current owners.
+The trial-profile, relay and engine files retain finite ordered slot templates
+(minimum/maximum occurrences, roles, fresh state and retainable work outcomes),
+so source-cited documented procedures remain variable without an unbounded or
+project-named shared allowlist. The explicit composition proof is the native
+Smol qualifier and `tests/terminal_systems_smol_composition.py`; it requires
+real KVM, PostgreSQL and MinIO with a controlled model provider, and must not
+report historical runsc evidence as qualification of this implementation.
 The trial module publishes a generic typed relay, profile and observation API;
 it does not treat relay success as a work verdict. Backend trial authority starts
 in `backend/app/modules/checkers/api/trial_profiles.py`,
@@ -109,7 +116,7 @@ in `backend/app/modules/checkers/api/trial_profiles.py`,
 distinct digest-pinned trusted service-config reader and do not reuse the
 monetary model profile. The exact selected-POST, TASK and ART extension files
 and typed contracts are listed below, including the two additive owner-custody
-migrations. The bridge must keep Docker authority and prepared offline material outside the untrusted project image, expose only
+migrations. The bridge must keep VM authority and prepared offline material outside the untrusted project image, expose only
 invocation-local bounded tools, and prove aggregate time, CPU, memory, PID and
 scratch-disk limits, cancellation, cleanup, no network or host socket in the
 nested workload, and trusted infrastructure-versus-work classification. It must
@@ -605,11 +612,9 @@ schemas; the required drift command must exercise that existing contract module.
 
 ### Smol target reconciliation
 
-The current Smol project bootstrap has one material tree and a final-result
-stream. It refuses model/trial callbacks and predecessor material. Removing
-those refusals alone is not an implementation. The proposed change reuses the
-existing trusted guest and managed Smol lease rather than transporting host
-sockets into the VM:
+The implementation extends the trusted guest and managed Smol lease with
+typed material roots and bounded callbacks. Merely removing the prior refusals
+would not preserve custody. Host sockets are not transported into the VM:
 
 - The trusted guest owns bounded, typed request/reply framing over Smol's
   existing interactive execution stream. It exposes guest-local
@@ -636,10 +641,9 @@ sockets into the VM:
 - Project policy cannot select a runtime or request broader authority. Neither
   a Docker daemon nor runsc is a fallback for the Smol execution target.
 
-The independently owned upload/intake branch changes these same guest and Smol
-lifecycle paths. Reconcile its final shared protocol before implementing this
-extension, and give those files one owner during implementation. This proposed
-design is not executed proof. Required qualification is a real KVM composition
+The upload/intake branch is reconciled into the shared guest and Smol
+lifecycle paths, with explicit ownership during parallel edits. Design and
+unit results are not executed KVM proof. Required qualification is a real KVM composition
 with model callbacks, predecessor material, isolated trials, verified ART
 receipts and replay without another model effect. Negative cases must cover
 control-frame spoofing, unknown/duplicate/oversize frames, cancellation in each
