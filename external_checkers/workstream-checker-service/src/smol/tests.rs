@@ -123,12 +123,20 @@ fn cached_image_config_must_match_its_pinned_digest_and_platform() {
 
 #[test]
 fn private_child_home_is_derived_from_the_exact_lease() {
-    let (root, config) = super::super::tests::test_config();
+    let (root, _config) = super::super::tests::test_config();
     let lease_root = root.join("smol-leases");
     let child_home_root = root.join("trial-child-homes");
     let name = format!("ws-{}", "a".repeat(32));
-    let mut runtime = config.smol.unwrap();
-    runtime.home = child_home_root.join(format!("{name}.home"));
+    let runtime = SmolConfig {
+        binary: root.join("runtime"),
+        binary_sha256: format!("sha256:{}", "a".repeat(64)),
+        home: child_home_root.join(format!("{name}.home")),
+        guest_binary: root.join("guest"),
+        guest_sha256: format!("sha256:{}", "b".repeat(64)),
+        cgroup_root: root.join("groups"),
+        maximum_parallel: 2,
+        maximum_storage_bytes: 4 * 1024 * 1024 * 1024,
+    };
     let mut lease = Lease {
         name,
         owner: "b".repeat(64),
@@ -142,5 +150,45 @@ fn private_child_home_is_derived_from_the_exact_lease() {
     assert!(lease.valid());
     lease.runtime.home = root.join("shared-or-foreign-home");
     assert!(!lease.valid());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn quarantined_admission_makes_runtime_health_unavailable() {
+    let (root, mut config) = super::super::tests::test_config();
+    let admission = Arc::new(
+        Admission::new(
+            Capacity {
+                slots: 2,
+                memory_bytes: 20,
+                storage_bytes: 20,
+            },
+            "e".repeat(64),
+        )
+        .unwrap(),
+    );
+    let held = admission
+        .reserve(
+            Capacity {
+                slots: 1,
+                memory_bytes: 10,
+                storage_bytes: 10,
+            },
+            Some(Capacity {
+                slots: 1,
+                memory_bytes: 10,
+                storage_bytes: 10,
+            }),
+        )
+        .unwrap();
+    held.child(Capacity {
+        slots: 1,
+        memory_bytes: 10,
+        storage_bytes: 10,
+    })
+    .unwrap()
+    .quarantine();
+    config.smol_admission = Some(admission);
+    assert_eq!(ready(&config).unwrap_err(), "node admission quarantined");
     fs::remove_dir_all(root).unwrap();
 }

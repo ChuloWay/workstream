@@ -1,4 +1,3 @@
-//! Private Smol engine. Product callers retain the existing checker contract.
 use super::*;
 use std::os::unix::process::CommandExt;
 use std::sync::{
@@ -124,8 +123,6 @@ pub(crate) fn trial_capacity(memory_bytes: u64, disk_bytes: u64) -> Result<Capac
         storage_gib,
         pids: 2,
     })?;
-    // The VM disk and retained host candidate/workspace exports coexist. The
-    // generic trial ledger bounds those exports within the invocation disk cap.
     capacity.storage_bytes = capacity
         .storage_bytes
         .checked_add(disk_bytes)
@@ -304,6 +301,9 @@ fn image_command(value: &Value) -> Result<Vec<String>, String> {
     Ok(command)
 }
 pub(super) fn ready(config: &ServiceConfig) -> Result<(), String> {
+    if let Some(admission) = &config.smol_admission {
+        admission.reserved_storage_bytes()?;
+    }
     let s = settings(config)?;
     memory_capacity(s)?;
     if s.maximum_storage_bytes < 1024 * 1024 * 1024 {
