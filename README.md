@@ -172,6 +172,13 @@ You need Git, Docker Engine, and Docker Compose v2.
 ## Use the command-line client
 
 The [Workstream CLI](cli/README.md) is a terminal client for the public API.
+Download published binaries from [GitHub Releases](https://github.com/Flow-Research/workstream/releases)
+and follow the [installation and verification instructions](cli/README.md#install-a-released-binary).
+Linux x86-64, Windows x86-64, Intel Mac and Apple Silicon are supported.
+A successful build or release tag is not a published download: the release
+workflow waits for independent human approval before publishing. A CLI release
+does not deploy the backend or certify the whole service for production.
+
 You can use it to set up projects, find and claim tasks, submit work, read
 authorized task audit context and evidence, and export contribution records.
 It sends your Flow token, from
