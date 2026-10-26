@@ -1671,6 +1671,14 @@ sessions, generic isolated trials, retained trial receipts and approved exact
 predecessor material. These historical eight specifications are not a platform
 allowlist or a requirement for eight separate images. The implementation and
 its qualification limits are recorded in the [checker README](../pilots/terminal_systems/checkers/README.md).
+The production Rust service and project Python image have completed a controlled
+provider qualification through real gVisor execution and PostgreSQL/MinIO custody:
+two verified trial receipts, four settled model effects and replay without new
+provider calls. Owned resource cleanup passed. This uses a qualification package;
+it does not establish live-model grading or the public contribution journey.
+That qualification used gVisor. The intended Smol deployment still lacks this
+image's model/trial callbacks and predecessor-material support; it remains
+blocked until those capabilities and the microVM composition are qualified.
 Model-enabled checks require exact approved project profiles before binding;
 project publication and complete live-journey qualification remain separate.
 Registration, corrected policy binding and approval must precede activation;

@@ -19,6 +19,14 @@ custody adds linear migrations 0063 and 0064 after that dependency.
 
 ## Bounded change
 
+The intended execution target is the current Smol microVM service. Earlier
+gVisor evidence remains valid only for that implementation and does not satisfy
+deployment readiness. Reconcile the model/trial and predecessor-material
+capabilities with the existing Smol guest, lease and resource owners before
+marking this work ready. Review the transport and execution design before
+implementation; retain the generic model ledger, ART custody and project image
+contracts. The independently owned upload/intake work remains separate.
+
 Allowed project paths are `pilots/terminal_systems/checkers/**`, the project
 README, affected current roadmap/runbook claims, this record and proportionate
 test/CI selection for these project assets. Preserve and reuse the delivered
@@ -209,10 +217,37 @@ generic runtime boundaries, exact cost/custody, and honest qualification limits.
 Architecture inspection confirmed that policy duplicate rejection includes
 requirement identity. The same registered capability can safely serve the two
 requirements with distinct locked configurations and separately counted budgets.
-The initial PRE plan has no architecture blocker. Generic POST prerequisites
-remain under design review; missing runtime support blocks activation.
+The initial PRE plan has no architecture blocker. The implemented generic POST
+runtime received scoped architecture/security and QA/test-delta review at
+`3e67d39c8`; the actual runtime composition passed at that same source. Policy
+approval and the public live-project journey remain separately owned.
 
 ## Evidence
+
+POST runtime composition passed at clean commit
+`3e67d39c8c5daaea9f950bde88bb3e70396ba9c5`, tree
+`9efbc5fda6eb7f541149f6acc804d32ecadd3737`. The production Rust service and Python
+project image used real gVisor/Kaniko, PostgreSQL and MinIO with a controlled
+provider. One composed test passed with no failures, errors or skips in 354.51
+seconds. It retained two verified ART trial receipts with 17 step outcomes each,
+four completed model effects settled at 5,100 nanodollars each, and no additional
+provider calls on replay. These are controlled accounting facts, not paid model
+spend. Migration head was 0064; database, MinIO and owned Docker cleanup passed.
+The canonical result summary SHA-256 is
+`281e5fc24639c8eaeddc7f0bc53588149cedb7665449ecf8392f27dd3bd6affb`;
+the fixture summary SHA-256 is
+`33b8ef4c9c891ffe1c858b4f9847ff6e8ec334495bc162529ddc67924cff7ccc`.
+Independent reviewers recomputed the published artifact hashes and inspected
+the receipt custody, replay, source identity and cleanup facts. Earlier failed
+qualification runs remain failures and are not included in this pass.
+
+The separate real-engine qualification also exercised reduced builder
+capabilities, nonroot execution, protected input writes/renames, offline cache
+and runtime identity refusal, deadline handling and cleanup. Focused evidence
+wrapper tests cover stale or changed source, failed execution and retraction of
+partially published success. These proofs use a local prepared gVisor harness
+and a qualification package. They do not establish a deployed node, live-model
+grading, image publication, guide approval or the public contribution journey.
 
 Independent review identified noncanonical metadata path aliases and undeclared
 fields in the four fixed metadata tables. Two regression cases reproduced eight
@@ -562,3 +597,51 @@ wrapper requires exactly one passed JUnit node with no skipped or failed cases.
 The required external-checker runtime job in `.github/workflows/backend.yml`
 also runs the standalone wrapper's source/stale/publication regression tests.
 This extends the existing checker job without altering other required lanes.
+
+Integration with current main also covers the retry-source, guide-proposal and
+guide-post-policy MCP snapshots and the existing checker/artifact drift test
+selection in `.github/workflows/mcp.yml`. Snapshots must expose the exact backend
+schemas; the required drift command must exercise that existing contract module.
+
+### Smol target reconciliation
+
+The current Smol project bootstrap has one material tree and a final-result
+stream. It refuses model/trial callbacks and predecessor material. Removing
+those refusals alone is not an implementation. The proposed change reuses the
+existing trusted guest and managed Smol lease rather than transporting host
+sockets into the VM:
+
+- The trusted guest owns bounded, typed request/reply framing over Smol's
+  existing interactive execution stream. It exposes guest-local
+  `/work/model.sock` and `/work/execution.sock` to the selected image. Workload
+  stdout is captured separately and cannot supply control frames. The host
+  forwards authorized frames through the existing invocation relays; MODEL,
+  CHECKERS and ART retain their current authority and evidence ownership.
+- Typed material roots carry current and optional predecessor files with
+  independent inventories, verified byte counts/digests and read-only mounts.
+  The host selects these roles; the image cannot nominate host paths.
+- A Smol implementation of `TrialSandboxBackend` reuses `GenericTrialEngine`.
+  Each build and each candidate step receives a fresh managed VM. The trusted
+  protocol transfers bounded build/cache/workspace input and verified candidate
+  or workspace output. Candidate image identity, cumulative invocation limits,
+  cancellation, exact-owner cleanup and retained evidence remain mandatory.
+- Admission reserves the peak outer-checker plus one child-trial VM capacity
+  before starting the checker or spending on a model. Child execution consumes
+  that invocation's reservation; it must not wait for a global slot while the
+  outer VM holds the last slot. Insufficient capacity fails before execution.
+  Trial guest purposes need the locked profile's CPU, memory, PID, filesystem
+  and export limits, not the ordinary checker VM's fixed defaults. Reuse shared
+  confinement primitives; the container launcher cannot be assumed valid as
+  a microVM bootstrap.
+- Project policy cannot select a runtime or request broader authority. Neither
+  a Docker daemon nor runsc is a fallback for the Smol execution target.
+
+The independently owned upload/intake branch changes these same guest and Smol
+lifecycle paths. Reconcile its final shared protocol before implementing this
+extension, and give those files one owner during implementation. This proposed
+design is not executed proof. Required qualification is a real KVM composition
+with model callbacks, predecessor material, isolated trials, verified ART
+receipts and replay without another model effect. Negative cases must cover
+control-frame spoofing, unknown/duplicate/oversize frames, cancellation in each
+direction, controller/guest death, candidate substitution, resource ceilings
+and confirmed cleanup. Preserve the separately owned public journey boundary.

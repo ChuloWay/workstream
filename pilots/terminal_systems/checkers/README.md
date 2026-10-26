@@ -90,11 +90,22 @@ set or approval. The project agent now has strict material/rubric validation, a
 bounded source-cited plan, invocation-local model-session and execution-socket
 clients, protected build/state projections, and receipt-bound runtime and author
 assessment cores. The shared runner has a generic offline Kaniko/runsc trial
-engine with resource, cancellation, cleanup and recovery controls. Provider-free
-tests and a real engine qualification are development proof only: the complete
-model→trial→retained-receipt→model flow has not yet completed a controlled
-provider qualification, and this POST image has not been published, registered,
-approved or activated.
+engine with resource, cancellation, cleanup and recovery controls. The production
+Rust service and Python project image have passed the complete
+model→trial→retained-receipt→model flow with a controlled provider, real gVisor
+execution, PostgreSQL and MinIO at `3e67d39c8`. That run retained two verified trial
+receipts with 17 step outcomes each and four settled model effects; replay made
+no additional provider calls. Database, storage and owned Docker cleanup passed.
+This qualifies the runtime composition using a qualification package. It does
+not establish live-model grading or the public guide-to-contribution journey.
+This POST image has not been published, registered, approved or activated.
+
+The deployment target is Smol microVMs. The qualification above exercised the
+gVisor implementation only. Smol currently refuses the model/trial callbacks
+and predecessor material required by this image, so that result does not qualify
+this project for its intended deployment. Readiness requires those capabilities
+through the existing Smol guest and lease boundaries, followed by a real microVM
+composition test. A passing gVisor run cannot substitute for that proof.
 
 [`post/model/execution-rubrics.json`](post/model/execution-rubrics.json) is an
 exact semantic projection of that historical handoff. Its
