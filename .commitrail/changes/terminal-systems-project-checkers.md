@@ -1192,3 +1192,29 @@ production cleanup defect, and no physical cancellation result is claimed.
 Root and independent frozen-source review passed. A successful recovery still
 requires the composition's marker-only relay/scratch/home check before stopping
 the controller; manual failed-case cleanup cannot satisfy that assertion.
+
+Recovery 023 also stopped before marker/fault: a prior short-step VMM was
+already a zombie. The selected owner/network/PID matched; the observer's new
+live-process assertion rejected this normal retirement. Its failed cleanup
+receipt is `e7d49bddfb970b3b51d435568ab6ae4763da0d7d52260e88ae251f654b540cc8`,
+again disclosing manual exact dead relay cleanup rather than runtime success.
+The next two-file test-only correction raises ProcessLookupError only for Z,
+then relies on the existing independent retirement check before bounded pending.
+UID/GID/start-time/cgroup failures remain fatal. Exception teardown will cancel
+and drain the adapter under existing bounds, then wait at most the existing
+30-second physical-cleanup allowance for VM and relay/scratch roots while the
+controller remains alive. The original failure stays primary; cleanup failure
+is retained as a secondary note. Controller-death recovery keeps its existing
+VM-drain, restart, then strict relay-root assertion order. No marker, workload,
+success deadline, runtime or image changes are authorized.
+
+All seven focused observer controls pass (3.06 seconds), including an actual
+unreaped zombie with independently verified retirement, real socket/directory
+removal observed before teardown returns, and a secondary cleanup deadline
+failure. The normal non-dumpable positive and all prior authority/protocol
+controls remain green. Original proof errors stay primary with bounded private
+secondary cleanup notes. No new KVM result is claimed.
+
+Root frozen-diff review passed. Inventory-retention failure is also recorded as
+a bounded secondary note, so failed evidence-file creation cannot mask the
+original observer error or skip the physical drain.

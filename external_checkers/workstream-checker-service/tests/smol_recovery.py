@@ -288,7 +288,8 @@ class NestedTrialRecovery:
         raw = (process / "stat").read_text()
         assert int(raw.split(" (", 1)[0]) == pid
         fields = raw.rpartition(") ")[2].split()
-        assert fields[0] != "Z"
+        if fields[0] == "Z":
+            raise ProcessLookupError("observed VMM already retired")
         start = int(fields[19])
         assert start > 0
         membership = "0::" + str(group).removeprefix("/sys/fs/cgroup")
@@ -522,17 +523,41 @@ class NestedTrialRecovery:
             path.write_text(json.dumps(summary, sort_keys=True, indent=2) + "\n")
             path.chmod(0o400)
             self.completed = True
-        except BaseException:
-            self.retain_inventory_failure()
+        except BaseException as failure:
+            try:
+                self.retain_inventory_failure()
+            except BaseException as retention_failure:
+                failure.add_note("observer inventory retention also failed: " + type(retention_failure).__name__
+                                 + ": " + str(retention_failure)[:512])
+            try:
+                await self.drain_failed_execution()
+            except BaseException as cleanup_failure:
+                failure.add_note("observer failure cleanup also failed: " + type(cleanup_failure).__name__
+                                 + ": " + str(cleanup_failure)[:512])
             raise
-        finally:
-            if not self.execution.done():
-                self.execution.cancel()
-                done, _ = await asyncio.wait({self.execution}, timeout=5)
-                if not done:
-                    await asyncio.to_thread(self.stop_owned_controller)
-                    done, _ = await asyncio.wait({self.execution}, timeout=15)
-                    assert done, "task did not drain after exact-owned controller teardown"
+
+    def relay_roots_clean(self):
+        return all(
+            {entry.name for entry in Path(self.config["trial_runtime"][key]).iterdir()}
+            == {".workstream-trial-root.json"}
+            for key in ("relay_root", "scratch_root")
+        )
+
+    async def drain_failed_execution(self):
+        if not self.execution.done():
+            self.execution.cancel()
+            done, _ = await asyncio.wait({self.execution}, timeout=5)
+            if not done:
+                await asyncio.to_thread(self.stop_owned_controller)
+                done, _ = await asyncio.wait({self.execution}, timeout=15)
+                assert done, "task did not drain after exact-owned controller teardown"
+        if self.controller.poll() is None:
+            # Adapter cancellation closes the socket before Rust finishes its
+            # relay worker. Keep the controller alive for the existing drain.
+            await asyncio.to_thread(
+                wait_until, lambda: self.physical_clean() and self.relay_roots_clean(),
+                "failed observer retained physical or relay resources", 30,
+            )
 
     def stop_owned_controller(self):
         if self.controller.poll() is None:
@@ -747,6 +772,71 @@ def test_nested_vmm_identity_accepts_nondumpable_process_and_rejects_foreign_cus
         child.terminate()
         child.wait(timeout=3)
         child.stdout.close()
+
+
+def test_nested_vmm_zombie_requires_verified_retirement(tmp_path):
+    import sys
+    import pytest
+
+    lease = tmp_path / "lease.json"
+    lease.write_text("retained")
+    child = subprocess.Popen([sys.executable, "-c", "pass"])
+    process = Path("/proc") / str(child.pid)
+    try:
+        wait_until(lambda: (process / "stat").read_text().rpartition(") ")[2].split()[0] == "Z",
+                   "control child did not retire", 3)
+        membership = (process / "cgroup").read_text().strip()
+        group = Path("/sys/fs/cgroup" + membership.removeprefix("0::"))
+        with pytest.raises(ProcessLookupError):
+            NestedTrialRecovery.vmm_identity(child.pid, group)
+        assert NestedTrialRecovery.observation_retired(lease, child.pid)
+        assert lease.read_text() == "retained"
+    finally:
+        child.wait(timeout=3)
+
+
+def test_nested_failed_observer_waits_for_actual_relay_drain(tmp_path, monkeypatch):
+    import threading
+    from types import SimpleNamespace
+    import pytest
+
+    relay, scratch = tmp_path / "relay", tmp_path / "scratch"
+    for root in (relay, scratch):
+        root.mkdir()
+        (root / ".workstream-trial-root.json").write_text("marker")
+    session = relay / ".trial-owned"
+    session.mkdir()
+    endpoint = session / "execution.sock"
+    with socket.socket(socket.AF_UNIX) as channel:
+        channel.bind(str(endpoint))
+    probe = NestedTrialRecovery("caller_disconnect")
+    probe.config = {"trial_runtime": {"relay_root": str(relay), "scratch_root": str(scratch)}}
+    probe.controller = SimpleNamespace(poll=lambda: None)
+    probe.physical_clean = lambda: True
+    probe.stop_owned_controller = lambda: (_ for _ in ()).throw(AssertionError("controller stopped before drain"))
+    drained = threading.Event()
+    def finish_runtime():
+        endpoint.unlink()
+        session.rmdir()
+        drained.set()
+    worker = threading.Timer(0.05, finish_runtime)
+    async def exercise():
+        probe.execution = asyncio.create_task(asyncio.sleep(3600))
+        worker.start()
+        await probe.drain_failed_execution()
+        assert probe.execution.cancelled() and drained.is_set()
+        assert probe.relay_roots_clean()
+        def expired(predicate, description, timeout):
+            assert timeout == 30
+            raise AssertionError("bounded secondary cleanup failure")
+        monkeypatch.setattr(__import__(__name__), "wait_until", expired)
+        with pytest.raises(AssertionError, match="bounded secondary"):
+            await probe.drain_failed_execution()
+    try:
+        asyncio.run(exercise())
+    finally:
+        worker.join(timeout=3)
+        assert not worker.is_alive()
 
 
 def test_nested_inventory_uses_unique_exact_name_and_selected_authority():
