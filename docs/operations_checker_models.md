@@ -71,7 +71,8 @@ POST images require neither a model profile nor provider credentials. Unsupporte
 provider/API pairs deny without fallback. Setup preserves both native agent
 runtimes through a credential-free local transport:
 
-- OpenAI Agents SDK uses the approved `openai` / `responses` request shape;
+- OpenAI Agents SDK uses the approved `openai` / `responses` or
+  `openrouter` / `chat_completions` request shape;
 - OmniCoreAgent uses the approved `openrouter` / `chat_completions` shape.
 
 The setup proxy accepts only the exact selected model, two neutral document tools,
@@ -81,7 +82,15 @@ unapproved service tiers and provider-side storage are rejected. OpenAI input is
 counted with the provider's input-count endpoint before dispatch. OpenRouter uses
 the exact non-alias model metadata endpoint before dispatch and requires current
 context, completion, parameter and pricing metadata to fit the immutable profile;
-unknown or unsupported non-token fees fail before spend. Metadata-to-dispatch
+unknown or unsupported non-token fees fail before spend. The advertised optional
+`web_search` rate is validated but excluded: both request owners explicitly
+disable the web plugin, reject routing variants, and exclude provider search
+tools/options. This does not enable search or exempt other per-request fees.
+Before private or paid qualification, verify that the account has no enabled
+plugin enforced by **Prevent overrides**; OpenRouter can otherwise ignore the
+request's disablement. See its [plugin precedence contract](https://openrouter.ai/docs/guides/features/plugins/overview).
+The API key and model metadata checks do not establish that account setting.
+Metadata-to-dispatch
 consistency remains an external provider assumption that must be requalified for
 the selected account and model. OpenRouter reserves the full qualified context
 window; it does not count each prompt locally. An over-context request can still
