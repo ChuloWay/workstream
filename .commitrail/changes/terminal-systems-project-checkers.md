@@ -751,3 +751,29 @@ unchanged; there is no lazy-unmount fallback. The focused wire regression covers
 the reproduced shape mismatch and malformed variants. A private diagnostic
 control built and exported the exact candidate and confirmed guest/host cleanup;
 canonical source qualification must repeat that proof before claiming readiness.
+
+### OpenRouter metadata and disabled search
+
+Live non-billable metadata for the selected `openai/gpt-5.6-terra` model includes
+an optional `web_search` price. The shared metadata guard currently rejects it
+even though both POST and setup use fixed requests that disable the web plugin,
+reject routing variants and never expose provider web-search tools or options.
+The bounded repair extends `backend/app/adapters/model_usage/openrouter.py`, its
+existing POST/setup provider tests and `docs/operations_checker_models.md`:
+validate but disregard that one disabled feature's advertised rate. Other
+unknown or nonzero non-token fees, malformed prices and insufficient pinned
+token/cache rates still refuse dispatch. Preserve full-context reservations,
+the shared project budget, request shape, paid-effect custody and no-retry rules.
+The provider's documented request controls remain an external assumption to
+qualify with the selected account; the repair does not enable search or add a
+pricing fallback. Required review covers both request owners and the negative
+fee/feature tests before a paid qualification. The source is OpenRouter's
+[plugin disable contract](https://openrouter.ai/docs/guides/features/plugins/overview).
+
+Focused review confirmed the closed request controls and retained fee refusals,
+and identified the account-level `Prevent overrides` qualification prerequisite.
+The runbook now states it explicitly; metadata/key availability alone cannot
+prove that setting. The real metadata endpoint passes the corrected preflight
+using conservative tier/cache rates, with zero paid calls. The 63 focused POST
+and setup cases include disabled-search metadata, unknown/request fees, malformed
+prices, plugin enablement, search options, server tools and routing variants.

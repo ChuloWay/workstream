@@ -35,10 +35,7 @@ class OpenRouterUsage:
             self.output_tokens,
             self.reasoning_tokens,
         )
-        if any(
-            type(value) is not int or not 0 <= value <= _MAX_TOKEN_COUNT
-            for value in values
-        ):
+        if any(type(value) is not int or not 0 <= value <= _MAX_TOKEN_COUNT for value in values):
             raise ValueError("OpenRouter usage is invalid")
         if self.total_tokens is not None and (
             type(self.total_tokens) is not int
@@ -138,9 +135,7 @@ def validate_openrouter_metadata(profile: ProjectModelProfile, value: object) ->
         or type(top_provider.get("context_length")) is not int
         or top_provider["context_length"] != context_length
         or type(top_provider.get("max_completion_tokens")) is not int
-        or not 1
-        <= profile.spec.maximum_output_tokens
-        <= top_provider["max_completion_tokens"]
+        or not 1 <= profile.spec.maximum_output_tokens <= top_provider["max_completion_tokens"]
         or not isinstance(supported, list)
         or any(type(item) is not str for item in supported)
         or not _OPENROUTER_REQUIRED_PARAMETERS.issubset(supported)
@@ -238,8 +233,14 @@ def _require_zero_unsupported_fees(row: dict) -> None:
         "min_prompt_tokens",
     }
     for key, value in row.items():
-        if key not in supported and _nanodollars(value) != 0:
-            raise ModelCallUnavailable("model_profile_provider_unavailable")
+        if key not in supported:
+            amount = _nanodollars(value)
+            # This is an advertised optional feature price, not a request fee.
+            # Both request owners require our fixed disabled web plugin and
+            # exclude web-search tools/options and routing variants. Still parse
+            # its price strictly; no other unsupported charge is admitted.
+            if key != "web_search" and amount != 0:
+                raise ModelCallUnavailable("model_profile_provider_unavailable")
 
 
 def _nanodollars(value: object) -> int:
