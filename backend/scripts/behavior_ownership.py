@@ -129,6 +129,8 @@ CHECKER_MODEL_RUNTIME_TARGETS = frozenset({
     "backend/app/adapters/checkers/model_proxy.py",
     "backend/app/adapters/checkers/model_proxy_transport.py",
     "backend/app/adapters/checkers/model_runtime.py",
+    "backend/app/adapters/checkers/openrouter_model_provider.py",
+    "backend/app/adapters/model_usage/openrouter.py",
     "backend/app/adapters/project_agents/setup_model_handler.py",
     "backend/app/adapters/project_agents/setup_model_proxy.py",
     "backend/app/api/deps/checker_models.py",
@@ -454,11 +456,11 @@ OMNICORE_GUIDE_RUNTIME_TARGETS = frozenset({
     "backend/app/workers/project_setup_topology.py",
 })
 NEUTRAL_GUIDE_RUNTIME_REMOVED_TARGETS = frozenset({
+    "backend/app/adapters/project_agents/openrouter_policy.py",
     "backend/app/modules/artifacts/zip_safety.py",
 })
 
 NEUTRAL_GUIDE_RUNTIME_TARGETS = frozenset({
-    "backend/app/adapters/project_agents/openrouter_policy.py",
     "backend/app/core/zip_safety.py",
     "backend/app/adapters/guide_document_tools/child.py",
     "backend/app/adapters/guide_document_tools/client.py",
@@ -1075,6 +1077,14 @@ def _validate_additive_partition_transition(
     current_by_target = {item["target"]: item for item in current_assignments}
     _validate_policy_lineage_relocation(set(trusted_targets), set(current_by_target))
     removed = set(trusted_targets) - set(current_by_target)
+    if (
+        "backend/app/adapters/project_agents/openrouter_policy.py" in removed
+        and not {
+            "backend/app/adapters/checkers/openrouter_model_provider.py",
+            "backend/app/adapters/model_usage/openrouter.py",
+        }.issubset(current_by_target)
+    ):
+        raise BehaviorOwnershipError("untrusted_partition_change")
     if removed & REV_04C_REMOVED_TARGETS and (
         "backend/app/modules/reviews/api/acceptance.py" not in current_by_target
     ):

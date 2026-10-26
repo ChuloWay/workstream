@@ -80,6 +80,7 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers_model_calls/test_setup_model_proxy_transport.py",
         "tests/checkers_model_calls/test_setup_output_custody.py",
         "tests/checkers/model_provider/test_openai_responses.py",
+        "tests/checkers/model_provider/test_openrouter.py",
         "tests/checkers/external/test_model_transport.py",
         "tests/checkers/external/test_model_proxy_transport.py",
         "tests/authorization/checker_models/test_contracts.py",
@@ -291,8 +292,8 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
             "76bee594b1d740d89d42fa4bf055eb6057458ca066c97cc793f9896bac67b281",
         ),
         "project": (
-            232,
-            "45ed34925d7cae23ee0b5a4f62b33a0492659f7152eb111ed774346406958843",
+            233,
+            "31df0d9eabcef7dba1db36eaf4e3fecad45f7b9766125ed728b2647991fa632e",
         ),
         "task": (
             95,
@@ -364,9 +365,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 232
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 233
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "cd5f60726209bc59d8464cf4ef7c5490f819daabaf980635562cd422d25611d5"
+        "f1364ffce62471dd20ce38c372b756d18b85fb954cb2f25ede59d8cb2c933ca3"
     )
 
 

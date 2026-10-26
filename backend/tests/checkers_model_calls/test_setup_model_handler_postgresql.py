@@ -36,7 +36,7 @@ from app.adapters.artifacts import (
 from app.adapters.auth import setup_model_service_authorization
 from app.adapters.checkers import model_profile_reader
 from app.adapters.model_usage import setup_model_usage_service
-from app.adapters.project_agents.openrouter_policy import openrouter_request_options
+from app.adapters.model_usage.openrouter import openrouter_request_options
 from app.adapters.project_agents.setup_model_handler import (
     SetupModelProxyHandler,
     SetupProviderResponse,
