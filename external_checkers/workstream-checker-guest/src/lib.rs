@@ -1,6 +1,8 @@
 //! Private node-to-guest bootstrap protocol. Not a project checker API.
 use serde::{Deserialize, Serialize};
 
+pub mod confinement;
+
 pub const MAX_JOB_BYTES: usize = 4 * 1024 * 1024;
 pub const CAPACITY_EXIT_CODE: i32 = 201;
 pub const INPUT_ROOT: &str = "/work/input";

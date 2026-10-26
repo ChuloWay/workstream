@@ -992,6 +992,7 @@ fn child_exec(command: &[OsString], identity: ChildIdentity, _error_fd: RawFd) -
         ChildIdentity::Builder => drop_builder_capabilities()?,
         ChildIdentity::Step { uid, gid } => drop_step_identity(uid, gid)?,
     }
+    workstream_checker_guest::confinement::install_workload_filter()?;
     exec_command(command)
 }
 

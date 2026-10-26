@@ -885,3 +885,55 @@ and deadline. It identified a README overclaim about sequential trials. The
 README now distinguishes the transport primitive from the current trial relay,
 which still authorizes one plan/connection per checker invocation. Native
 composition's two trial receipts belong to separate selected checker members.
+
+
+### Shared guest and trial workload syscall confinement
+
+Direct KVM probe 33 passed distinct current/predecessor read-only material
+transport and rejected altered predecessor bytes before the workload marker.
+Its trial control stopped at an overly strict interface assertion. Metadata-only
+probe 34 then showed loopback plus inert, unaddressed, down `dummy0`, with no
+IPv4 route. That is consistent with the verified `network=false` machine state;
+no external packet was sent. The same confined trial step had zero capabilities
+and NoNewPrivs=1 but Seccomp=0, and AF_VSOCK socket creation succeeded. No
+management connection or message was attempted. Both probes confirmed exact
+input identity, raw/final/EOF and owned VM/HOME/cgroup cleanup. The seven resource
+cases were not run after this first unexplained control result.
+
+The bounded repair moves the existing ordinary guest syscall filter unchanged
+into one guest-library confinement module. Existing guest call sites reuse it;
+the trusted launcher applies it after dropping builder/step capabilities and
+immediately before untrusted exec. Trusted setup and supervision retain their
+existing operations. Allowed implementation files are
+`workstream-checker-guest/src/confinement.rs`, `src/lib.rs`, `src/main.rs` and
+`workstream-checker-service/src/bin/workstream-trial-launcher.rs`, plus this
+record. No SDK dependency, policy variant, controller or protocol change is
+introduced. Isolated child/launcher tests must prove management-family denial
+and ordinary exec/thread behavior, followed by full native tests, independent
+review, exact static rebuild, corrected direct probes and composed qualification.
+The earlier successful composition remains evidence only for its recorded pins.
+
+The existing qualification package additionally gains two execution-level
+regression assertions: `environment/Dockerfile` requires Seccomp=2 before its
+unchanged chmod action, and `tools/qualification-status` requires Seccomp=2
+before its unchanged present/absent output. These two fixture files are in the
+allowed scope; the project model image build context is unchanged. They make
+actual composed KVM execution discriminate an omitted launcher installer in
+both builder and candidate-step paths without a source-string test or another
+proof framework.
+
+The existing Smol composition assertion also explicitly requires the
+`qualification_status` step to succeed: the controlled semantic provider alone
+would otherwise accept a correctly reported nonzero step. That one assertion
+in `tests/terminal_systems_smol_composition.py` is included in the bounded scope
+so the step guard is a discriminating execution regression.
+
+Validation before KVM rerun: the isolated-process syscall regression passed and
+the complete native workspace passed 190 tests with no failures or ignored
+cases, using serial test threads. The qualifier's six evidence-admission tests,
+fixture shell syntax, composition Python compilation, formatting and diff checks
+passed. Independent source review found no defect. The shared filter's BPF
+construction is byte-identical to the previous ordinary guest implementation
+(`2971eec728a590bd4e165d493906e7ed5f6cd8c64a4c2a583978d1efb98f96fe`).
+New static artifact, direct confinement/resource and composed KVM results remain
+required; the shared-function unit alone does not prove launcher wiring.
