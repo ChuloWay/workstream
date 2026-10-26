@@ -138,3 +138,30 @@ using a separate database/release and nonce-bound challenge objects. Existing
 same-digest objects remain untouched. Record newly created durable object keys
 and their retention separately from disposable container/VM cleanup; do not
 claim deletion of the shared namespace or bypass its immutability policy.
+
+### Bounded live model POST qualification
+
+The public hosted model qualification extends the same inspected deployment and
+public guide/submission helpers. One exclusive private proof-state file owns one
+isolated project and its immutable US$10 lifetime account; a rerun must inspect
+that state, not create another paid project or reset its counters. The existing
+Terminal Systems `solver_brief_and_extension_disclosure` image rule supplies a
+one-call, model-only POST. Manager-authored engineering source and rubric bindings
+remain explicit; this is not a setup-agent or real pilot-project rehearsal.
+
+The OpenRouter profile pins `openai/gpt-5.6-terra`, full-context reservation and
+conservative tier/cache rates, one call with finite bytes/tokens/deadline, and no
+provider tools. Credentials remain solely in the trusted proxy. The user confirmed
+that no optional OpenRouter plugins were enabled. The existing Operator profile,
+budget and registry routes, separate policy approvals, public claim/start and ZIP
+intake lead to a real Submission and durable Celery dispatch. Actual model output
+is evaluated without manufactured findings: a pass follows shared automatic
+acceptance, a valid work failure follows revision, and ambiguous/infrastructure
+outcomes stop further paid qualification.
+
+Exact public replay and duplicate outbox delivery must preserve checker effects,
+model slots, ART request/response evidence and account counters. Retain settled
+and outstanding reserved amounts within the total cap; conservative ledger
+charges are not represented as an external provider invoice. Any later live
+model-plus-trial proof must reuse this same project/account and its remaining
+headroom. No separate US$10 allowance or automatic paid retry is introduced.
