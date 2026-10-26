@@ -672,7 +672,7 @@ def test_artifact_ports_keep_prepared_authority_at_the_transaction_boundary() ->
 
 
 def test_checker_output_contract_has_one_canonical_consumer_owner() -> None:
-    """CHECKERS owns the ports that ART implements for future durable execution."""
+    """CHECKERS owns the model-output and trial-evidence ports implemented by ART."""
     tree = _tree(CHECKER_OUTPUT_CUSTODY_API)
     classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
     assert {
@@ -690,8 +690,15 @@ def test_checker_output_contract_has_one_canonical_consumer_owner() -> None:
         assert "CheckerOutputSelector" in annotations
 
     expected_methods = {
-        "CheckerOutputBindingPort": {"bind_checker_output"},
-        "CheckerArtifactOutputPort": {"store", "recover", "read_response"},
+        "CheckerOutputBindingPort": {"bind_checker_output", "bind_trial_evidence"},
+        "CheckerArtifactOutputPort": {
+            "store",
+            "recover",
+            "read_response",
+            "store_trial_evidence",
+            "recover_trial_evidence",
+            "read_trial_evidence",
+        },
     }
     for name, methods in expected_methods.items():
         assert {
