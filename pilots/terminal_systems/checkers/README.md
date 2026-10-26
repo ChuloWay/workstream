@@ -91,21 +91,25 @@ bounded source-cited plan, invocation-local model-session and execution-socket
 clients, protected build/state projections, and receipt-bound runtime and author
 assessment cores. The shared runner implements generic offline image building
 and trials in Smol sibling microVMs, with resource, cancellation, cleanup and
-recovery controls. An earlier Rust service and Python project image passed the
-model→trial→retained-receipt→model flow with a controlled provider, real gVisor
-execution, PostgreSQL and MinIO at `3e67d39c8`. That run retained two verified trial
-receipts with 17 step outcomes each and four settled model effects; replay made
-no additional provider calls. Database, storage and owned Docker cleanup passed.
-This qualifies the runtime composition using a qualification package. It does
-not establish live-model grading or the public guide-to-contribution journey.
-This POST image has not been published, registered, approved or activated.
+recovery controls. Native build `b2ce3fa45` passed controlled-provider KVM
+composition 013: trusted intake, two verified ART trial receipts of 17 steps,
+four controlled model effects and replay without new calls. Both builder and
+candidate-step paths checked the shared syscall filter. Direct KVM proof 36
+also qualified distinct predecessor custody and guest resource ceilings.
+Exact pins, cleanup and limits are in the
+[qualification record](../../../.commitrail/changes/terminal-systems-project-checkers.md#repaired-confinement-and-resource-qualification-on-real-kvm).
+The three active nested cancellation/death cases remain pending; ordinary
+cleanup and interruption evidence does not substitute for those cases.
 
-The deployment target is Smol microVMs. The historical qualification above
-exercised the superseded gVisor trial implementation only. Smol now implements
-model/trial callbacks and predecessor material through the existing guest and
-lease boundaries; its real microVM composition qualification remains required.
-The earlier result does not qualify this project for its intended deployment.
-There is no Docker/runsc trial fallback.
+The earlier gVisor composition at `3e67d39c8` applies only to that historical
+implementation. Smol is the deployment target, with no Docker/runsc trial
+fallback. These native proofs use a qualification package, not the real
+Terminal Systems contribution journey. Hosted Smol composition and its scoped
+AWS proof are tracked separately in [PR #692](https://github.com/Flow-Research/workstream/pull/692);
+that owned baseline passed with its disclosed fixture identity. Live-provider/model-quality
+proof and full project qualification remain separate. The real Terminal Systems
+project has no qualified POST binding or activation. Registration and guide
+authority in a model-only engineering fixture do not establish that project.
 
 [`post/model/execution-rubrics.json`](post/model/execution-rubrics.json) is an
 exact semantic projection of that historical handoff. Its

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
+from contextlib import closing
 import hashlib
 import io
 import json
@@ -15,10 +17,12 @@ from pathlib import Path
 import shlex
 import signal
 import socket
+import sqlite3
 import stat
 import struct
 import subprocess
 import time
+import tempfile
 import zipfile
 
 from smol_runtime import Proof, canonical, exchange
@@ -46,6 +50,59 @@ class NestedTrialRecovery:
         self.completed = False
         self.replacement = None
         self.killed_controller = None
+        self.pending_create_observations = 0
+        self.cache_lock_identity = None
+        self.last_inventory = None
+
+    @staticmethod
+    def inventory_rows(value):
+        rows = value.get("machines") if isinstance(value, dict) else value
+        assert isinstance(rows, list), "invalid child VM inventory shape"
+        return rows
+
+    @classmethod
+    def child_inventory(cls, value, name):
+        matches = [row for row in cls.inventory_rows(value)
+                   if isinstance(row, dict) and row.get("name") == name]
+        assert len(matches) <= 1, "duplicate exact child VM identity"
+        return matches[0] if matches else None
+
+    @staticmethod
+    def validate_child(machine, owner):
+        assert machine["labels"]["workstream.external-checker-owner"] == owner
+        assert machine["network"] is False
+
+    @staticmethod
+    def inventory_facts(value, name, owner, home, home_identity, raw):
+        # Fixed field/row/string bounds; never retain argv or guest payloads.
+        def fact(item):
+            if isinstance(item, str):
+                return item[:256]
+            return item if item is None or type(item) in (int, bool) else type(item).__name__
+        rows = value.get("machines") if isinstance(value, dict) else value
+        observed = []
+        for row in rows[:8] if isinstance(rows, list) else ():
+            if not isinstance(row, dict):
+                observed.append({"row_type": type(row).__name__})
+                continue
+            labels = row.get("labels")
+            observed.append({key: fact(row.get(key)) for key in ("name", "state", "pid", "network")} | {
+                "owner": fact(labels.get("workstream.external-checker-owner")) if isinstance(labels, dict) else None,
+            })
+        return {"expected_name": name, "expected_owner": owner,
+                "child_home": str(home), "child_home_identity": home_identity,
+                "row_count": len(rows) if isinstance(rows, list) else None,
+                "inventory_type": type(value).__name__, "rows_type": type(rows).__name__,
+                "observed_rows": observed,
+                "raw_inventory_sha256": "sha256:" + hashlib.sha256(raw).hexdigest()}
+
+    def retain_inventory_failure(self):
+        if self.last_inventory is None:
+            return
+        destination = self.service_root.parent / "inventory-failure.json"
+        descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "w") as output:
+            json.dump(self.last_inventory, output, sort_keys=True)
 
     def archive_factory(self, original):
         def archive(evidence_path, project_id):
@@ -69,12 +126,133 @@ class NestedTrialRecovery:
             return data.getvalue()
         return archive
 
-    def runtime(self, home, *arguments, check=True):
-        return subprocess.run(
-            [self.config["smol"]["binary"], *arguments], check=check,
-            capture_output=True, timeout=5,
-            env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+    @staticmethod
+    def snapshot_inventory(home, name):
+        """Never open SQLite on the target: even a read-only URI can write SHM."""
+        directory = home / ".local/share/smolvm/server"
+        descriptors = []
+        bodies = {}
+        maximum = 8 * 1024 * 1024
+        signature = lambda value: (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns)
+        try:
+            for suffix in ("", "-wal"):
+                path = directory / ("smolvm.db" + suffix)
+                try:
+                    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                except FileNotFoundError:
+                    if suffix:
+                        continue
+                    return None
+                descriptors.append((path, fd, os.fstat(fd)))
+            for path, fd, before in descriptors:
+                assert stat.S_ISREG(before.st_mode) and before.st_nlink == 1
+                assert (before.st_uid, before.st_gid) == (os.geteuid(), os.getegid())
+                assert stat.S_IMODE(before.st_mode) == 0o600 and before.st_size <= maximum
+                body = bytearray()
+                while len(body) <= before.st_size:
+                    chunk = os.read(fd, min(65536, before.st_size + 1 - len(body)))
+                    if not chunk:
+                        break
+                    body.extend(chunk)
+                if len(body) != before.st_size:
+                    return None
+                maximum -= len(body)
+                bodies[path.name] = bytes(body)
+            for path, fd, before in descriptors:
+                if signature(os.fstat(fd)) != signature(before) or signature(path.lstat()) != signature(before):
+                    return None
+            if "smolvm.db-wal" not in bodies and (directory / "smolvm.db-wal").exists():
+                return None
+            with tempfile.TemporaryDirectory(prefix="ws-observer-db-") as copied:
+                target = Path(copied) / "smolvm.db"
+                for filename, body in bodies.items():
+                    (Path(copied) / filename).write_bytes(body)
+                # WAL replay and any SHM creation happen only in our private copy.
+                with closing(sqlite3.connect(target, timeout=0.1)) as connection:
+                    deadline = time.monotonic() + 1
+                    connection.set_progress_handler(lambda: time.monotonic() >= deadline, 1000)
+                    selected = connection.execute("SELECT name,data FROM vms WHERE name=?", (name,)).fetchmany(2)
+                    assert len(selected) <= 1, "duplicate exact child VM identity"
+                    others = connection.execute("SELECT name,data FROM vms WHERE name!=? ORDER BY name LIMIT 7", (name,)).fetchall()
+                    rows = []
+                    for key, data in selected + others:
+                        row = json.loads(data)
+                        assert isinstance(row, dict) and row.get("name") == key
+                        rows.append(row)
+            raw = b"".join(len(body).to_bytes(8, "big") + body for body in bodies.values())
+            return rows, raw
+        except (FileNotFoundError, sqlite3.DatabaseError):
+            return None  # Retired or inconsistent copies stay within the original deadline.
+        finally:
+            for _, fd, _ in descriptors:
+                os.close(fd)
+
+    @staticmethod
+    def agent_marker(home, name):
+        path = home / ".cache/smolvm/vms" / hashlib.sha256(name.encode()).hexdigest()[:16] / "agent.sock"
+        script = (
+            "for p in $(cat /sys/fs/cgroup/workstream-trial/workload/cgroup.procs 2>/dev/null); do "
+            "grep -Eq '^Seccomp:[[:space:]]+2$' /proc/$p/status 2>/dev/null || continue; "
+            "f=/proc/$p/root/workspace/.trial-recovery-ready; "
+            "test -r $f || continue; "
+            "test \"$(cat $f)\" = workstream-owned-nested-trial-ready-v1 || exit 41; "
+            "printf 'nested-workload-ready:%s\\n' $p; exit 0; done; exit 43"
         )
+        request = {"method": "vm_exec", "command": ["/bin/sh", "-c", script], "env": [],
+                   "workdir": None, "timeout_ms": 1000, "interactive": False, "tty": False,
+                   "background": False, "stdin_data": None}
+        received = 0
+        try:
+            before = path.lstat()
+            assert stat.S_ISSOCK(before.st_mode) and before.st_nlink == 1
+            assert (before.st_uid, before.st_gid) == (os.geteuid(), os.getegid())
+            deadline = time.monotonic() + 2
+            with socket.socket(socket.AF_UNIX) as channel:
+                def budget():
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError("marker agent absolute deadline")
+                    channel.settimeout(remaining)
+                def exact(size):
+                    nonlocal received
+                    data = b""
+                    while len(data) < size:
+                        budget()
+                        chunk = channel.recv(size - len(data))
+                        if not chunk:
+                            raise EOFError("truncated marker agent frame")
+                        received += len(chunk)
+                        data += chunk
+                    return data
+                budget();channel.connect(str(path))
+                raw = canonical(request)
+                budget();channel.sendall(struct.pack(">I", len(raw)) + raw)
+                size = struct.unpack(">I", exact(4))[0]
+                assert 0 < size <= 65536, "unbounded marker agent response"
+                response = json.loads(exact(size))
+            after = path.lstat()
+            assert (after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
+            assert isinstance(response, dict) and set(response) in (
+                {"status", "exit_code", "stdout", "stderr"},
+                {"status", "exit_code", "stdout", "stderr", "trace_id"},
+            )
+            assert response["status"] == "completed" and type(response["exit_code"]) is int
+            if "trace_id" in response:
+                assert response["trace_id"] is None or (isinstance(response["trace_id"], str) and len(response["trace_id"]) <= 256)
+            stdout = base64.b64decode(response["stdout"], validate=True)
+            stderr = base64.b64decode(response["stderr"], validate=True)
+            assert len(stdout) <= 4096 and not stderr
+            if response["exit_code"] == 43:
+                assert not stdout
+                return None
+            assert response["exit_code"] == 0
+            return stdout
+        except TimeoutError:
+            if received:
+                raise  # A partial active frame must not become ordinary pending work.
+            return None
+        except (FileNotFoundError, ConnectionRefusedError):
+            return None
 
     @staticmethod
     def private_directory(path):
@@ -93,6 +271,16 @@ class NestedTrialRecovery:
         # /proc stat's parenthesized comm may contain spaces or parentheses.
         start = int((process / "stat").read_text().rpartition(") ")[2].split()[19])
         return {"pid": pid, "start_ticks": start, "executable": str(executable)}
+
+    @staticmethod
+    def observation_retired(lease, pid):
+        if not lease.exists():
+            return True
+        try:
+            state = (Path("/proc") / str(pid) / "stat").read_text().rpartition(") ")[2].split()[0]
+            return state == "Z"
+        except FileNotFoundError:
+            return True
 
     def marker(self):
         if self.execution.done():
@@ -128,42 +316,40 @@ class NestedTrialRecovery:
                 assert lease["runtime"][key] == self.config["smol"][key]
             try:
                 home_identity = self.private_directory(home)
-                rows = json.loads(self.runtime(home, "machine", "ls", "--json").stdout)
-            except (FileNotFoundError, subprocess.CalledProcessError):
-                if not path.exists():
-                    continue  # Only an already-removed exact lease may disappear.
-                raise
-            assert len(rows) == 1 and rows[0]["name"] == name
-            machine = rows[0]
-            assert machine["labels"]["workstream.external-checker-owner"] == owner
-            assert machine["network"] is False
+                snapshot = self.snapshot_inventory(home, name)
+                if snapshot is None:
+                    continue
+                rows, inventory_bytes = snapshot
+            except FileNotFoundError:
+                continue
+            self.last_inventory = self.inventory_facts(
+                rows, name, owner, home, home_identity, inventory_bytes,
+            )
+            self.last_inventory["source"] = "bounded_nofollow_db_wal_snapshot_v1"
+            machine = self.child_inventory(rows, name)
+            if machine is None:
+                self.pending_create_observations += 1
+                continue
+            self.validate_child(machine, owner)
             if machine["state"] != "running":
                 continue
-            # This is trusted observation of our exact VM, never an untrusted
-            # management request. The marker is read through the live workload's
-            # chroot, so launcher setup or mere VM startup cannot satisfy it.
-            script = (
-                "for p in $(cat /sys/fs/cgroup/workstream-trial/workload/cgroup.procs 2>/dev/null); do "
-                "grep -Eq '^Seccomp:[[:space:]]+2$' /proc/$p/status 2>/dev/null || continue; "
-                "f=/proc/$p/root/workspace/.trial-recovery-ready; "
-                "test -r $f || continue; "
-                "test \"$(cat $f)\" = workstream-owned-nested-trial-ready-v1 || exit 41; "
-                "printf 'nested-workload-ready:%s\\n' $p; exit 0; done; exit 43"
-            )
-            observed = self.runtime(
-                home, "machine", "exec", "--name", name, "--user", "0:0", "--",
-                "/bin/sh", "-c", script, check=False,
-            )
-            if observed.returncode:
-                continue
-            assert observed.stdout.startswith(b"nested-workload-ready:")
-            assert observed.stdout.endswith(b"\n") and not observed.stderr
-            workload_pid = int(observed.stdout.strip().split(b":")[1])
-            vmm = self.process_identity(machine["pid"], Path(self.config["smol"]["binary"]))
-            group = self.groups / name
-            assert (Path("/proc") / str(vmm["pid"]) / "cgroup").read_text().strip() == (
-                "0::" + str(group).removeprefix("/sys/fs/cgroup")
-            )
+            try:
+                vmm = self.process_identity(machine["pid"], Path(self.config["smol"]["binary"]))
+                group = self.groups / name
+                membership = "0::" + str(group).removeprefix("/sys/fs/cgroup")
+                assert (Path("/proc") / str(vmm["pid"]) / "cgroup").read_text().strip() == membership
+                observed = self.agent_marker(home, name)
+                if observed is None:
+                    continue
+                assert self.process_identity(vmm["pid"], Path(vmm["executable"])) == vmm
+                assert (Path("/proc") / str(vmm["pid"]) / "cgroup").read_text().strip() == membership
+                assert self.private_directory(home) == home_identity
+            except (FileNotFoundError, ProcessLookupError, EOFError, ConnectionResetError, BrokenPipeError, TimeoutError):
+                if self.observation_retired(path, machine["pid"]):
+                    continue
+                raise
+            assert observed.startswith(b"nested-workload-ready:") and observed.endswith(b"\n")
+            workload_pid = int(observed.strip().split(b":")[1])
             self.reached = {
                 "owner": owner, "lease_name": name,
                 "lease_sha256": "sha256:" + hashlib.sha256(raw).hexdigest(),
@@ -171,17 +357,30 @@ class NestedTrialRecovery:
                 "child_home": str(home), "child_home_identity": home_identity,
                 "vmm": vmm, "workload_pid_in_guest": workload_pid,
                 "marker_sha256": "sha256:" + hashlib.sha256(self.MARKER).hexdigest(),
-                "workload_seccomp_mode": 2,
+                "workload_seccomp_mode": 2, "inventory": self.last_inventory,
+                "observer_transport": "copied_smolvm_db_and_fixed_agent_vm_exec_v1",
             }
             return True
         return False
 
     def physical_clean(self):
+        vms = Path(self.config["smol"]["home"]) / ".cache/smolvm/vms"
+        for entry in vms.iterdir() if vms.exists() else ():
+            if entry.name != ".artifact-cache.lock":
+                return False
+            identity = entry.lstat()
+            assert stat.S_ISREG(identity.st_mode) and stat.S_IMODE(identity.st_mode) == 0o600
+            assert (identity.st_uid, identity.st_gid, identity.st_nlink, identity.st_size) == (
+                os.geteuid(), os.getegid(), 1, 0,
+            )
+            observed = (identity.st_dev, identity.st_ino)
+            if self.cache_lock_identity is None:
+                self.cache_lock_identity = observed
+            assert self.cache_lock_identity == observed, "engine cache lock identity changed"
         return (
             not list(self.leases.iterdir())
             and not list(self.groups.glob("ws-*"))
             and not list(self.child_root.glob("ws-*.home"))
-            and not list((Path(self.config["smol"]["home"]) / ".cache/smolvm/vms").glob("*"))
         )
 
     async def exercise(self, *, executor, harness, controller, service_binary,
@@ -202,6 +401,7 @@ class NestedTrialRecovery:
         controller_identity = self.process_identity(controller.pid, service_binary)
         self.controller = controller
         self.controller_identity = controller_identity
+        assert self.physical_clean(), "recovery must start physically drained"
         self.execution = asyncio.create_task(executor.evaluate_post_submission(harness.request))
         result = None
         try:
@@ -287,11 +487,15 @@ class NestedTrialRecovery:
                 "model_effects": effect_summary, "capacity_reuse_simultaneous_intakes": 2,
                 "physical_cleanup_confirmed": True, "child_root_identity_unchanged": True,
                 "controller_restarted": self.replacement is not None,
+                "pending_create_observations": self.pending_create_observations,
             }
             path = Path(os.environ["WORKSTREAM_TS_SMOL_ROOT"]) / "recovery-summary.json"
             path.write_text(json.dumps(summary, sort_keys=True, indent=2) + "\n")
             path.chmod(0o400)
             self.completed = True
+        except BaseException:
+            self.retain_inventory_failure()
+            raise
         finally:
             if not self.execution.done():
                 self.execution.cancel()
@@ -332,6 +536,176 @@ class NestedTrialRecovery:
             except subprocess.TimeoutExpired:
                 self.replacement.kill()
                 self.replacement.wait(timeout=15)
+
+
+def test_nested_observation_reads_only_copies_and_never_recreates_retired_targets(tmp_path, monkeypatch):
+    import shutil
+    from types import SimpleNamespace
+
+    home = tmp_path / "retired-home"
+    probe = NestedTrialRecovery("caller_disconnect")
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("observer invoked CLI")))
+    assert probe.snapshot_inventory(home, "owned") is None
+    assert probe.agent_marker(home, "owned") is None
+    assert not home.exists()
+
+    source = home / ".local/share/smolvm/server/smolvm.db"
+    source.parent.mkdir(parents=True)
+    connect = sqlite3.connect
+    writer = connect(source)
+    try:
+        writer.execute("PRAGMA journal_mode=WAL")
+        writer.execute("PRAGMA wal_autocheckpoint=0")
+        writer.execute("CREATE TABLE vms(name TEXT PRIMARY KEY,data BLOB)")
+        value = {"name": "owned", "state": "running", "pid": os.getpid(),
+                 "labels": {"workstream.external-checker-owner": "a" * 64}, "network": False}
+        writer.execute("INSERT INTO vms VALUES(?,?)", ("owned", json.dumps(value).encode()))
+        writer.commit()
+        for path in source.parent.iterdir():
+            path.chmod(0o600)
+        before = {path.name: (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_mode)
+                  for path in source.parent.iterdir()}
+
+        def copied_only(path, *args, **kwargs):
+            assert not Path(path).is_relative_to(home), "SQLite opened original target"
+            return connect(path, *args, **kwargs)
+        monkeypatch.setattr(sqlite3, "connect", copied_only)
+        observed, raw = probe.snapshot_inventory(home, "owned")
+        assert probe.child_inventory(observed, "owned") == value and raw
+        after = {path.name: (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_mode)
+                 for path in source.parent.iterdir()}
+        assert after == before  # Includes the original WAL and SHM bytes.
+    finally:
+        writer.close()
+    shutil.rmtree(home)
+    assert probe.snapshot_inventory(home, "owned") is None
+    assert probe.agent_marker(home, "owned") is None
+    assert not home.exists()
+    lease = tmp_path / "lease"
+    lease.touch()
+    assert probe.observation_retired(lease, 2**31 - 1)
+    assert not probe.observation_retired(lease, os.getpid())
+    lease.unlink()
+    assert probe.observation_retired(lease, os.getpid())
+    # Exercise the real polling owner, not just its read helpers. An empty HOME
+    # behind a valid published lease must not acquire CLI-created DB residue.
+    probe.config = {"smol": dict.fromkeys(("binary", "binary_sha256", "guest_binary", "guest_sha256", "cgroup_root"), "unused")}
+    probe.service_root = tmp_path / "service"
+    probe.leases = probe.service_root / "smol-leases"
+    probe.leases.mkdir(parents=True)
+    probe.child_root = tmp_path / "children"
+    probe.child_root.mkdir(mode=0o700)
+    owner = "a" * 64
+    (probe.service_root / ".workstream-checker-owner").write_text(owner)
+    name = "ws-" + "1" * 32
+    target = probe.child_root / (name + ".home")
+    target.mkdir(mode=0o700)
+    published = probe.leases / (name + ".json")
+    published.write_text(json.dumps({"name": name, "owner": owner, "root": str(probe.leases),
+                                    "private_home_root": str(probe.child_root),
+                                    "runtime": probe.config["smol"] | {"home": str(target)}}))
+    published.chmod(0o600)
+    probe.execution = SimpleNamespace(done=lambda: False)
+    assert probe.marker() is False and not list(target.iterdir())
+    target.rmdir()
+    assert probe.marker() is False and not target.exists()
+
+
+def test_nested_agent_marker_uses_fixed_bounded_protocol_without_target_writes():
+    import pytest
+    import threading
+    from smol_runtime import receive
+
+    for fault in ("none", "pending", "oversized", "truncated", "bad_base64", "stderr", "slow_partial"):
+        with tempfile.TemporaryDirectory(prefix="nr-") as temporary:
+            home = Path(temporary)
+            path = home / ".cache/smolvm/vms" / hashlib.sha256(b"owned").hexdigest()[:16] / "agent.sock"
+            path.parent.mkdir(parents=True)
+            listener = socket.socket(socket.AF_UNIX)
+            listener.bind(str(path));path.chmod(0o600);listener.listen(1)
+            before = sorted(str(item.relative_to(home)) for item in home.rglob("*"))
+            requests = []
+            failures = []
+
+            def server():
+                try:
+                    with listener, listener.accept()[0] as channel:
+                        channel.settimeout(3)
+                        length = struct.unpack(">I", receive(channel, 4))[0]
+                        assert 0 < length < 4096
+                        requests.append(json.loads(receive(channel, length)))
+                        if fault == "oversized":
+                            channel.sendall(struct.pack(">I", 65537));return
+                        if fault == "truncated":
+                            channel.sendall(b"\x00\x00");return
+                        if fault == "slow_partial":
+                            channel.sendall(b"\x00");time.sleep(2.1);return
+                        response = {"status": "completed", "exit_code": 43 if fault == "pending" else 0,
+                                    "stdout": base64.b64encode(b"" if fault == "pending" else b"nested-workload-ready:123\n").decode(),
+                                    "stderr": base64.b64encode(b"unexpected" if fault == "stderr" else b"").decode()}
+                        if fault == "bad_base64":
+                            response["stdout"] = "!!!"
+                        raw = canonical(response)
+                        channel.sendall(struct.pack(">I", len(raw)) + raw)
+                except BaseException as error:
+                    failures.append(error)
+            worker = threading.Thread(target=server)
+            worker.start()
+            started = time.monotonic()
+            try:
+                if fault in {"none", "pending"}:
+                    result = NestedTrialRecovery.agent_marker(home, "owned")
+                    assert result == (b"nested-workload-ready:123\n" if fault == "none" else None)
+                else:
+                    with pytest.raises((AssertionError, EOFError, ValueError, TimeoutError)):
+                        NestedTrialRecovery.agent_marker(home, "owned")
+            finally:
+                worker.join(timeout=4)
+                assert not worker.is_alive() and not failures
+            assert time.monotonic() - started < 3
+            assert sorted(str(item.relative_to(home)) for item in home.rglob("*")) == before
+            request = requests[0]
+            assert request == {"method": "vm_exec", "command": request["command"], "env": [],
+                               "workdir": None, "timeout_ms": 1000, "interactive": False,
+                               "tty": False, "background": False, "stdin_data": None}
+            assert request["command"][:2] == ["/bin/sh", "-c"]
+            assert "/workspace/.trial-recovery-ready" in request["command"][2]
+
+
+def test_nested_inventory_uses_unique_exact_name_and_selected_authority():
+    import pytest
+
+    owner = "a" * 64
+    expected = {"name": "owned", "labels": {"workstream.external-checker-owner": owner}, "network": False}
+    other = {"name": "other", "labels": {"workstream.external-checker-owner": "foreign"}, "network": True}
+    select = NestedTrialRecovery.child_inventory
+    assert select([other, expected], "owned") is expected
+    assert select([other], "owned") is None
+    assert select({"machines": [other, expected]}, "owned") is expected
+    for invalid in ([expected, expected], {"machines": "invalid"}, {}, "invalid"):
+        with pytest.raises(AssertionError):
+            select(invalid, "owned")
+    NestedTrialRecovery.validate_child(expected, owner)
+    for invalid in (expected | {"network": True}, expected | {"labels": other["labels"]}):
+        with pytest.raises(AssertionError):
+            NestedTrialRecovery.validate_child(invalid, owner)
+
+
+def test_nested_inventory_evidence_is_bounded_and_retained_before_failure(tmp_path):
+    rows = {"machines": [{"name": "x" * 1024, "state": "running", "argv": "unretained"}] * 12}
+    raw = json.dumps(rows).encode()
+    facts = NestedTrialRecovery.inventory_facts(rows, "owned", "a" * 64, tmp_path, {}, raw)
+    assert facts["row_count"] == 12 and len(facts["observed_rows"]) == 8
+    assert len(facts["observed_rows"][0]["name"]) == 256
+    assert "unretained" not in json.dumps(facts)
+    assert facts["raw_inventory_sha256"] == "sha256:" + hashlib.sha256(raw).hexdigest()
+    recovery = NestedTrialRecovery("caller_disconnect")
+    recovery.service_root = tmp_path / "service"
+    recovery.last_inventory = facts
+    recovery.retain_inventory_failure()
+    path = tmp_path / "inventory-failure.json"
+    assert json.loads(path.read_text()) == facts
+    assert stat.S_IMODE(path.lstat().st_mode) == 0o600
 
 
 class Recovery:

@@ -19,13 +19,13 @@ custody adds linear migrations 0063 and 0064 after that dependency.
 
 ## Bounded change
 
-The intended execution target is the current Smol microVM service. Earlier
-gVisor evidence remains valid only for that implementation and does not satisfy
-deployment readiness. Reconcile the model/trial and predecessor-material
-capabilities with the existing Smol guest, lease and resource owners before
-marking this work ready. Review the transport and execution design before
-implementation; retain the generic model ledger, ART custody and project image
-contracts. The independently owned upload/intake work remains separate.
+The execution target is the Smol microVM service. Its controlled native
+composition, direct predecessor custody and guest resource enforcement have
+qualified evidence below; the three active nested cancellation/death cases
+remain pending. Earlier gVisor evidence applies only to its recorded historical
+implementation. Preserve the existing Smol guest, lease and resource owners,
+generic model ledger, ART custody and project image contracts. The independently
+owned hosted and full-project journey work remains separate.
 
 Allowed project paths are `pilots/terminal_systems/checkers/**`, the project
 README, affected current roadmap/runbook claims, this record and proportionate
@@ -1022,7 +1022,7 @@ mutation assertion fail (CapacityExceeded instead of InvalidObservation); the
 source was restored and the complete serial native workspace then passed 193
 tests with zero failures or ignored cases. Independent test review found no
 defect; formatting and diff checks passed. This test-only change does not alter
-the static runtime artifacts qualified by direct 35 and composition 009.
+production Rust behavior; rebuilt artifacts remain bound to their actual pins.
 
 The separate active nested recovery test scope is the existing
 `workstream-checker-service/tests/smol_recovery.py` helper,
@@ -1052,3 +1052,105 @@ receipt callbacks, trial ART put attempts and bindings. Two simultaneous real
 trusted-intake preparations must demonstrate full admission capacity reuse and
 then close/drain. Final independent source review passed; all three physical
 recovery cases remain pending the exclusive VM handoff.
+
+The exact b2ce3fa45 static rebuild passed. Its guest and launcher pins reproduced
+the earlier values, while the service pin became
+`sha256:5e5760b898017453feb821a24066dc78201249ce39a1eb2f3eb27fffef100ba0`;
+the pre-VM equality guard caught that difference. The Rust source delta is
+strictly cfg(test). The new service was then qualified again: direct 36 passed
+all ten cases, and composition 013 passed in 123.60 seconds with two verified
+ART receipts of 17 steps, four controlled model effects and no new replay calls.
+Their bounded direct and cleanup receipts are respectively
+`sha256:d70973a9025ebe69046c8fa8f5cee74e75bb506728cff4da2db7c09417183540`
+and `sha256:2b630b2a0b9cadd802debd4e44d9ea05aeebcac523b8f94707e9bc5cab7b4293`.
+
+Recovery 010 stopped before its marker or fault injection: the observer required
+one VM immediately after durable lease publication, which precedes VM creation.
+The failed run and full cleanup are retained; cleanup receipt is
+`sha256:cf32cfbc186f1f41dc45e203c2cfc46f5c58860513d92da1b8852241dcf4bd3d`.
+The bounded observer correction treats only empty inventory as pending and still
+rejects wrong or multiple VMs. It also distinguishes the engine's persistent
+empty cache lock from a VM: nofollow metadata must prove a regular 0600 file,
+exact process UID/GID, one link and zero bytes, preserving its initial device and
+inode. Unknown entries remain unclean. Focused inventory and filesystem controls
+passed, including wrong/multiple inventory and replacement lock refusal. No
+runtime or image change was needed; fresh physical recovery cases remain required.
+
+Fresh recovery 014 also stopped before its marker or fault: this time the strict
+observer rejected a nonempty wrong/multiple inventory, whose actual rows were
+not retained by the assertion. No negative recovery claim is made. Its cleanup
+receipt is
+`sha256:3153166334f1101ffdf3697165d0c1090f570edaef3cce7a362373e994d172e8`;
+all owned VM directories, leases and cgroups were absent, all three roots had
+only their verified marker, and database/object-store cleanup passed.
+A bounded create-only discriminator 37 observed empty inventory followed by
+one exact named/labelled created VM; it did not reproduce the anomalous rows.
+Its exact machine/HOME/cgroup were removed, with receipt
+`sha256:6c4c54cf5c2cdf504b0e02e039e77492c5b2a18cac65b87c92ffd7ddcd6f3e9b`.
+The VM window was released for the hosted baseline. The next observer probe
+will retain bounded whitelisted inventory identities and a raw-inventory hash
+before the unchanged strict rejection; no unobserved inventory normalization
+or runtime change is justified. All three active nested recovery cases remain
+pending actual marker/fault/custody/capacity evidence.
+
+The next offline observer-only correction is grounded in the canonical
+Lease::inventory/verify_network_disabled owner: select one exact lease name from
+an array or a wrapped machines array, treat no match as bounded pending work,
+and reject duplicate exact names. The selected owner, network, PID/start-time,
+executable, cgroup and workload checks remain required. Allowed files are the
+existing tests/smol_recovery.py helper and this record. Bounded whitelisted row
+facts and the raw-inventory digest must be retained at the workload marker and
+on failure. Focused mixed/absent/duplicate/wrapped/malformed and selected
+wrong-owner/network controls precede independent review. This canonical parity
+change is not a diagnosis of the unretained 010/014 inventories, and no new VM
+run is authorized before the hosted baseline and paid-stage handoff.
+
+The two focused helper tests passed: mixed/absent/duplicate/wrapped/malformed
+inventory selection, selected owner/network refusal, and bounded evidence
+retention including a real exclusive 0600 failure file. The opt-in physical
+wrapper still collects exactly one case with the qualification plugins. Python
+compilation and diff checks passed, and independent frozen-source review found
+no defect. Actual nested marker/fault/cleanup/capacity results are still pending.
+
+Recovery 017 reached no marker or injected fault and ended with CleanupUnsettled.
+Its owned lease/HOME metadata and six small DB files were retained before exact
+cleanup. A no-VM discriminator proved that machine ls against an absent HOME
+creates the DB/WAL/SHM directory tree, matching the observed DB-only orphan
+(`sha256:a1b2bd6de0f8d45e4d63f4f885f6b9326e3bb755888442176881ade46f766d53`).
+The exact empty owned disk directory was removed, the pinned guardian removed
+its current lease/HOME, and the recorded DB-only orphan was removed under its
+verified root. Final cleanup receipt is
+`sha256:7a6383095be677da5272a5f5cc68113c0671be505a70a456e8a5bff54a221891`.
+The hosted VM window was released; no negative recovery case is qualified.
+
+The next test-only repair remains limited to tests/smol_recovery.py and this
+record: remove CLI calls from marker polling. Copy only bounded existing DB/WAL
+bytes through nofollow read descriptors, query only observer-owned copies, and
+send one fixed bounded VmExec marker request to the existing exact agent socket.
+Source consistency, selected authority, PID/start/executable/cgroup/socket
+custody and finite deadlines remain required. Absent/retired targets must create
+nothing; focused fail-old no-target-write and protocol controls precede review.
+No production runtime, image or grant protocol changes are included.
+
+The corrected observer passed four focused tests, including committed WAL
+metadata, unchanged original DB/WAL/SHM bytes/mtime/mode, source SQLite and CLI
+refusal, actual marker polling of empty and retired owned HOMEs, exact fixed
+VmExec frames, malformed/oversized/truncated/base64/stderr responses and an
+absolute partial-frame deadline. SQLite connections close before temporary
+copy removal. Proven lease/PID retirement remains pending within the original
+90-second window; malformed active frames and live identity mismatches fail.
+A narrow control loaded the actual afef marker on the same valid published
+empty-HOME fixture: it invoked the forbidden CLI, while the corrected marker
+returned pending without a CLI call or target mutation. Independent frozen
+source review passed. Physical cancellation/death cases are still pending;
+the hosted baseline and paid stage retain the VM window.
+
+Final current-document reconciliation is limited to the project checker README,
+external-checker README, roadmap, WS-EXEC-001 overview and this record. It points
+current readers to native build b2ce/direct 36/composition 013, labels gVisor
+evidence as historical, and links separately tracked hosted composition/AWS
+evidence in [PR #692](https://github.com/Flow-Research/workstream/pull/692), whose
+owned baseline passed with fixture identity. It preserves pending active nested
+recovery, live-provider and full-project evidence.
+No disposition change, native rebuild or new qualification claim follows from
+these documentation edits.

@@ -161,7 +161,8 @@ because this path does not rely on privileged ownership changes.
 Docker development proves only the ordinary runtime path. A gVisor `runsc`
 deployment must separately enable `host-uds=open` before a mounted host Unix
 socket can work. This repository does not claim that the model relay has been
-qualified under gVisor.
+qualified under gVisor at the current source; historical runsc composition
+evidence applies only to its recorded implementation.
 
 Smol exposes guest-local model and execution sockets through its trusted guest
 stream. The host forwards only the capabilities granted to that invocation to
@@ -174,12 +175,18 @@ per checker invocation; transport support for sequential sessions does not grant
 additional trials. Workload stdout never carries control frames. No host
 socket or provider credential is mounted into the microVM. Trials use fresh
 Smol sibling VMs and have no Docker/runsc fallback. Controlled KVM composition
-passed at `ee9436e19`: trusted intake, two trials of 17 steps, four controlled
+013 passed on native build `b2ce3fa45`: trusted intake, two trials of 17 steps, four controlled
 model effects, verified PostgreSQL/MinIO ART receipts, replay without new model
-calls and confirmed VM/cgroup cleanup. The [qualification record](../.commitrail/changes/terminal-systems-project-checkers.md#native-kvm-composition-qualification)
+calls and confirmed VM/cgroup cleanup. Builder and candidate-step execution
+verified the shared syscall filter. The [qualification record](../.commitrail/changes/terminal-systems-project-checkers.md#repaired-confinement-and-resource-qualification-on-real-kvm)
 binds the exact source, artifacts and 2 GiB aggregate disk profile. This initial
-submission package does not exercise predecessor material. Hosted deployment,
-live-model grading and the public guide-to-contribution journey remain separate.
+submission composition does not exercise predecessor material; direct proof 36
+separately covers predecessor transport/custody and guest resource ceilings.
+The three active nested cancellation/death cases remain pending. Hosted Smol
+composition and its scoped AWS proof are tracked separately in
+[PR #692](https://github.com/Flow-Research/workstream/pull/692); that owned baseline
+does not establish live-model grading or the full Terminal Systems
+guide-to-contribution journey.
 
 The [hosted composition](../deploy/hosted/README.md) uses that same native node
 for typed intake and project execution, with credentials confined to the trusted

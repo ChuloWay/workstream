@@ -41,11 +41,12 @@ through governed outcome on a one-slot Smol node, including cancellation,
 ordered project PRE, runtime recovery and public Operator POST retry. Locked
 human review remains pending; locked automatic acceptance creates the submitter
 ContributionRecord and applicable award without a fabricated Review. Hosted
-composition now selects the existing native Smol node for typed intake and
-project execution through one private endpoint; approved POST model/trial
-callbacks require their transport and pinned authority configuration. PRE model
-selectors remain unsupported. Production Flow, native AWS S3, real model calls
-and the intended hosted deployment still need their own proof. See
+composition selects the existing native Smol node for typed intake and project
+execution through one private endpoint. The owned hosted AWS baseline passed
+with its disclosed fixture identity; approved POST model/trial callbacks require
+their transport and pinned authority configuration. PRE model selectors remain
+unsupported. Production Flow identity, live-model grading and the full project
+journey remain separate. See
 [WS-EXEC-001](../.commitrail/initiatives/WS-EXEC-001/OVERVIEW.md).
 
 The artifact diagnosis API uses exact,
@@ -117,8 +118,9 @@ OpenRouter-only operation needs no OpenAI credential. Images keep their own
 rubrics and receive only an invocation-local socket through the generic Rust service; hosted setup workers connect read-only
 to the trusted proxy and receive no provider key. This provides the model
 capability needed by the real Terminal Systems POST proposal; it does not
-establish that project's activation, model quality, current provider account,
-Smol qualification or live contribution journey. See
+establish that project's activation, model quality, live-provider outcome or
+full contribution journey. Controlled native Smol qualification is recorded
+below; historical gVisor evidence is not its deployment qualification. See
 [model runtime operations](operations_checker_models.md) and its
 [bounded change](../.commitrail/changes/checker-model-runtime.md) and
 [POST provider selection](../.commitrail/changes/post-model-provider-selection.md).
@@ -575,7 +577,7 @@ cannot be reused as post-submission review-gate evidence. See the
 
 | Lifecycle stage | Intended merged status | What is already proven | What remains before v0.1 |
 | --- | --- | --- | --- |
-| Shared setup and project-image model use | **Budgeted runtime and public Operator controls** | One project-lifetime funded account serves exact setup-attempt and approved POST image lineage; immutable bounded profiles; finite multi-call/run envelopes and setup document-tool caps; private ART request/response evidence; stable paid-effect replay/recovery; once-only settlement; exact redacted Operator effect inspection; hosted composition gives only configured provider credentials to the trusted proxy; locked POST profiles select OpenAI Responses or OpenRouter Chat Completions, while ordinary POST needs neither; native KVM composition retains two verified trial receipts, four controlled model effects and no-call replay | Qualify the external account/current pricing and each project's substantive rubric under the intended Smol/AWS deployment; then perform only the approved aggregate-capped live rehearsal. Native composition uses a controlled provider; actual hosted deployment and model-quality evidence remain separate |
+| Shared setup and project-image model use | **Budgeted runtime and public Operator controls** | One project-lifetime funded account serves exact setup-attempt and approved POST image lineage; immutable bounded profiles; finite multi-call/run envelopes and setup document-tool caps; private ART request/response evidence; stable paid-effect replay/recovery; once-only settlement; exact redacted Operator effect inspection; hosted composition gives only configured provider credentials to the trusted proxy; locked POST profiles select OpenAI Responses or OpenRouter Chat Completions, while ordinary POST needs neither; native KVM composition retains two verified trial receipts, four controlled model effects and no-call replay; the owned hosted baseline tracked separately in [PR #692](https://github.com/Flow-Research/workstream/pull/692) qualifies its disclosed fixture scope | Complete only the authorized aggregate-capped live-provider proof with the exact account/profile and retain its actual verdict and paid custody. Native composition uses a controlled provider; the initial hosted model attempt stopped before any provider effect. Substantive rubric quality, production Flow identity and the full Terminal Systems journey remain separate |
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed; suspension denies both self-read and self-update; CLI privileged exact-actor/profile and identity-link reads and explicit separate profile/link lifecycle writes remain distinct from self-service and backend guards | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; exact-project, privacy-safe candidate read now consumed by the CLI; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence; CLI scope-filtered administrative grant/catalogue reads and explicit keyed grant issue/revoke consume existing public APIs without local authority decisions | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | System project catalogue | **Bounded public API and CLI read** | WS-CLI-001-46 adds `GET /api/v1/projects` and `workstream project list` for current system Project Manager, Operator, Finance or Audit `project.read` grants; each signed page exposes only ID, name and status. `me projects` retains exact-grant membership semantics. | System-catalogue TUI picker integration, deployed CLI and hosted conformance remain separate |
@@ -1702,24 +1704,26 @@ sessions, generic isolated trials, retained trial receipts and approved exact
 predecessor material. These historical eight specifications are not a platform
 allowlist or a requirement for eight separate images. The implementation and
 its qualification limits are recorded in the [checker README](../pilots/terminal_systems/checkers/README.md).
-An earlier controlled-provider qualification used the production Rust service,
-project Python image, gVisor and PostgreSQL/MinIO custody:
-two verified trial receipts, four settled model effects and replay without new
-provider calls. Owned resource cleanup passed. This uses a qualification package;
-it does not establish live-model grading or the public contribution journey.
-The current native Smol KVM composition passed at `74bc123fe`, using the production Rust
+An earlier controlled-provider gVisor qualification applies only to its recorded
+historical implementation; it does not qualify the Smol deployment target.
+Native Smol KVM composition 013 passed on native build `b2ce3fa45`, using the production Rust
 service, current project image and trusted intake on an isolated Linux/amd64
 node. It retained two verified ART trial receipts with 17 steps each, four
 controlled model effects and replay without new model calls; VM, cgroup,
 database and object-store cleanup passed. Both real builder and candidate-step
-guards verified the shared syscall filter. Ten additional direct KVM cases
+guards verified the shared syscall filter. Ten direct KVM cases in proof 36
 qualified predecessor custody and CPU, memory, process, disk, output and deadline
 enforcement, with exact cleanup. The whole-invocation disk profile was 2 GiB.
 Exact source, artifact hashes and proof limits are in the [native qualification record](../.commitrail/changes/terminal-systems-project-checkers.md#repaired-confinement-and-resource-qualification-on-real-kvm).
 Direct predecessor transport does not prove an approved revision journey, and
-guest limits do not prove every host/ART forced-stop classification. Actual
-hosted/live-provider operation and the public guide-to-contribution journey
-remain separate.
+guest limits do not prove every host/ART forced-stop classification. Three
+active nested cancellation/death cases remain pending; the staged read-only
+observer at `b4c888d2e` changes only test observation, not the native build.
+Hosted Smol composition and its scoped AWS proof are tracked separately in
+[PR #692](https://github.com/Flow-Research/workstream/pull/692). That owned baseline
+passed with fixture identity; its initial model-only attempt stopped before
+provider effects. No live-provider outcome
+or full Terminal Systems guide-to-contribution journey is qualified here.
 Model-enabled checks require exact approved project profiles before binding;
 project publication and complete live-journey qualification remain separate.
 Registration, corrected policy binding and approval must precede activation;
