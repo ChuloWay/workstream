@@ -17,7 +17,7 @@ from preflight import (
     run_shutdown,
     validate_checker_config,
     validate_compose,
-    validate_docker_runtime,
+    validate_smol_runtime,
     validate_trusted_intake,
     validate_environment,
     validate_private_host_inputs,
@@ -39,14 +39,28 @@ def main() -> int:
         validate_environment(values)
         validate_compose(render_compose(args.env_file, values), values)
         launch = args.compose_arguments and args.compose_arguments[0] in {"up", "proof"}
-        if launch:
+        proxy_bootstrap = args.compose_arguments in (
+            ["up", "-d", "model-proxy"],
+            ["up", "--detach", "model-proxy"],
+        )
+        migration = args.compose_arguments == ["migrate"]
+        proof_bootstrap = bool(
+            args.compose_arguments and args.compose_arguments[0] == "proof"
+        )
+        if proxy_bootstrap and values["WORKSTREAM_MODEL_PROXY_ENABLED"] != "true":
+            raise PreflightError("model proxy bootstrap requires an enabled proxy")
+        if launch or migration:
             checker_config = load_checker_config(
                 Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"])
             )
             validate_checker_config(checker_config, values)
-            validate_private_host_inputs(values)
-            validate_docker_runtime(checker_config, values)
-            validate_trusted_intake(values)
+            if proxy_bootstrap or migration or proof_bootstrap:
+                # No API, worker or producer is released in these fixed stages.
+                validate_private_host_inputs(values, require_node=False)
+            else:
+                validate_private_host_inputs(values)
+                validate_smol_runtime(checker_config, values)
+                validate_trusted_intake(values)
         if args.compose_arguments and args.compose_arguments[0] == "proof":
             if (
                 len(args.compose_arguments) != 3

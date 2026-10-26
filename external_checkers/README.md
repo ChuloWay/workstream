@@ -108,13 +108,16 @@ deployment must separately enable `host-uds=open` before a mounted host Unix
 socket can work. This repository does not claim that the model relay has been
 qualified under gVisor.
 
-The Smol engine does not currently project host Unix sockets into its guest.
-Its service configuration therefore rejects the model-proxy/relay pair, and a
-model-entitled request sent to a Smol-only node returns
-`implementation_unavailable` before VM admission. Model-enabled POST remains a
-`runsc`/`gvisor` deployment capability until a separately reviewed guest-native
-transport preserves the same invocation-local custody; this merge does not
-claim such support.
+The hosted release selects the native Smol node through the same typed adapter.
+Its model/trial transport is supplied by the coordinated
+[Smol runtime change](https://github.com/Flow-Research/workstream/pull/677):
+guest-local capability sockets forward bounded invocation traffic through the
+trusted host relay. Project guests receive no global host socket or provider
+credential. The [hosted composition](../deploy/hosted/README.md) keeps credentials
+in the trusted proxy and uses one native endpoint for typed intake and project
+execution. Its configuration/readiness checks do not establish a live model call
+or public lifecycle qualification. PRE model selectors remain unsupported; only
+existing approved POST model lineage can issue that grant.
 
 The opt-in
 [`model_relay_docker.py`](workstream-checker-service/tests/model_relay_docker.py)
@@ -196,7 +199,7 @@ the capability still exists.
 
 ## Smol microVM engine
 
-The node also accepts the deployment pair `smolvm` / `smol-microvm`. Python still
+The hosted node uses the deployment pair `smolvm` / `smol-microvm`. Python still
 uses the single `external_checker_execution/unix_socket` provider; neither a
 project policy nor a checker request can choose the engine. Each execution gets
 a fresh VM and the same verified ART grant and JSON result contract. The native
@@ -207,10 +210,14 @@ Use Linux x86-64 with `/dev/kvm`, cgroup v2 and Smol 1.31.4. The
 places the controller in its own subgroup; `DelegateSubgroup` requires systemd
 254 or later ([systemd documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html#DelegateSubgroup=)).
 Set `smol.cgroup_root` to that unit's delegated root, not the controller subgroup.
-The service refuses startup outside its delegation. Use the ART grant issuer's
-Unix identity and a separate private socket directory, Smol HOME and image cache
-for each node. The sample unit's CPU, memory and task ceilings are deployment
-capacity; individual registered checker limits remain unchanged.
+The service refuses startup outside its delegation. Use the ART grant issuer's numeric UID/GID (`10001:10001` in the hosted unit)
+and a separate private socket directory, Smol HOME and image cache for each node. The sample unit's CPU, memory and task ceilings are deployment
+capacity; individual registered checker limits remain unchanged. Hosted releases
+may select one canonical private deployment root and a digest-pinned native
+binary path; the same derived absolute scratch/socket paths must appear in the
+node JSON and API/worker mounts. See the
+[hosted operator sequence](../deploy/hosted/README.md#start-and-inspect) for
+migration/activation/proxy prerequisites and native readiness.
 
 For this engine omit `docker_binary`, and configure `smol` with absolute `binary`,
 `home`, `guest_binary`, `cgroup_root` paths; `binary_sha256` and `guest_sha256`;
@@ -289,10 +296,10 @@ Backend API and durable workers require all three settings:
 - `WORKSTREAM_ARTIFACT_INTAKE_CONFIG_DIGEST`: exact image config digest.
 
 The configured socket must serve Smol with the expected trusted image and default
-behavior. A Docker/runsc project node can remain separate, but cannot satisfy ART
-intake readiness. Missing or mismatched configuration fails closed; there is no
-host ZIP/default fallback. Existing Docker-only deployment compositions therefore
-need a separately provisioned Smol intake node before accepting uploads or POST.
+behavior. The hosted release uses the same native node socket for this typed capability
+and project execution; the protocols and privileged intake image remain separate.
+Missing or mismatched configuration fails closed. Local Docker-only mechanism
+configurations still cannot supply Smol intake readiness.
 
 The original artifact deadline bounds upload and intake preparation together.
 Only known pre-launch infrastructure failures permit at most three preparation

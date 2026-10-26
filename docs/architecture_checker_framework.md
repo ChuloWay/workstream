@@ -264,9 +264,14 @@ closed deployment pairs are `runsc/gvisor`, `runc/docker-dev`, and
 `smolvm/smol-microvm`; project requests cannot select an engine. Smol uses a fresh
 KVM VM, a static trusted bootstrap, workload and host resource limits, bounded
 concurrency and independent exact-lease cleanup guardians. Its node requires
-Linux amd64, KVM and delegated cgroup v2. The existing hosted Docker composition
-still requires `runsc`; Smol deployment and guest ZIP/default integration are
-separate boundaries. See the [node contract](../external_checkers/README.md#smol-microvm-engine).
+Linux amd64, KVM and delegated cgroup v2. The hosted release composition uses the existing native Smol systemd node for
+two typed capabilities at one private endpoint: trusted intake and project
+execution. API/worker containers share its absolute ART material path and numeric
+identity and mount its socket directory read-only; Compose starts no checker
+controller or Docker/runsc fallback. Guest-native model/trial callbacks retain
+their existing invocation custody and trusted proxy ownership. PRE model
+selectors remain unsupported. Hosted configuration and readiness checks do not
+establish a real public journey or model call. See the [node contract](../external_checkers/README.md#smol-microvm-engine).
 
 Project-specific requirements are implemented by registered external images.
 The shared service accepts the normalized result contract; it does not interpret

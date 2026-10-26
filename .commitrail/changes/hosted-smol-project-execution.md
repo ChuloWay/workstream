@@ -22,7 +22,7 @@ PRE model access is unsupported: `configured_model_profile_selector` rejects mod
 
 ### Allowed
 
-- `deploy/hosted/compose.py`, `compose.yml`, selected provider overlays, `preflight.py`, `checker-service.example.json`, `release.env.example` and `README.md`: replace the controller topology, validate native-node identity/readiness and preserve credential isolation.
+- `deploy/hosted/compose.py`, `compose.yml`, selected provider overlays, `compose.trials.yml`, `preflight.py`, `checker-service.example.json`, `release.env.example` and `README.md`: replace the controller topology, validate native-node identity/readiness and preserve credential isolation.
 - `external_checkers/deploy/workstream-checker.service` and `external_checkers/README.md`: align the existing native service configuration and document operator-managed provisioning and shutdown.
 - `scripts/test_hosted_release_config.py` and existing focused deployment tests: exercise the rendered topology and meaningful refusal paths.
 - `docs/decision_0014_external_service_adapter_convention.md`, `docs/architecture_checker_framework.md` and affected `docs/roadmap_status.md` claims: reconcile the intended hosted boundary and explicit evidence limits.
@@ -41,7 +41,8 @@ PRE model access is unsupported: `configured_model_profile_selector` rejects mod
 2. Remove the Compose checker controller and its Docker socket/group grants. API and worker retain the same absolute scratch path and read-only node socket-directory mount. The native process runs as the same numeric UID/GID as the ART grant issuer.
 3. Keep model credentials exclusively in the existing trusted model proxy. The native node forwards only invocation-bound guest capability traffic through the PR #677 transport; the project image receives neither global sockets nor credentials.
 4. Replace runsc/image-inspection readiness with the existing typed project-execution health capability plus typed trusted-intake health. Validate configured Smol binary/guest/archive identities, native delegation and socket metadata without introducing a deployment controller. Configuration-only mode remains explicitly weaker than live readiness.
-5. Operator provisioning and service lifecycle remain explicit. Compose startup validates the already-running native node; Compose shutdown drains producers/workers but does not stop an unrelated systemd unit. No command in this PR mutates the live proof node.
+5. One trusted `WORKSTREAM_DEPLOYMENT_ROOT` selector derives identical absolute data/socket/model/parser paths on host and clients, defaulting to `/var/lib/workstream`. The root must be canonical, private and owned by the exact service identity; config, provider credentials and executable/cache assets stay outside it. `WORKSTREAM_CHECKER_SERVICE_BINARY` selects one absolute native service artifact under its required digest. This supports independently owned deployments without a test-only controller or validation bypass.
+6. Operator provisioning and service lifecycle remain explicit. Compose startup validates the already-running native node; Compose shutdown drains producers/workers but does not stop an unrelated systemd unit. No command in this PR mutates the live proof node.
 
 ## Acceptance criteria
 
@@ -66,12 +67,20 @@ PRE model access is unsupported: `configured_model_profile_selector` rejects mod
 | Current deployment and typed ownership | Inspect hosted Compose/preflight, existing systemd unit, typed execution/intake adapters and selected PRE/POST owners | Inspected | No hosted operation executed |
 | Provider overlap | Read PR #690 and its exact head `f3f818265` | Inspected | Dependency is not merged |
 | Smol callback transport | PR #677 implementation and qualification | Required dependency | Pending runtime integration and root-owned qualification |
-| Rendered topology and refusal paths | Focused `scripts/test_hosted_release_config.py` tests | Required | Not executed yet |
+| Rendered topology and refusal paths | `python3 -m unittest scripts.test_hosted_release_config scripts.test_hosted_release_images` | 63 passed, exit 0 | Contract/image fixtures; no native VM or provider execution |
+| Generated readiness client | Execute the actual generated script using pinned backend Python, real Settings, registered typed factory and a local framed Unix health server | Passed; exact typed health request observed | The responder is a local protocol fixture, not a Smol node |
+| Source hygiene | Ruff, Markdown links, stale wording and `git diff --check` | Passed | Does not replace runtime or independent review |
 | Public lifecycle and real model behavior | Root-owned public API/Celery journey and scoped live proof | Required before support claims | No EC2 or paid model work performed by this change |
 
 ## Review findings
 
-Plan review is required before implementation. Exact-head implementation review follows a clean tested candidate; no passing reviewer verdict is claimed here.
+Root plan review of `e07f28b4a`: PASS WITH LOW RISKS for implementation only. The review required exact numeric identity, native/Compose path parity in both directions, native health before API/worker release and explicit drain ordering. Runtime signoff remains separate. The root subsequently approved one trusted deployment-root selector and explicit pinned native binary path because fixed production paths prevented an isolated rendered-topology proof without touching shared resources. Exact UID/GID and live health requirements remain unchanged.
+
+Cold-start inspection found a schema/activation/proxy/node cycle: the proxy reads the activated ART namespace, the native node requires its model socket, and API normally applies migrations. The fixed `migrate`, AWS `proof` and exact proxy-only `up -d model-proxy` stages therefore validate static custody while releasing no application producer/worker; full `up` still requires both typed native health checks. AWS proof itself uses DB/AWS directly and retains its exact existing credential-separated observations.
+
+Controller-only tests were replaced by native custody/readiness and second-controller refusal proof; API/worker mount, secret isolation, parser and producer/worker drain guards are retained. The generated readiness script was exercised through real Settings and the registered typed factory: the material root requires the matching ART scratch setting, which is now supplied from the same derived path. This proof uses a local framed Unix responder and makes no VM or paid-provider claim.
+
+Exact-head implementation review follows this clean tested checkpoint; no passing implementation verdict is claimed here.
 
 ## Reconciliation
 

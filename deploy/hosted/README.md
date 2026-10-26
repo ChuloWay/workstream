@@ -1,42 +1,65 @@
 # Hosted Release Configuration
 
-This directory contains the first bounded release composition for the Workstream
-API, durable Celery worker, Beat scheduler, fixed guide-document parser and
-existing Rust external-checker service. It targets one dedicated Linux runner
-host with Docker and gVisor `runsc` for project execution, plus a separately
-provisioned KVM/Smol node for trusted ZIP intake. PostgreSQL, Redis, AWS S3, Flow identity and the optional OTLP collector
-are external services managed by the approved environment.
+This directory prepares the Workstream API, durable Celery worker, Beat,
+fixed guide-document parser and optional trusted model proxy on one dedicated
+Linux amd64 host. Project PRE/POST and trusted ZIP intake use the existing native
+Smol systemd node. Compose does not start a checker controller or grant access
+to its Docker socket. PostgreSQL, Redis, AWS S3, Flow identity and the optional
+OTLP collector remain environment-managed dependencies.
 
-The files prepare a release; they do not provision or deploy one. A successful
-render, image build or preflight is not AWS, Flow, recovery, performance or
-hosted-isolation proof. Parent issue #555 owns the connected deployed evidence.
+This configuration depends on the guest-native model/trial transport from
+[PR #677](https://github.com/Flow-Research/workstream/pull/677) and preserves the
+provider selection from [PR #690](https://github.com/Flow-Research/workstream/pull/690).
+A render, image build or preflight does not establish hosted operation or a real
+model call. Parent issue #555 owns the connected public API/worker evidence.
 
 ## Trust boundary
 
-The checker service controls the host Docker daemon through
-`/var/run/docker.sock`. That is host-level authority. gVisor isolates the
-untrusted checker containers launched by the service; it does not protect the
-host from compromise of the trusted checker-service controller. Use a dedicated
-runner host and a trusted daemon. Do not place unrelated workloads or credentials
-on that host.
+The native node uses KVM and its delegated cpu/memory/pids cgroup, under the same
+numeric UID/GID `10001:10001` as the ART grant issuer. It owns fresh VM execution,
+exact leases and cleanup. Neither the node nor project images receive provider
+credentials. The optional Compose model proxy alone owns those credentials;
+the native node connects to its host-visible private socket and forwards only
+invocation-bound capability traffic through the Smol guest transport.
 
-The checker controller has no network, runs as a fixed non-root UID/GID, drops
-all Linux capabilities and mounts verified material read-only. Its supplemental
-group grants only access to the Docker socket. The API and worker use the same
-absolute host paths as the controller because the host daemon, rather than the
-controller container's mount namespace, resolves checker bind sources:
+The API and worker mount the node socket directory read-only. Both typed
+capabilities use the same host endpoint, while retaining distinct closed
+protocols and pinned images:
 
 ```text
 /var/lib/workstream/scratch
 /var/lib/workstream/checker-runtime/checker.sock
-/var/lib/workstream/intake-runtime/checker.sock
+/var/lib/workstream/model-runtime/model.sock
 ```
 
-Keep these absolute paths consistent across the host and clients. The intake
-node owns its private socket directory; API and Celery mount it read-only. It
-needs no Docker socket, provider credentials or project model credentials.
-Trusted ZIP inspection and default checks run in its pinned guest image; project
-PRE/POST still use the separately configured execution capability.
+`WORKSTREAM_DEPLOYMENT_ROOT` defaults to `/var/lib/workstream`. An independently
+owned deployment may select one canonical absolute private root; all scratch,
+checker/model/parser socket paths below it are derived together, with identical
+absolute source/target paths in the containers. The root must be mode `0700`,
+owned by `10001:10001`, and contain no config, provider secret or executable/cache
+asset. Symlink roots, ancestor aliases and data/asset overlap fail preflight.
+`WORKSTREAM_CHECKER_SERVICE_BINARY` defaults to the unit's installed path and
+selects one absolute artifact under `WORKSTREAM_CHECKER_SERVICE_BINARY_SHA256`.
+
+For an isolated proof, use a newly owned `/var/tmp/workstream-hosted-smol-*`
+prefix with a private `data` subdirectory and config/assets as separate siblings.
+Give UID `10001` traversal access to the owned prefix; do not rely on another
+user's private home ancestry. Configure the existing scoped unit's `ExecStart`
+and cgroup path for that exact binary/config and preserve its ownership. This
+uses the same release topology and preflight, without shared `/etc/workstream`
+or `/var/lib/workstream` mutation. No source here deploys or restarts that unit.
+
+These absolute paths and identities must match across native configuration,
+API/worker containers and the proxy. ART material lives under the same scratch
+root on host and clients; the native node independently verifies each opaque
+ART grant before staging. Model proxy sockets and ART material are never assumed
+to exist only inside a Docker namespace. Project guests receive guest-local
+capability sockets, never the global host socket or a provider key.
+
+Ordered non-model PRE and approved model-enabled POST retain their existing
+owners. PRE model selectors remain unsupported: PRE has no supported paid-model
+lineage/grant operation, and policy validation rejects those selectors. This
+configuration does not introduce PRE model authority.
 
 Guide parsing uses a separate private Unix socket at
 `/var/lib/workstream/guide-runtime/guide.sock`. The parser uses the immutable
@@ -48,7 +71,7 @@ a distinct fixed identity (10003 or 10004), no supplementary groups and no
 capabilities. The broker and children verify their process protections before
 processing documents; startup fails if the required identity boundary is absent.
 The broker owns the socket directory and socket. Only the guide worker mounts that directory as
-a read-only client. API, Beat, proof jobs and the checker controller do not
+a read-only client. API, Beat, proof jobs and the native node do not
 receive it. The parser process validates directory and socket ownership before
 binding. The health check drops to client UID/GID 10001 with no capabilities before
 performing a framed protocol round trip against the fixed parser build identity.
@@ -70,11 +93,9 @@ docker build --build-arg WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT=agents \
 docker build --build-arg WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT=omnicore \
   --file docker/backend/Dockerfile.release \
   --tag registry.example/workstream/backend-omnicore:<source-commit> .
-docker build --file docker/checker/Dockerfile.release \
-  --tag registry.example/workstream/checker-service:<source-commit> .
 ```
 
-Both Dockerfiles pin their base images. Each backend build requires one exact SDK
+Backend and intake image definitions pin their base images. Each backend build requires one exact SDK
 environment and installs only its committed `agents` or `omnicore` resolution,
 without the development extra. The image records that choice in a root-owned
 read-only marker. Select the worker image that matches the configured setup SDK.
@@ -86,9 +107,10 @@ credential. `manager_authored` is accepted in either worker image with the exact
 `none/none/none` setup tuple; `WORKSTREAM_MODEL_PROXY_ENABLED` independently
 decides whether approved POST images can use the proxy. The backend image
 also installs the official Roles Anywhere helper 1.8.5 at its fixed path, with
-architecture-specific hashes checked during the build and image proof. The
-checker-service build compiles the committed Rust lock and copies the pinned
-Docker client. A local build tag is build evidence only; the release file must
+architecture-specific hashes checked during the build and image proof. Build the native service and static guest from the same reviewed source using the
+[node instructions](../../external_checkers/README.md#smol-microvm-engine). Record the
+installed service digest in `WORKSTREAM_CHECKER_SERVICE_BINARY_SHA256`; the
+private node config pins Smol, the guest and every cached archive/config. A local build tag is build evidence only; the release file must
 contain the registry-resolved digest after publication. The backend build's uv
 package-download cache mount exists only on the builder; it is not retained in
 the image. Runtime image inspection uses `uv --no-cache pip check` and bounded
@@ -109,48 +131,39 @@ that no smoke container owned by that run remains after inspection or timeout.
 
 ## Prepare the host
 
-Install and configure Docker and gVisor using the approved host process. Confirm
-that Docker reports a `runsc` runtime. Installation and daemon configuration are
-outside this repository configuration. When model access is enabled, the outer
-checker runtime must include exactly `--host-uds=open` so its invocation-local
-Unix socket works under gVisor; full preflight checks Docker's reported runtime
-arguments. This permits the mounted socket, not network access or a global proxy
-mount inside the image. A separate trial runtime remains configured with host
-Unix sockets disabled.
+Install Docker for the backend containers and the pinned native Smol bundle
+for Linux amd64 with `/dev/kvm`, cgroup v2 and systemd 254 or later. Use the
+[existing unit](../../external_checkers/deploy/workstream-checker.service), which
+runs as `10001:10001`, places its controller in a delegated subgroup and preserves
+independent guardians with `KillMode=process`. Review its explicit deployment
+CPU/memory/PID/storage capacity against intake, checker and sequential trial
+peak demand; this configuration does not increase registered checker limits.
 
-The hosted profile fixes backend processes at UID/GID 10001 and the parser broker
-at UID 10002 with the shared client group 10001 after its identity bootstrap.
-Find the Docker socket GID and
-create the fixed private directories with these exact identities:
+Create canonical private roots on durable host storage:
 
 ```sh
+sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/scratch
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/checker-runtime
-sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/intake-runtime
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/model-runtime
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/model-relays
+sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream-checker/smol
+sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream-checker/images
 sudo install -d -m 0750 -o 10002 -g 10001 /var/lib/workstream/guide-runtime
-stat -c '%g' /var/run/docker.sock
 ```
 
-The checker and model runtime directories must be on durable host storage, not `/run`,
-tmpfs or ephemeral container storage. Its private `.workstream-checker-owner`
-file identifies containers recoverable after a service or host restart. Only the
-checker service has a writable mount; API and worker socket mounts are read-only
-so clients can connect but cannot replace recovery custody. Preserve the file
-with the directory; never clone it into another live deployment. Before
-changing or deleting this directory, drain checker work and verify cleanup of
-its exact owned containers. If custody was lost, reconcile independently verified
-container IDs; a new owner will not adopt old containers. See
-[container recovery ownership](../../external_checkers/README.md#container-recovery-ownership).
+Preserve the node socket parent's persistent owner/lease custody and all trial
+root markers across restarts. Never clone them into another live deployment or
+replace them with `/run`, tmpfs or container storage. Do not delete retained
+inputs, product evidence, shared roots or unknown runtime resources during
+recovery. Unknown ownership or cleanup refuses admission.
 
-Provision the [Smol node and pinned trusted image](../../external_checkers/README.md#trusted-submission-intake)
-under UID/GID 10001 before launch. Its socket must be mode `0600` inside the
-`0700` intake directory. Preserve its owner and lease files across restarts. Set
-`WORKSTREAM_ARTIFACT_INTAKE_IMAGE_DIGEST` and
-`WORKSTREAM_ARTIFACT_INTAKE_CONFIG_DIGEST` to the exact cached manifest/config;
-project registrations cannot select that privileged purpose. Account for its
-2 GiB guest memory plus VMM overhead when setting the delegated node budget.
+Provision project images and the pinned trusted intake image using the existing
+[Smol cache command](../../external_checkers/README.md#smol-microvm-engine).
+The native `trusted_intake` configuration selects the intake image; project
+registrations cannot select that privileged purpose. Its image/config pins must
+match the two `WORKSTREAM_ARTIFACT_INTAKE_*_DIGEST` values. Both typed clients
+connect through the one mode-`0600` socket in the mode-`0700` checker directory.
 
 Copy `release.env.example` to an operator-owned non-secret environment file and
 replace every example identity. The file contains paths and public configuration,
@@ -179,13 +192,12 @@ startup, and an unrelated secret is neither mounted nor loaded. The loader
 independently requires the running identity and mode `0400`, performs no shell
 evaluation and never prints a value. Do not put AWS static keys in these files.
 
-With the proxy enabled, the trusted checker service also mounts the global
-model socket directory read-only. Its separate writable
-`/var/lib/workstream/model-relays` directory has the same absolute path on the
-Docker host and in the service, owned by the runtime UID/GID with mode `0700`.
-The service waits for the proxy to become healthy and mounts only the current
-invocation's relay into a project image. Project images receive neither the
-global socket nor provider credentials. API, Beat and proof jobs receive
+With the proxy enabled, the native checker service reads the global
+model socket from its canonical host path. Its separate writable
+`/var/lib/workstream/model-relays` directory is private to the native service, owned by the runtime UID/GID with mode `0700`.
+Start the proxy before the native node. The service creates an invocation relay
+and the Smol transport exposes only its guest-local capability endpoint. Project
+images receive neither the global socket nor provider credentials. API, Beat and proof jobs receive
 neither model directory.
 The two provider file paths are trusted release configuration. The proxy loads
 only configured dedicated files as `OPENROUTER_API_KEY` or `OPENAI_API_KEY`; this is
@@ -274,22 +286,39 @@ canonical application owner validates eligibility at startup. Replace the exampl
 drill; satisfying the arithmetic does not prove live latency, AWS identity or
 activation.
 
-Copy `checker-service.example.json` to the configured private path, mode `0400`
-and the same runtime owner. Replace the example cache with every approved
-single-platform checker image supplied by the project checker/registry work.
-The example includes the exact `model_proxy_socket` and `model_relay_root`
-selectors for a proxy-enabled release. Remove both keys when
-`WORKSTREAM_MODEL_PROXY_ENABLED=false`; preflight rejects partial, substituted
-or disabled-proxy selectors. Rust consumes these paths from the private JSON
-configuration, not environment variables.
-For each entry, preserve the exact repository, platform manifest digest/media
-type/byte count, Linux architecture and Docker config image ID. Pull every
-`repository@sha256:...` identity before preflight. Full preflight checks that
-point-in-time local cache identity. The checked-in runner independently rejects
-a tag, missing image, substituted config ID, platform mismatch or absent runsc
-for each execution.
+Copy `checker-service.example.json` to the configured private mode-`0400`
+path. The unit reads `/etc/workstream/checker-service.json`. Replace all example
+binary, guest, archive, platform-manifest and config digests with independently
+verified values. The default-behavior digest must match the built source's
+canonical default checker. Runtime execution uses preloaded archives and never
+pulls, resolves a tag or falls back to Docker/runsc.
+
+For a proxy-disabled release remove both `model_proxy_socket` and
+`model_relay_root`; preflight rejects partial or substituted selectors. For a
+proxy-enabled release retain their exact host paths. The running service reads
+its configuration from JSON, not the release environment.
+
+Approved POST trial selectors additionally require the optional paired
+`WORKSTREAM_CHECKER_TRIAL_AUTHORITY_MANIFEST_PATH` and
+`WORKSTREAM_CHECKER_TRIAL_AUTHORITY_MANIFEST_DIGEST`. They activate
+`compose.trials.yml`, which mounts that exact host file read-only only into the
+model proxy. Set the native JSON's `trial_authority_manifest_path` and
+`trial_authority_manifest_digest` to the same host source and digest, and supply
+its existing `trial_runtime` object: private relay/scratch/child-home/cache roots,
+pinned builder config ID, launcher/filesystem-tool paths and digests, deployment
+owner, candidate archive ceiling and exact runtime-configuration digest. Provision
+the builder cache entry and approved offline cache from the qualified runtime
+release. Do not substitute a project-selected profile or copy the runtime into
+this deployment layer. The native runtime and backend typed manifest loader
+validate the authority catalogue; preflight checks their shared byte identity
+and custody. API, worker and Beat do not read this catalogue or receive its mount.
 
 ## Validate without disclosure
+
+The directory commands above describe the default production root. For another
+owned root, create its derived children with the same identities and modes, and
+replace native JSON socket/material/model paths with those exact derived paths.
+Keep source/cache/config/credential files outside that data root.
 
 Run preflight from the trusted host administrator account. Use `sudo` when the
 operator account cannot read the runtime-owned `0400` checker configuration or
@@ -309,10 +338,11 @@ python3 deploy/hosted/preflight.py \
 ```
 
 The full preflight additionally checks secret/config metadata without reading
-secret contents, validates the private directories and Docker-socket group, and
-requires locally registered runsc plus every exact cached image at that point in
-time. It also checks the private intake socket and calls the production typed
-intake health adapter from the pinned backend image with no secrets or network.
+secret contents, validates private directories and the one node socket owner/mode, and
+hashes the installed native service, Smol, guest and cached archive/config assets.
+It checks delegated cpu/memory/pids controls and calls the existing typed project
+execution and trusted intake health adapters from the pinned backend image with
+no credentials or network. Configuration-only mode performs none of those live checks.
 Wrong runtime, image/config or default behavior rejects launch:
 
 ```sh
@@ -333,35 +363,48 @@ Use the checked-in wrapper for every Compose operation. It parses and validates
 the approved environment file, renders the fixed topology, and gives Docker
 Compose only that parsed allowlist plus fixed process path, operator home and
 local Docker-socket values. Ambient shell values cannot replace an image, Flow
-URL, secret path, Compose selector or Docker daemon selector. Every `up` also
-reloads the current checker configuration and repeats the checker-selector,
-private-host-input, Docker-runtime/cache and typed intake readiness checks before starting anything.
-Skipping the separate preflight does not skip these launch checks. `pull`, `ps`
-and `stop` remain available without launch-only checks so an invalid host can
-still be inspected or stopped. Run `up` from the same trusted administrator
-account used for full preflight. Keep the private configuration and host inputs
-unchanged between validation and launch and while the service runs; these
-point-in-time checks do not constrain a trusted host administrator:
+URL, secret path, Compose selector or Docker daemon selector. Normal `up`
+reloads the node configuration and requires static custody plus both typed native
+health checks before releasing API/worker services. `pull`, `ps` and fixed `stop`
+remain usable while a node is unavailable.
+
+Cold startup has explicit prerequisite stages to avoid a schema/activation/proxy/
+node dependency cycle. `migrate` runs only the existing API image's Alembic command
+with no dependencies. The fixed AWS `proof` sequence and exactly
+`up -d model-proxy` validate static topology and private inputs but require no live
+node and release no API, worker or scheduler. The proof command retains its exact
+credential-separated AWS observations and coordinator; it does not use intake or
+project execution. Run these reviewed operator steps:
 
 ```sh
 python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env pull
+python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env migrate
+python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
+  proof --group-nonce <fresh-uuid>
+python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
+  up -d model-proxy
+# Wait for the proxy health check, then start the reviewed native unit explicitly.
+sudo systemctl start workstream-checker.service
+python3 deploy/hosted/preflight.py --env-file /etc/workstream/release.env
 python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
   up --detach --wait
 python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env ps
 ```
 
-The API applies forward migrations before serving. The guide parser and an
-enabled trusted model proxy must pass their protocol/socket health checks before
-the worker starts. Worker startup uses the existing prefork lifecycle. Beat runs the
-existing recovery and cleanup
-schedules. The checker health check requires its private socket and Docker's
-registered runsc runtime. It does not attest cache identity; full preflight
-observes the cache once, and the canonical runner verifies the exact image again
-for each execution. API health checks a lightweight endpoint; the worker and
-Beat health checks verify their local Celery processes. These checks do not
-replace a public authenticated journey or dependency-specific provider probes.
-Each process stops after five consecutive failed restarts so an invalid release
-cannot remain in an unbounded crash loop.
+A proxy-disabled release omits its proxy stage. Schema migration and any required
+fresh AWS activation still precede API startup. Keep reviewed files unchanged
+between validation and launch. These checks do not constrain a trusted host
+administrator and do not attest the running node's complete source custody;
+qualification separately records its actual process/binary identities.
+
+The guide parser and enabled model proxy must pass their existing health checks
+before the worker starts. Beat retains existing recovery schedules. API health
+is a lightweight endpoint; Celery health checks its processes. Typed native
+readiness verifies runtime/identity/cache-count and pinned intake/default facts;
+exact image selection is independently checked during every execution. None of
+these checks replaces a public authenticated journey, provider proof, resource
+qualification or restart/cleanup evidence. Each Compose service has its existing
+finite restart policy; the native unit retains its own bounded systemd policy.
 
 The API binds to host loopback for an environment-owned TLS reverse proxy. Do
 not expose the checker socket, Docker socket, PostgreSQL, Redis or OTLP collector
@@ -382,7 +425,8 @@ outage does not change product results. Configuration alone is not that proof.
 
 The wrapper's `stop` operation stops Beat and API first so they cannot produce
 new work, gives the prefork worker its configured 7,320-second graceful window,
-then drains the model proxy before stopping the parser and checker controller.
+then drains the model proxy before stopping the parser. It never stops the
+native systemd node.
 Keeping all socket services alive while the worker drains lets cancellation and
 terminal persistence finish against their original dependencies. Guide inference
 has a 7,260-second process backstop;
@@ -397,7 +441,12 @@ python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env stop
 
 For a restart or upgrade, preserve scratch until cleanup/recovery has classified
 all retained work, update only reviewed digest identities/configuration, rerun
-full preflight, pull, and start with `up --detach --wait`. Exercise an interrupted
+the cold/warm dependency sequence above, and start with `up --detach --wait`.
+Before restarting or stopping the native unit, first drain producers and the
+worker through the wrapper, retain the proxy until node calls settle, and
+independently confirm that this node has no active owned leases, VMs or cgroups.
+Preserve guardian recovery and use the exact owner-scoped inventory; never prune
+shared resources or stop another deployment. Exercise an interrupted
 job and verify the existing exact retry/reconciliation operations rather than
 editing rows or replaying unknown work blindly.
 
@@ -453,7 +502,7 @@ change.
 
 Before #583 or parent #555 can claim a hosted release, retain evidence for real
 Flow human/service identities, AWS custody and negative identity cases, selected
-registry/LIVE controls, actual project checker images, gVisor isolation,
+registry/LIVE controls, actual project checker images, Smol isolation,
 representative CPU/memory/PID/disk/time measurements, missing-cache and limit
 classification, collector outage, drain/restart, supported recovery and isolated
 backup restore. Bind that evidence to exact source, service-image, checker-image,
