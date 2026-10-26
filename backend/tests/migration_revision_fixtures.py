@@ -301,6 +301,7 @@ ALTER TABLE public.submissions ADD COLUMN attempt_status varchar(30) DEFAULT 'ev
   ADD COLUMN updated_at timestamptz DEFAULT now() NOT NULL;
 ALTER TABLE public.task_assignments ADD COLUMN started_at timestamptz,
   ADD COLUMN updated_at timestamptz DEFAULT now() NOT NULL;
+ALTER TABLE public.checker_runs ADD COLUMN input_context_custody jsonb;
 CREATE TABLE public.checker_result_findings (
   id uuid PRIMARY KEY, checker_result_id uuid NOT NULL, checker_run_id uuid NOT NULL,
   task_id uuid NOT NULL, submission_id uuid NOT NULL, member_order integer NOT NULL,
@@ -319,7 +320,7 @@ _ATTEMPT_OUTCOME_WRITERS = (
 async def enter_predecessor_owner_shape(execute, database_url, patch):
     """Let current owners build history on a pre-0049 schema, as its owners did.
 
-    Predecessor owners stored no attempt outcomes, assignment starts or finding
+    Predecessor owners stored no input context, attempt outcomes, assignment starts or finding
     rows, so those writes are disabled and the ORM gets placeholder columns.
     ``leave_predecessor_owner_shape`` removes them before the real upgrade, so
     0049 runs against the genuine predecessor shape.
@@ -337,6 +338,7 @@ async def leave_predecessor_owner_shape(execute, database_url):
     """Remove the placeholders so the upgrade sees only predecessor DDL."""
     await execute(database_url, (
         "DROP TABLE public.checker_result_findings; "
+        "ALTER TABLE public.checker_runs DROP COLUMN input_context_custody; "
         "ALTER TABLE public.submissions DROP COLUMN attempt_status, DROP COLUMN status_reason, "
         "DROP COLUMN decided_at, DROP COLUMN updated_at; "
         "ALTER TABLE public.task_assignments DROP COLUMN started_at, DROP COLUMN updated_at"

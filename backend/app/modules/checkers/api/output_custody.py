@@ -12,7 +12,13 @@ from app.modules.checkers.api.canonical_values import (
     CheckerValue,
     ResourceId,
 )
-from app.modules.checkers.api.trial_evidence import TrialEvidenceReservation, TrialEvidenceSelector
+from app.modules.checkers.api.trial_evidence import (
+    TrialEvidenceArtifactRequest,
+    TrialEvidenceBindingRequest,
+    TrialEvidenceCustodyAck,
+    TrialEvidenceReservation,
+    TrialEvidenceSelector,
+)
 from app.modules.model_usage.api import (
     ModelCallEvidence,
     ModelCallExecutionFacts,
@@ -155,6 +161,11 @@ class CheckerOutputBindingPort(Protocol):
     ) -> CheckerOutputBindingResult:
         """Bind verified checker output under the checker binding action."""
 
+    async def bind_trial_evidence(
+        self, request: TrialEvidenceBindingRequest
+    ) -> TrialEvidenceCustodyAck:
+        """Bind an exact verified trial receipt in the caller transaction."""
+
 
 class CheckerArtifactOutputPort(Protocol):
     """Store generated output for one fixed checker execution."""
@@ -171,6 +182,21 @@ class CheckerArtifactOutputPort(Protocol):
         evidence: ModelCallEvidence,
     ) -> bytes:
         """Read one authorized private response with exact byte/hash verification."""
+
+    async def store_trial_evidence(
+        self, request: TrialEvidenceArtifactRequest
+    ) -> CheckerOutputArtifactResult:
+        """Store bounded trial receipt bytes under fresh exact authority."""
+
+    async def recover_trial_evidence(
+        self, selector: TrialEvidenceSelector
+    ) -> CheckerOutputArtifactResult | None:
+        """Recover the original receipt upload without regenerating evidence."""
+
+    async def read_trial_evidence(
+        self, selector: TrialEvidenceSelector, evidence: TrialEvidenceCustodyAck
+    ) -> bytes:
+        """Read and independently verify the exact retained trial receipt."""
 
 
 GeneratedOutputSelector = CheckerOutputSelector | TrialEvidenceSelector | SetupModelOutputSelector

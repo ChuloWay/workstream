@@ -718,3 +718,21 @@ threads. Guest workload PID ceilings, memory, CPU and policy limits are unchange
 guest processes are controlled by their own guest cgroups. Both diagnostic VMs,
 their private HOMEs and host cgroups were removed. This startup control is not
 the full composed model/trial qualification.
+
+### Composition contract and fixture reconciliation
+
+Independent architecture review identified that the shared ART output factories
+declared model-only ports while the trial proxy called four existing trial
+methods. The canonical output and binding protocols now declare those exact
+methods, and the proxy dependencies name those public ports. No parallel factory
+or new authorization path is added.
+
+Main-integrated CI exposed stale fixture assumptions: the material result now
+carries input context separately from verified byte facts, the architecture
+inventory has one new material DTO and trial-proxy consumer, historical 0047
+fixtures require a temporary ORM input-context column, and aggregate source
+cleanup raises its fixed public error rather than a nested diagnostic string.
+The fixtures retain their original denial, transaction, immutable-history and
+cleanup assertions. The historical placeholder is removed before upgrading the
+genuine predecessor schema. Real PostgreSQL/MinIO replay and required CI remain
+necessary; corrected fixtures alone are not a runtime pass.

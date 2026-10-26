@@ -2,15 +2,19 @@
 
 import hashlib
 import json
+from collections.abc import Callable
 
 from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.interfaces.checker_trial_proxy import (
     TRIAL_PROXY_MAXIMUM_FRAME_BYTES, TRIAL_PROXY_PROTOCOL, TRIAL_PROXY_REQUEST,
     TrialPublishRequest, TrialReserveRequest,
 )
-from app.modules.checkers.api.external import external_checker_json_hash
-from app.modules.checkers.api.output_custody import CheckerOutputUnavailable
+from app.modules.checkers.api.external import ExternalCheckerExecutionRequest, external_checker_json_hash
+from app.modules.checkers.api.output_custody import (
+    CheckerArtifactOutputPort, CheckerOutputBindingPort, CheckerOutputUnavailable,
+)
 from app.modules.checkers.api.trial_evidence import (
     TrialEvidenceArtifactRequest, TrialEvidenceBindingRequest, TrialEvidenceSelector,
     TrialEvidenceStableSubject, TrialEvidenceUnavailable,
@@ -143,7 +147,12 @@ def _validate_receipt(value, ticket, external, profile):
 class CheckerTrialProxy:
     """The trusted host callback never delegates evidence custody to an image."""
 
-    def __init__(self, *, sessions, reservations, outputs, bindings, profiles):
+    def __init__(
+        self, *, sessions, reservations,
+        outputs: Callable[[ExternalCheckerExecutionRequest], CheckerArtifactOutputPort],
+        bindings: Callable[[AsyncSession, ExternalCheckerExecutionRequest], CheckerOutputBindingPort],
+        profiles,
+    ):
         """Compose existing custody owners with the trusted trial-profile reader."""
         self._sessions, self._reservations = sessions, reservations
         self._outputs, self._bindings = outputs, bindings
