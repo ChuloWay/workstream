@@ -241,21 +241,28 @@ class HostedModelAuthority(unittest.TestCase):
         self.assertIn(b'no execution or trial measurement is claimed', (self.root / 'evidence/results').read_bytes())
 
     def test_hosted_stalled_admission_does_not_inject_a_verifier_task(self):
-        os.environ.setdefault('WORKSTREAM_CELERY_BROKER_URL', 'redis://127.0.0.1:6379/15')
-        from experiments.pilot04_external_checker_runtime import run_public_journey_probe as probe
-        from app.workers.artifacts import verify_object
+        from app.core.config import get_settings
 
-        result = {'pre_submission_results': [{}], 'submission_bundle_preparation_status': 'object_confirmed', 'admission_id': None}
-        ticks = iter(range(0, 1000, 31))
-        with patch.object(probe, '_fixture_hashes', return_value={}), \
-                patch.object(probe, '_scan_audit_count', new=AsyncMock(return_value=0)), \
-                patch.object(probe, '_json', new=AsyncMock(return_value=result)), \
-                patch.object(probe, '_artifact_task_state', new=AsyncMock(return_value=([], [('job', 'pending', None)]))), \
-                patch.object(probe.time, 'monotonic', side_effect=lambda: next(ticks)), \
-                patch.object(probe.asyncio, 'sleep', new=AsyncMock()), patch.object(verify_object, 'apply_async') as dispatch:
-            with self.assertRaisesRegex(RuntimeError, 'remained object_confirmed'):
-                asyncio.run(probe._ready_admission(None, None, 'task', 'assignment', 'token', b'zip', 'summary', 'attestation', hosted=True))
-            dispatch.assert_not_called()
+        with patch.dict(os.environ, {'WORKSTREAM_CELERY_BROKER_URL': 'redis://127.0.0.1:6379/15'}):
+            # Earlier proof imports may have cached settings without a broker.
+            get_settings.cache_clear()
+            try:
+                from experiments.pilot04_external_checker_runtime import run_public_journey_probe as probe
+                from app.workers.artifacts import verify_object
+
+                result = {'pre_submission_results': [{}], 'submission_bundle_preparation_status': 'object_confirmed', 'admission_id': None}
+                ticks = iter(range(0, 1000, 31))
+                with patch.object(probe, '_fixture_hashes', return_value={}), \
+                        patch.object(probe, '_scan_audit_count', new=AsyncMock(return_value=0)), \
+                        patch.object(probe, '_json', new=AsyncMock(return_value=result)), \
+                        patch.object(probe, '_artifact_task_state', new=AsyncMock(return_value=([], [('job', 'pending', None)]))), \
+                        patch.object(probe.time, 'monotonic', side_effect=lambda: next(ticks)), \
+                        patch.object(probe.asyncio, 'sleep', new=AsyncMock()), patch.object(verify_object, 'apply_async') as dispatch:
+                    with self.assertRaisesRegex(RuntimeError, 'remained object_confirmed'):
+                        asyncio.run(probe._ready_admission(None, None, 'task', 'assignment', 'token', b'zip', 'summary', 'attestation', hosted=True))
+                    dispatch.assert_not_called()
+            finally:
+                get_settings.cache_clear()
 
     def test_model_stage_requires_and_uses_the_existing_hosted_attachment(self):
         from experiments.pilot04_external_checker_runtime import run_public_journey_probe as probe
