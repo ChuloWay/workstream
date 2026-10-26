@@ -216,3 +216,12 @@ missing/ambiguous image and refusal of substituted replies. No hidden owner
 operation or second bootstrap was added. The release-image workflow now runs
 the attachment and model-qualification guard tests in its frozen backend
 environment, without changing existing deployment proof or timeout bounds.
+
+Independent review passed the added CI step and its exact path triggers. Its
+first hosted run (`40373193281`) then reproduced an order-sensitive test fixture:
+the stalled-admission guard set a broker environment value after settings had
+already been cached. The test now scopes that value and clears settings before
+worker import and during cleanup; its no-verifier-dispatch assertion is intact.
+The exact combined two-module command with the broker environment unset failed
+one of 26 tests before `f406310f7` and passed all 26 afterward. Root review, Ruff
+and diff checks passed. Product settings and release images are unchanged.
