@@ -273,6 +273,32 @@ class NestedTrialRecovery:
         return {"pid": pid, "start_ticks": start, "executable": str(executable)}
 
     @staticmethod
+    def vmm_identity(pid, group, expected=None):
+        # Smol deliberately makes the VMM non-dumpable: exe readlink is denied.
+        # The exact lease/DB selection supplies pinned launch provenance; status,
+        # start ticks and the private cgroup bind the live process without ptrace.
+        assert type(pid) is int and pid > 1
+        assert group.is_absolute() and str(group).startswith("/sys/fs/cgroup/")
+        process = Path("/proc") / str(pid)
+        status = dict(line.split(":", 1) for line in (process / "status").read_text().splitlines()
+                      if ":" in line)
+        uids = [int(value) for value in status["Uid"].split()]
+        gids = [int(value) for value in status["Gid"].split()]
+        assert uids == [os.geteuid()] * 4 and gids == [os.getegid()] * 4
+        raw = (process / "stat").read_text()
+        assert int(raw.split(" (", 1)[0]) == pid
+        fields = raw.rpartition(") ")[2].split()
+        assert fields[0] != "Z"
+        start = int(fields[19])
+        assert start > 0
+        membership = "0::" + str(group).removeprefix("/sys/fs/cgroup")
+        assert (process / "cgroup").read_text().strip() == membership
+        identity = {"pid": pid, "start_ticks": start, "uids": uids, "gids": gids,
+                    "cgroup": membership, "provenance": "pinned_owned_lease_and_readonly_db"}
+        assert expected is None or identity == expected
+        return identity
+
+    @staticmethod
     def observation_retired(lease, pid):
         if not lease.exists():
             return True
@@ -334,16 +360,19 @@ class NestedTrialRecovery:
             if machine["state"] != "running":
                 continue
             try:
-                vmm = self.process_identity(machine["pid"], Path(self.config["smol"]["binary"]))
                 group = self.groups / name
-                membership = "0::" + str(group).removeprefix("/sys/fs/cgroup")
-                assert (Path("/proc") / str(vmm["pid"]) / "cgroup").read_text().strip() == membership
+                vmm = self.vmm_identity(machine["pid"], group)
                 observed = self.agent_marker(home, name)
                 if observed is None:
                     continue
-                assert self.process_identity(vmm["pid"], Path(vmm["executable"])) == vmm
-                assert (Path("/proc") / str(vmm["pid"]) / "cgroup").read_text().strip() == membership
+                self.vmm_identity(vmm["pid"], group, vmm)
                 assert self.private_directory(home) == home_identity
+                assert path.read_bytes() == raw and path.lstat().st_ino == identity.st_ino
+                current = self.snapshot_inventory(home, name)
+                assert current is not None
+                selected = self.child_inventory(current[0], name)
+                assert selected is not None and selected["pid"] == vmm["pid"]
+                self.validate_child(selected, owner)
             except (FileNotFoundError, ProcessLookupError, EOFError, ConnectionResetError, BrokenPipeError, TimeoutError):
                 if self.observation_retired(path, machine["pid"]):
                     continue
@@ -410,7 +439,7 @@ class NestedTrialRecovery:
                 self.execution.cancel()  # Adapter finally closes its exact request socket.
             elif self.case == "child_death":
                 victim = self.reached["vmm"]
-                assert self.process_identity(victim["pid"], Path(victim["executable"])) == victim
+                self.vmm_identity(victim["pid"], self.groups / self.reached["lease_name"], victim)
                 os.kill(victim["pid"], signal.SIGKILL)
             else:
                 assert self.process_identity(controller.pid, service_binary) == controller_identity
@@ -670,6 +699,54 @@ def test_nested_agent_marker_uses_fixed_bounded_protocol_without_target_writes()
                                "tty": False, "background": False, "stdin_data": None}
             assert request["command"][:2] == ["/bin/sh", "-c"]
             assert "/workspace/.trial-recovery-ready" in request["command"][2]
+
+
+def test_nested_vmm_identity_accepts_nondumpable_process_and_rejects_foreign_custody(monkeypatch):
+    import select
+    import sys
+    import pytest
+
+    child = subprocess.Popen([
+        sys.executable, "-c",
+        "import ctypes,time; libc=ctypes.CDLL(None); "
+        "assert libc.prctl(4,0,0,0,0)==0 and libc.prctl(3,0,0,0,0)==0; "
+        "print('ready',flush=True); time.sleep(10)",
+    ], stdout=subprocess.PIPE, text=True)
+    try:
+        assert select.select([child.stdout], [], [], 3)[0], "non-dumpable child did not start"
+        assert child.stdout.readline(32) == "ready\n"
+        process = Path("/proc") / str(child.pid)
+        membership = (process / "cgroup").read_text().strip()
+        assert membership.startswith("0::/")
+        group = Path("/sys/fs/cgroup" + membership.removeprefix("0::"))
+        observed = NestedTrialRecovery.vmm_identity(child.pid, group)
+        assert observed["uids"] == [os.geteuid()] * 4
+        assert observed["gids"] == [os.getegid()] * 4
+        assert NestedTrialRecovery.vmm_identity(child.pid, group, observed) == observed
+        with pytest.raises(AssertionError):
+            NestedTrialRecovery.vmm_identity(child.pid, group, observed | {
+                "start_ticks": observed["start_ticks"] + 1,
+            })
+        with pytest.raises(AssertionError):
+            NestedTrialRecovery.vmm_identity(child.pid, group / "foreign")
+        original = Path.read_text
+        for field, foreign in (("Uid", os.geteuid() + 1), ("Gid", os.getegid() + 1)):
+            def altered(path, *args, **kwargs):
+                raw = original(path, *args, **kwargs)
+                if path == process / "status":
+                    raw = "\n".join(
+                        field + ":\t" + "\t".join([str(foreign)] * 4)
+                        if row.startswith(field + ":") else row for row in raw.splitlines()
+                    )
+                return raw
+            with monkeypatch.context() as patch:
+                patch.setattr(Path, "read_text", altered)
+                with pytest.raises(AssertionError):
+                    NestedTrialRecovery.vmm_identity(child.pid, group)
+    finally:
+        child.terminate()
+        child.wait(timeout=3)
+        child.stdout.close()
 
 
 def test_nested_inventory_uses_unique_exact_name_and_selected_authority():
