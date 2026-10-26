@@ -241,19 +241,24 @@ async def test_request_bound_refuses_before_metadata_or_paid_dispatch() -> None:
     "drift",
     [
         {"id": "openai/other"},
-        {"context_length": 101},
+        {
+            "context_length": 101,
+            "top_provider": {"context_length": 101, "max_completion_tokens": 50},
+        },
+        {"top_provider": {"context_length": 101, "max_completion_tokens": 50}},
         {"supported_parameters": ["max_tokens"]},
         {"pricing": {"prompt": "0.000000012", "completion": "0.000000029"}},
     ],
-    ids=["model", "context", "parameters", "pricing"],
+    ids=["model", "context-ceiling", "context-disagreement", "parameters", "pricing"],
 )
 async def test_metadata_refusal_prevents_paid_dispatch(drift: dict) -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
-        assert request.method == "GET"
-        return httpx.Response(200, json=metadata(**drift))
+        if request.method == "GET":
+            return httpx.Response(200, json=metadata(**drift))
+        return httpx.Response(200, json=completion())
 
     provider = adapter(handler)
     result = await provider.create(CheckerModelRequest("one effect"))

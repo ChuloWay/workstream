@@ -83,7 +83,11 @@ the exact non-alias model metadata endpoint before dispatch and requires current
 context, completion, parameter and pricing metadata to fit the immutable profile;
 unknown or unsupported non-token fees fail before spend. Metadata-to-dispatch
 consistency remains an external provider assumption that must be requalified for
-the selected account and model.
+the selected account and model. OpenRouter reserves the full qualified context
+window; it does not count each prompt locally. An over-context request can still
+reach the provider and be rejected, entering the conservative uncertain/held
+path. This availability limitation must not be described as exact pre-dispatch
+prompt-token validation or proof that every failed request is unbilled.
 
 Setup's fixed `read_document` and `search_document` capability retains its own
 owner-side actual call/output counters. A model session opens only when those

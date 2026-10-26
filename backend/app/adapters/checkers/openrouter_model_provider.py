@@ -74,18 +74,13 @@ class OpenRouterCheckerModelProvider:
             )
 
         try:
-            input_tokens = await preflight_openrouter_profile(self._client, self._profile)
+            # Qualify the full provider window; this is not a prompt tokenizer.
+            await preflight_openrouter_profile(self._client, self._profile)
         except ModelCallUnavailable:
             return CheckerModelCreateResult(
                 CheckerModelCreateOutcome.NO_EFFECT,
                 failure=CheckerModelCreateFailure.INPUT_COUNT_UNAVAILABLE,
             )
-        if input_tokens > self._profile.spec.maximum_input_tokens:
-            return CheckerModelCreateResult(
-                CheckerModelCreateOutcome.NO_EFFECT,
-                failure=CheckerModelCreateFailure.INPUT_LIMIT_EXCEEDED,
-            )
-
         try:
             async with self._client.stream(
                 "POST",

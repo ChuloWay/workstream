@@ -139,6 +139,16 @@ Authenticated failed/incomplete responses may omit text and still settle their
 known usage; completed responses must contain text. The terminal-status matrix
 covers text, null and absent content without turning malformed values into success.
 
+The external prompt-count concern does not demonstrate an accepted token-budget
+bypass under the adopted provider contract: metadata context `C` must fit profile
+cap `M`, and accepted input honoring that context is at most `C <= M`. OpenRouter
+reserves the full window rather than counting this prompt. The misleading unused
+count/comparison is removed. The regression now varies root and top-provider
+context together so only the profile ceiling rejects it, with a separate context
+agreement case. Removing the ceiling guard must make the named regression fail.
+Over-context requests may still be sent and enter an uncertain hold; no exact
+local tokenizer or blanket no-charge claim is introduced.
+
 ## Reconciliation
 
 Base: current main `a3c98c3571c6de4a6f4ce5ca6f3560b5cb32f7f6`, including merged #676
