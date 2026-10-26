@@ -11,6 +11,7 @@ from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[impor
 from workstream_mcp.limits import (
     GUIDE_DOCUMENT_MAX_BASE64_CHARS,
     GUIDE_DOCUMENT_MEDIA_TYPES,
+    SUBMISSION_BUNDLE_MAX_BASE64_CHARS,
 )
 
 EMPTY_INPUT_SCHEMA: dict[str, Any] = {
@@ -822,6 +823,184 @@ CONTRIBUTION_POLICY_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
 }
 
 
+_TASK_SELECTOR_PROPERTIES = {"task_id": _UUID_INPUT}
+_TASK_PAGE_PROPERTIES = {
+    **_TASK_SELECTOR_PROPERTIES,
+    "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+    "cursor": {"type": "string", "minLength": 1, "maxLength": 1024},
+}
+_TASK_TRANSITION_BODY = {
+    "type": "object",
+    "properties": {
+        "reason": {
+            "type": ["string", "null"],
+            "maxLength": 1000,
+            "pattern": r"^[^\u0000]*$",
+        }
+    },
+    "additionalProperties": False,
+}
+_ASCII_PACKET_TEXT = {
+    "type": "string",
+    "maxLength": 4_096,
+    "pattern": r"^[\u0020-\u007e]*$(?![\s\S])",
+}
+_SHA256_INPUT = {
+    "type": "string",
+    "pattern": r"^sha256:[0-9a-f]{64}$",
+    "minLength": 71,
+    "maxLength": 71,
+}
+
+
+def _task_transition_input() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            **_TASK_SELECTOR_PROPERTIES,
+            "body": _TASK_TRANSITION_BODY,
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+        },
+        "required": ["task_id", "idempotency_key"],
+        "additionalProperties": False,
+    }
+
+
+TASK_EXECUTION_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "preparation_create": {
+        "type": "object",
+        "properties": {
+            "task_id": _UUID_INPUT,
+            "assignment_id": _UUID_INPUT,
+            "zip_base64": {
+                "type": "string",
+                "minLength": 4,
+                "maxLength": SUBMISSION_BUNDLE_MAX_BASE64_CHARS,
+                "pattern": r"^[A-Za-z0-9+/]*={0,2}$",
+            },
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+            "summary": _ASCII_PACKET_TEXT,
+            "contributor_attestation": _ASCII_PACKET_TEXT,
+            "predecessor_submission_id": _UUID_INPUT,
+            "revision_preparation_id": _UUID_INPUT,
+            "revision_preparation_sha256": _SHA256_INPUT,
+        },
+        "required": ["task_id", "assignment_id", "zip_base64", "idempotency_key"],
+        "allOf": [
+            {
+                "if": {"required": ["revision_preparation_id"]},
+                "then": {"required": ["revision_preparation_sha256"]},
+            },
+            {
+                "if": {"required": ["revision_preparation_sha256"]},
+                "then": {"required": ["revision_preparation_id"]},
+            },
+        ],
+        "additionalProperties": False,
+    },
+    "preparations_list": {
+        "type": "object",
+        "properties": {
+            **_TASK_PAGE_PROPERTIES,
+            "cursor": {**_TASK_PAGE_PROPERTIES["cursor"], "maxLength": 512},
+        },
+        "required": ["task_id"],
+        "additionalProperties": False,
+    },
+    "preparation_get": {
+        "type": "object",
+        "properties": {"task_id": _UUID_INPUT, "preparation_id": _UUID_INPUT},
+        "required": ["task_id", "preparation_id"],
+        "additionalProperties": False,
+    },
+    "task_get": {
+        "type": "object",
+        "properties": _TASK_SELECTOR_PROPERTIES,
+        "required": ["task_id"],
+        "additionalProperties": False,
+    },
+    "task_submission_requirements_get": {
+        "type": "object",
+        "properties": _TASK_SELECTOR_PROPERTIES,
+        "required": ["task_id"],
+        "additionalProperties": False,
+    },
+    "task_screen": _task_transition_input(),
+    "task_release": _task_transition_input(),
+    "task_claim": _task_transition_input(),
+    "task_start": _task_transition_input(),
+    "task_work_context_get": {
+        "type": "object",
+        "properties": _TASK_SELECTOR_PROPERTIES,
+        "required": ["task_id"],
+        "additionalProperties": False,
+    },
+    "task_guide_document_content_get": {
+        "type": "object",
+        "properties": {"task_id": _UUID_INPUT, "document_id": _UUID_INPUT},
+        "required": ["task_id", "document_id"],
+        "additionalProperties": False,
+    },
+    "submission_create": {
+        "type": "object",
+        "properties": {
+            "task_id": _UUID_INPUT,
+            "body": {
+                "type": "object",
+                "properties": {
+                    "admission_id": _UUID_INPUT,
+                    "assignment_id": _UUID_INPUT,
+                    "predecessor_submission_id": {"anyOf": [_UUID_INPUT, {"type": "null"}]},
+                    "summary": {"type": ["string", "null"]},
+                    "contributor_attestation": {"type": ["string", "null"]},
+                },
+                "required": ["admission_id", "assignment_id"],
+                "additionalProperties": False,
+            },
+        },
+        "required": ["task_id", "body"],
+        "additionalProperties": False,
+    },
+    "task_submissions_list": {
+        "type": "object",
+        "properties": _TASK_PAGE_PROPERTIES,
+        "required": ["task_id"],
+        "additionalProperties": False,
+    },
+    "submission_get": {
+        "type": "object",
+        "properties": {"submission_id": _UUID_INPUT},
+        "required": ["submission_id"],
+        "additionalProperties": False,
+    },
+    "management_task_submissions_list": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT, **_TASK_PAGE_PROPERTIES},
+        "required": ["project_id", "task_id"],
+        "additionalProperties": False,
+    },
+    "management_submission_get": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT, "submission_id": _UUID_INPUT},
+        "required": ["project_id", "submission_id"],
+        "additionalProperties": False,
+    },
+    "management_task_work_context_get": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT, "task_id": _UUID_INPUT},
+        "required": ["project_id", "task_id"],
+        "additionalProperties": False,
+    },
+    "management_task_submission_requirements_get": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT, "task_id": _UUID_INPUT},
+        "required": ["project_id", "task_id"],
+        "additionalProperties": False,
+    },
+}
+TASK_EXECUTION_CONTRACT_NAMES = tuple(TASK_EXECUTION_INPUT_SCHEMAS)
+
+
 class ContractError(RuntimeError):
     """The reviewed packaged contract is absent or invalid."""
 
@@ -1291,3 +1470,20 @@ def checker_artifact_output_schema(name: str) -> dict[str, Any]:
 def checker_artifact_output_validator(name: str) -> Draft202012Validator:
     checker_artifact_output_schema(name)
     return _contract_output_validator(name)
+
+
+def task_execution_output_schema(name: str) -> dict[str, Any]:
+    """Load one reviewed task/submission response or the bounded binary projection."""
+    if name not in TASK_EXECUTION_INPUT_SCHEMAS:
+        raise ContractError("unknown task execution contract")
+    if name == "task_guide_document_content_get":
+        return GUIDE_DOCUMENT_CONTENT_OUTPUT_SCHEMA
+    return _contract_output_schema(name)
+
+
+def task_execution_output_validator(name: str) -> Draft202012Validator:
+    """Validate one task/submission response projection."""
+    return Draft202012Validator(
+        task_execution_output_schema(name),
+        format_checker=_OUTPUT_FORMAT_CHECKER,
+    )

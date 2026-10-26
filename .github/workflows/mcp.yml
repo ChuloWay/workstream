@@ -75,7 +75,7 @@ jobs:
               --header 'Content-Type: application/json' \
               --data '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
               http://127.0.0.1:18080/mcp \
-              | python -c 'import json, sys; tools = [tool["name"] for tool in json.load(sys.stdin)["result"]["tools"]]; assert len(tools) == len(set(tools)) == 90; assert tools[-43:] == ["workstream_project_guides_list", "workstream_project_guide_get", "workstream_guide_activate", "workstream_guide_activation_readiness_get", "workstream_guide_proposal_correct", "workstream_guide_correction_dispatch", "workstream_guide_post_policy_get", "workstream_guide_post_policy_approve", "workstream_guide_post_policy_correct", "workstream_guide_pre_submission_approve", "workstream_guide_proposal_get", "workstream_guide_document_upload", "workstream_guide_document_content_get", "workstream_guide_effective_submission_artifact_policy_get", "workstream_guide_pre_submit_checker_policy_get", "workstream_guide_setup_latest_get", "workstream_guide_submission_artifact_policies_list", "workstream_guide_submission_artifact_policy_create", "workstream_guide_submission_artifact_policy_get", "workstream_guide_submission_artifact_policy_update", "workstream_guide_sufficiency_reports_list", "workstream_guide_sufficiency_report_create", "workstream_guide_sufficiency_report_get", "workstream_guide_sufficiency_warnings_acknowledge", "workstream_submission_checker_runs_list", "workstream_submission_checker_runs_get", "workstream_project_checker_runs_list", "workstream_project_checker_runs_get", "workstream_checker_retry_sources_list", "workstream_checker_runs_retry", "workstream_post_submit_deliveries_list", "workstream_post_submit_deliveries_reconcile", "workstream_checker_registry_read", "workstream_checker_registry_register", "workstream_artifact_readiness_get", "workstream_artifact_bindings_list", "workstream_artifact_replicas_list", "workstream_artifact_receipts_list", "workstream_artifact_verification_job_get", "workstream_artifact_verification_job_retry", "workstream_artifact_recovery_attempt_get", "workstream_artifact_admission_usage_get", "workstream_artifact_audit_events_list"]'; then
+              | python -c 'import json, sys; tools = [tool["name"] for tool in json.load(sys.stdin)["result"]["tools"]]; assert len(tools) == len(set(tools)) == 108; assert tools[-18:] == ["workstream_preparation_create", "workstream_preparations_list", "workstream_preparation_get", "workstream_task_get", "workstream_task_submission_requirements_get", "workstream_task_screen", "workstream_task_release", "workstream_task_claim", "workstream_task_start", "workstream_task_work_context_get", "workstream_task_guide_document_content_get", "workstream_submission_create", "workstream_task_submissions_list", "workstream_submission_get", "workstream_management_task_submissions_list", "workstream_management_submission_get", "workstream_management_task_work_context_get", "workstream_management_task_submission_requirements_get"]'; then
               exit 0
             fi
             sleep 1
@@ -140,7 +140,8 @@ jobs:
         run: |
           set -euo pipefail
           export WORKSTREAM_MCP_OPENAPI_COMMAND="uv run --frozen python -c 'import json; from app.main import app; print(json.dumps(app.openapi()))'"
-          uv run --frozen pytest -q tests/test_contract_drift.py
+          uv run --frozen pytest -q tests/test_contract_drift.py \
+            tests/test_task_execution_contract_drift.py
 
       - name: Run real isolated API-to-MCP lifecycle parity
         working-directory: backend

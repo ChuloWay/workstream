@@ -296,11 +296,12 @@ Selected production request/completion composition and
 supported false-guide activation are implemented. A known pre-effect non-live REV refusal returns bounded OUTBOX retry after rollback; exhaustion dead-letters without automatic reopen. A setup-fault hold is future safety work because no current selected production result emits `task_setup_blocked`. Human review/revision, conditional fulfillment, operations and
 release proof remain later v0.1 work.
 
-The [independent MCP package](../mcp_server/README.md) implements ninety
+The [independent MCP package](../mcp_server/README.md) implements 108
 self-service, administrative access, actor/identity-lifecycle, project-shell,
 project-participation, guide-metadata, draft-policy, contributor-workspace,
 contribution-evidence, contribution-policy, complete guide-lifecycle,
-checker/delivery/registry and operator-artifact tools through WS-MCP-002-11. The
+checker/delivery/registry, operator-artifact, task-execution and submission tools
+through WS-MCP-002-12. The
 [Go CLI](../cli/README.md) provides caller-profile and exact-project authorization
 reads plus human self-profile editing, exact-project inspection and manager
 task queue/detail reads, contributor ready-work/instruction reads and public
@@ -697,8 +698,8 @@ cannot be reused as post-submission review-gate evidence. See the
   review and revision policy selection and completes the original 27-tool catalogue;
   WS-MCP-002-10 adds 20 workspace/evidence/policy bindings. WS-MCP-002-11 adds
   43 guide lifecycle, checker/delivery/registry and operator-artifact bindings.
-  Task execution/submissions, task operations/imports and assembled release
-  proof remain. This is still a custom
+  WS-MCP-002-12 adds 18 task execution, preparation, context and submission
+  bindings. Task operations/imports and assembled release proof remain. This is still a custom
   authentication adapter, not a public deployment or a certified release.
   The [CLI foundation](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-01.md)
   provides `whoami` and `project access PROJECT_ID` through those public REST

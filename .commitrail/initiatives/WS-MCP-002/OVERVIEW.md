@@ -14,20 +14,22 @@
 - Project participation: [Project-role grants](WS-MCP-002-07.md), merged in PR #644.
 - Guide declarations: [Guide declarations and draft metadata](WS-MCP-002-08.md), merged in PR #655.
 - Contributor workspace and policies: [Workspace and contribution-policy tools](WS-MCP-002-10.md), merged in PR #669.
-- Current change: [Guide, checker and artifact operations](WS-MCP-002-11.md).
-- Next usable boundary: WS-MCP-002-12 task execution and submissions.
+- Guide, checker and artifact operations: [WS-MCP-002-11](WS-MCP-002-11.md), merged in PR #685.
+- Current change: [Task execution and submissions](WS-MCP-002-12.md).
+- Next usable boundary: WS-MCP-002-13 task operations and imports.
 
 ## Current implementation
 
 [`mcp_server/`](../../../mcp_server/README.md) is an independently packaged
-Streamable HTTP adapter with ninety tools: three self-service tools for profile read,
+Streamable HTTP adapter with 108 tools: three self-service tools for profile read,
 profile update and exact-project authorization context, plus six administrative
 reads for permission/role definitions, grants and actor/identity projections, two
 administrative grant mutations, five actor/identity lifecycle mutations, two
 project-shell tools, five project-participation tools, two guide-metadata tools
 and two draft-policy tools, plus twenty contributor workspace, contribution
 evidence and contribution-policy tools, twenty-four complete guide-lifecycle
-tools, ten checker/delivery/registry tools and nine operator-artifact tools. It includes a container,
+tools, ten checker/delivery/registry tools, nine operator-artifact tools and
+eighteen task-execution/submission tools. It includes a container,
 selected response-schema validation and additive CI. Its integration tests
 exercise the installed adapter against the real Workstream API. Workstream
 still owns token verification and authorization. This is delivered packaging,
@@ -489,7 +491,8 @@ batches; row 11 combines the adjacent guide/checker/artifact work after the
 maintainer requested larger parallel PRs. `/api/v1/health` is excluded because it is operational liveness, not a
 user capability. Every batch preserves fixed routes, caller-token forwarding,
 selected OpenAPI contracts, no private imports and Workstream-owned authority.
-Release proof follows the assembled 128-tool product catalogue.
+WS-MCP-002-12 adds the eighteen task execution and submission bindings, bringing
+the catalogue to 108. Release proof follows the assembled 128-tool product catalogue.
 
 ## References
 

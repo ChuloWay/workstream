@@ -18,12 +18,15 @@ from workstream_mcp.schemas import (
     PROFILE_UPDATE_INPUT_SCHEMA,
     PROJECT_GRANT_INPUT_SCHEMAS,
     PROJECT_INPUT_SCHEMAS,
+    TASK_EXECUTION_CONTRACT_NAMES,
+    TASK_EXECUTION_INPUT_SCHEMAS,
     WORKSPACE_READ_INPUT_SCHEMAS,
     authorization_context_output_schema,
     checker_artifact_input_schema,
     guide_lifecycle_input_schema,
     profile_output_schema,
     profile_update_output_schema,
+    task_execution_output_schema,
 )
 from workstream_mcp.tools.checker_artifacts import TOOL_NAMES as CHECKER_ARTIFACT_TOOL_NAMES
 from workstream_mcp.tools.context import TOOL_NAME as CONTEXT_TOOL_NAME
@@ -34,6 +37,7 @@ from workstream_mcp.tools.profile import (
     get_definition,
     update_definition,
 )
+from workstream_mcp.tools.task_execution import TOOL_NAMES as TASK_EXECUTION_TOOL_NAMES
 
 
 def test_tool_definitions_are_closed_and_use_selected_outputs() -> None:
@@ -141,6 +145,7 @@ def test_mcp_tool_listing_exposes_exactly_the_chunk_catalogue(
         "workstream_guide_sufficiency_report_get",
         "workstream_guide_sufficiency_warnings_acknowledge",
         *CHECKER_ARTIFACT_TOOL_NAMES,
+        *TASK_EXECUTION_TOOL_NAMES,
     ]
     assert [item["inputSchema"] for item in listed] == [
         EMPTY_INPUT_SCHEMA,
@@ -161,6 +166,10 @@ def test_mcp_tool_listing_exposes_exactly_the_chunk_catalogue(
             checker_artifact_input_schema(name)
             for name in CHECKER_ARTIFACT_CONTRACT_NAMES
         ),
+        *(TASK_EXECUTION_INPUT_SCHEMAS[name] for name in TASK_EXECUTION_CONTRACT_NAMES),
+    ]
+    assert [item["outputSchema"] for item in listed[-18:]] == [
+        task_execution_output_schema(name) for name in TASK_EXECUTION_CONTRACT_NAMES
     ]
 
 

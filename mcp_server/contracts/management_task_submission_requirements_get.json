@@ -1,0 +1,764 @@
+{
+  "canonical_sha256": "de6a65accd7708dc34045b6a1404830d6ebf506e06e39e3db7d4bb0fd820b71e",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "ForbiddenArtifactRequirement": {
+        "additionalProperties": false,
+        "description": "Contributor-facing forbidden artifact rule from the locked effective policy.",
+        "properties": {
+          "pattern": {
+            "title": "Pattern",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "worker_facing_fix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Facing Fix"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "title": "ForbiddenArtifactRequirement",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "detail",
+          "error"
+        ],
+        "type": "object"
+      },
+      "ManagementTaskSubmissionRequirements": {
+        "additionalProperties": false,
+        "description": "Separate management requirements; no additional private fields are needed.",
+        "properties": {
+          "allowed_storage_schemes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Storage Schemes",
+            "type": "array"
+          },
+          "artifact_hash_algorithm": {
+            "const": "sha256",
+            "title": "Artifact Hash Algorithm",
+            "type": "string"
+          },
+          "artifact_hash_required": {
+            "title": "Artifact Hash Required",
+            "type": "boolean"
+          },
+          "attestation_terms": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Attestation Terms",
+            "type": "array"
+          },
+          "forbidden_artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ForbiddenArtifactRequirement"
+            },
+            "title": "Forbidden Artifacts",
+            "type": "array"
+          },
+          "guide_version": {
+            "pattern": "\\S",
+            "title": "Guide Version",
+            "type": "string"
+          },
+          "manifest_required": {
+            "title": "Manifest Required",
+            "type": "boolean"
+          },
+          "maximum_archive_entries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum Archive Entries"
+          },
+          "maximum_archive_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum Archive Size Bytes"
+          },
+          "maximum_file_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum File Size Bytes"
+          },
+          "maximum_package_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum Package Size Bytes"
+          },
+          "merge_algorithm_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merge Algorithm Version"
+          },
+          "packaging": {
+            "$ref": "#/components/schemas/SubmissionPackagingRequirements"
+          },
+          "policy_schema_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Schema Version"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "required_artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/RequiredArtifactRequirement"
+            },
+            "title": "Required Artifacts",
+            "type": "array"
+          },
+          "required_evidence": {
+            "items": {
+              "$ref": "#/components/schemas/RequiredEvidenceRequirement"
+            },
+            "title": "Required Evidence",
+            "type": "array"
+          },
+          "required_packet_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Packet Fields",
+            "type": "array"
+          },
+          "storage_reference_rules": {
+            "$ref": "#/components/schemas/StorageReferenceRules"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "project_id",
+          "guide_version",
+          "policy_schema_version",
+          "merge_algorithm_version",
+          "required_packet_fields",
+          "required_artifacts",
+          "required_evidence",
+          "forbidden_artifacts",
+          "attestation_terms",
+          "manifest_required",
+          "artifact_hash_required",
+          "artifact_hash_algorithm",
+          "allowed_storage_schemes",
+          "storage_reference_rules",
+          "maximum_file_size_bytes",
+          "maximum_package_size_bytes",
+          "maximum_archive_entries",
+          "maximum_archive_size_bytes",
+          "packaging"
+        ],
+        "title": "ManagementTaskSubmissionRequirements",
+        "type": "object"
+      },
+      "RequiredArtifactRequirement": {
+        "additionalProperties": false,
+        "description": "Contributor-facing required artifact rule from the locked effective policy.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "hash_required": {
+            "title": "Hash Required",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "path",
+          "hash_required",
+          "required"
+        ],
+        "title": "RequiredArtifactRequirement",
+        "type": "object"
+      },
+      "RequiredEvidenceRequirement": {
+        "additionalProperties": false,
+        "description": "Contributor-facing required evidence rule from the locked effective policy.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "hash_required": {
+            "title": "Hash Required",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "hash_required",
+          "required"
+        ],
+        "title": "RequiredEvidenceRequirement",
+        "type": "object"
+      },
+      "StorageReferenceRules": {
+        "additionalProperties": false,
+        "description": "Contributor-facing storage-reference constraints for staged artifacts.",
+        "properties": {
+          "allowed_storage_schemes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Storage Schemes",
+            "type": "array"
+          },
+          "allowed_uri_prefixes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Uri Prefixes",
+            "type": "array"
+          },
+          "credentials_allowed": {
+            "title": "Credentials Allowed",
+            "type": "boolean"
+          },
+          "fragments_allowed": {
+            "title": "Fragments Allowed",
+            "type": "boolean"
+          },
+          "path_traversal_allowed": {
+            "title": "Path Traversal Allowed",
+            "type": "boolean"
+          },
+          "query_strings_allowed": {
+            "title": "Query Strings Allowed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "allowed_storage_schemes",
+          "allowed_uri_prefixes",
+          "credentials_allowed",
+          "query_strings_allowed",
+          "fragments_allowed",
+          "path_traversal_allowed"
+        ],
+        "title": "StorageReferenceRules",
+        "type": "object"
+      },
+      "SubmissionPackagingRequirements": {
+        "additionalProperties": false,
+        "description": "Fixed packaging requirements from the historical effective policy.",
+        "properties": {
+          "allowed_package_formats": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "zip",
+                    "tar",
+                    "tar.gz",
+                    "tar.zst"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Package Formats"
+          },
+          "package_required": {
+            "title": "Package Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "package_required"
+        ],
+        "title": "SubmissionPackagingRequirements",
+        "type": "object"
+      }
+    }
+  },
+  "operation": {
+    "description": "Read exact management requirements under a covering Manager grant.",
+    "operationId": "get_management_task_submission_requirements_api_v1_projects__project_id__tasks__task_id__submission_requirements_get",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "project_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "task_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ManagementTaskSubmissionRequirements"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Resource not found.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "$ref": "#/components/schemas/ApiError"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              ]
+            }
+          }
+        },
+        "description": "Locked task context is missing or inconsistent.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Identity verification unavailable.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Get Management Task Submission Requirements",
+    "tags": [
+      "tasks"
+    ],
+    "x-workstream-action-id": "project.task.submission_requirements.read"
+  },
+  "schema_version": 1,
+  "source": {
+    "method": "GET",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/projects/{project_id}/tasks/{task_id}/submission-requirements",
+    "repository_sha": "f0431385573eb53353c5ffc3c6cdb6a93d206b73"
+  }
+}
