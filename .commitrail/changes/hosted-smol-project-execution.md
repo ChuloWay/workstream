@@ -24,7 +24,9 @@ PRE model access is unsupported: `configured_model_profile_selector` rejects mod
 
 - `deploy/hosted/compose.py`, `compose.yml`, selected provider overlays, `compose.trials.yml`, `preflight.py`, `checker-service.example.json`, `release.env.example` and `README.md`: replace the controller topology, validate native-node identity/readiness and preserve credential isolation.
 - `external_checkers/deploy/workstream-checker.service` and `external_checkers/README.md`: align the existing native service configuration and document operator-managed provisioning and shutdown.
-- `scripts/test_hosted_release_config.py` and existing focused deployment tests: exercise the rendered topology and meaningful refusal paths.
+- `scripts/verify_hosted_release_images.py`, `scripts/test_hosted_release_images.py`, `scripts/test_hosted_release_config.py` and existing focused deployment tests: qualify hosted backend images separately from native-node readiness, and exercise the rendered topology and meaningful refusal paths.
+- Existing `experiments/pilot04_external_checker_runtime/` public journey helpers and their focused `scripts/` tests: attach to the actual hosted API and durable workers, retain scoped fault injection and verify native acknowledgements without substituting an in-process API or recorded worker.
+- Owned disposable EC2 qualification resources, source-pinned release builds and an isolated AWS artifact namespace: exercise the rendered hosted release without modifying shared services or production state. Reuse the existing simulated RS256 issuer fixture and label its identity proof accurately.
 - `docs/decision_0014_external_service_adapter_convention.md`, `docs/architecture_checker_framework.md` and affected `docs/roadmap_status.md` claims: reconcile the intended hosted boundary and explicit evidence limits.
 - This combined change record.
 
@@ -32,7 +34,7 @@ PRE model access is unsupported: `configured_model_profile_selector` rejects mod
 
 - No runtime implementation changes in the PR #677 worktree, duplicate guest transport, fallback controller or provider implementation changes.
 - No new adapter convention, service locator, backend business policy, schema migration, auth/payment authority, PRE model entitlement or paid retry.
-- No EC2 mutation, shared service restart, `/etc/workstream` change, publication, activation, global cleanup or merge.
+- No shared service restart, `/etc/workstream` change, product deployment, cloud image publication, global cleanup or merge. Activation is limited to the owned disposable qualification database and artifact namespace; it does not activate the real pilot project.
 - Do not weaken existing credential, identity, material, deadline, cleanup or evidence checks to make a deployment fixture pass.
 
 ## Design and decisions
@@ -42,7 +44,18 @@ PRE model access is unsupported: `configured_model_profile_selector` rejects mod
 3. Keep model credentials exclusively in the existing trusted model proxy. The native node forwards only invocation-bound guest capability traffic through the PR #677 transport; the project image receives neither global sockets nor credentials.
 4. Replace runsc/image-inspection readiness with the existing typed project-execution health capability plus typed trusted-intake health. Validate configured Smol binary/guest/archive identities, native delegation and socket metadata without introducing a deployment controller. Configuration-only mode remains explicitly weaker than live readiness.
 5. One trusted `WORKSTREAM_DEPLOYMENT_ROOT` selector derives identical absolute data/socket/model/parser paths on host and clients, defaulting to `/var/lib/workstream`. The root must be canonical, private and owned by the exact service identity; config, provider credentials and executable/cache assets stay outside it. `WORKSTREAM_CHECKER_SERVICE_BINARY` selects one absolute native service artifact under its required digest. This supports independently owned deployments without a test-only controller or validation bypass.
-6. Operator provisioning and service lifecycle remain explicit. Compose startup validates the already-running native node; Compose shutdown drains producers/workers but does not stop an unrelated systemd unit. No command in this PR mutates the live proof node.
+6. Operator provisioning and service lifecycle remain explicit. Compose startup validates the already-running native node; Compose shutdown drains producers/workers but does not stop an unrelated systemd unit. Shared nodes remain untouched; qualification lifecycle is limited to the newly owned deployment.
+
+### Live model qualification authority
+
+The user authorized proceeding with US$10 for the required live model test after
+being told that an earlier setup charge remains unresolved. Enforce a separate
+hard 10,000,000,000-nanodollar ceiling for this qualification through the existing
+project budget and reservation ledger before dispatch. Preserve the earlier
+uncertain effect separately; do not mark it free, retry it, reset its accounting,
+or count it as reconciled. Record actual settled and outstanding reserved amounts
+for the new test. Stop paid dispatch on ambiguous delivery or exhausted budget;
+only the existing authorized recovery rules may resolve an effect.
 
 ## Acceptance criteria
 
