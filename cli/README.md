@@ -325,6 +325,40 @@ ARM64 and Windows ARM64 are not part of this first contract. Use the archive
 whose platform matches your host; a different architecture or OS will not run.
 There is no package-manager or automatic-update channel.
 
+### What publication means
+
+Users download from the Releases page, not from an Actions run. Maintainers
+create an approved annotated tag; GitHub Actions builds and tests all four
+platforms, assembles the archives and checksums, then waits for independent
+approval of the `cli-release` environment. Only after approval and successful
+publication do those files become public release downloads. A tag or green
+build alone is not a release. If no published CLI release is listed, use the
+source build below. Maintainers should follow the
+[release runbook](../docs/engineering/cli-release.md); users do not need to
+approve or run that workflow.
+
+### Verify your installation and connection
+
+After verifying and installing the archive as described below, run
+`workstream --version`. Configure `WORKSTREAM_API_URL` with your deployed API
+origin and supply `WORKSTREAM_TOKEN` through your existing secret environment
+mechanism, then run `workstream whoami` and `workstream me projects`.
+The first confirms an authenticated self-read; the second lists exact-grant
+project membership, which may legitimately be empty. Neither proves an entire
+task lifecycle or grants management authority. Do not put tokens in commands,
+screenshots or issue reports.
+
+The connected local CLI journey has separately exercised manager-authored
+setup, task work, ZIP intake, durable evaluation, unpaid automated acceptance
+and contribution evidence with PostgreSQL, MinIO and Celery; see
+[the journey evidence](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-43.md).
+That proof is not hosted deployment verification or proof of human review.
+The [capability ledger](../docs/roadmap_status.md) identifies those remaining
+product boundaries. The interactive workspace above is still read-only;
+explicit commands remain the interface for supported mutations.
+
+### Download and install
+
 Download the exact platform archive and `SHA256SUMS` from the same GitHub
 release over HTTPS. Compare the archive's SHA-256 with its exact filename line
 in `SHA256SUMS` before extracting. On Linux/macOS, for example:
