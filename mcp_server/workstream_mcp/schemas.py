@@ -8,6 +8,12 @@ from typing import Any, cast
 
 from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
 
+from workstream_mcp.limits import (
+    GUIDE_DOCUMENT_MAX_BASE64_CHARS,
+    GUIDE_DOCUMENT_MEDIA_TYPES,
+    SUBMISSION_BUNDLE_MAX_BASE64_CHARS,
+)
+
 EMPTY_INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {},
@@ -817,6 +823,184 @@ CONTRIBUTION_POLICY_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
 }
 
 
+_TASK_SELECTOR_PROPERTIES = {"task_id": _UUID_INPUT}
+_TASK_PAGE_PROPERTIES = {
+    **_TASK_SELECTOR_PROPERTIES,
+    "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+    "cursor": {"type": "string", "minLength": 1, "maxLength": 1024},
+}
+_TASK_TRANSITION_BODY = {
+    "type": "object",
+    "properties": {
+        "reason": {
+            "type": ["string", "null"],
+            "maxLength": 1000,
+            "pattern": r"^[^\u0000]*$",
+        }
+    },
+    "additionalProperties": False,
+}
+_ASCII_PACKET_TEXT = {
+    "type": "string",
+    "maxLength": 4_096,
+    "pattern": r"^[\u0020-\u007e]*$(?![\s\S])",
+}
+_SHA256_INPUT = {
+    "type": "string",
+    "pattern": r"^sha256:[0-9a-f]{64}$",
+    "minLength": 71,
+    "maxLength": 71,
+}
+
+
+def _task_transition_input() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            **_TASK_SELECTOR_PROPERTIES,
+            "body": _TASK_TRANSITION_BODY,
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+        },
+        "required": ["task_id", "idempotency_key"],
+        "additionalProperties": False,
+    }
+
+
+TASK_EXECUTION_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "preparation_create": {
+        "type": "object",
+        "properties": {
+            "task_id": _UUID_INPUT,
+            "assignment_id": _UUID_INPUT,
+            "zip_base64": {
+                "type": "string",
+                "minLength": 4,
+                "maxLength": SUBMISSION_BUNDLE_MAX_BASE64_CHARS,
+                "pattern": r"^[A-Za-z0-9+/]*={0,2}$",
+            },
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+            "summary": _ASCII_PACKET_TEXT,
+            "contributor_attestation": _ASCII_PACKET_TEXT,
+            "predecessor_submission_id": _UUID_INPUT,
+            "revision_preparation_id": _UUID_INPUT,
+            "revision_preparation_sha256": _SHA256_INPUT,
+        },
+        "required": ["task_id", "assignment_id", "zip_base64", "idempotency_key"],
+        "allOf": [
+            {
+                "if": {"required": ["revision_preparation_id"]},
+                "then": {"required": ["revision_preparation_sha256"]},
+            },
+            {
+                "if": {"required": ["revision_preparation_sha256"]},
+                "then": {"required": ["revision_preparation_id"]},
+            },
+        ],
+        "additionalProperties": False,
+    },
+    "preparations_list": {
+        "type": "object",
+        "properties": {
+            **_TASK_PAGE_PROPERTIES,
+            "cursor": {**_TASK_PAGE_PROPERTIES["cursor"], "maxLength": 512},
+        },
+        "required": ["task_id"],
+        "additionalProperties": False,
+    },
+    "preparation_get": {
+        "type": "object",
+        "properties": {"task_id": _UUID_INPUT, "preparation_id": _UUID_INPUT},
+        "required": ["task_id", "preparation_id"],
+        "additionalProperties": False,
+    },
+    "task_get": {
+        "type": "object",
+        "properties": _TASK_SELECTOR_PROPERTIES,
+        "required": ["task_id"],
+        "additionalProperties": False,
+    },
+    "task_submission_requirements_get": {
+        "type": "object",
+        "properties": _TASK_SELECTOR_PROPERTIES,
+        "required": ["task_id"],
+        "additionalProperties": False,
+    },
+    "task_screen": _task_transition_input(),
+    "task_release": _task_transition_input(),
+    "task_claim": _task_transition_input(),
+    "task_start": _task_transition_input(),
+    "task_work_context_get": {
+        "type": "object",
+        "properties": _TASK_SELECTOR_PROPERTIES,
+        "required": ["task_id"],
+        "additionalProperties": False,
+    },
+    "task_guide_document_content_get": {
+        "type": "object",
+        "properties": {"task_id": _UUID_INPUT, "document_id": _UUID_INPUT},
+        "required": ["task_id", "document_id"],
+        "additionalProperties": False,
+    },
+    "submission_create": {
+        "type": "object",
+        "properties": {
+            "task_id": _UUID_INPUT,
+            "body": {
+                "type": "object",
+                "properties": {
+                    "admission_id": _UUID_INPUT,
+                    "assignment_id": _UUID_INPUT,
+                    "predecessor_submission_id": {"anyOf": [_UUID_INPUT, {"type": "null"}]},
+                    "summary": {"type": ["string", "null"]},
+                    "contributor_attestation": {"type": ["string", "null"]},
+                },
+                "required": ["admission_id", "assignment_id"],
+                "additionalProperties": False,
+            },
+        },
+        "required": ["task_id", "body"],
+        "additionalProperties": False,
+    },
+    "task_submissions_list": {
+        "type": "object",
+        "properties": _TASK_PAGE_PROPERTIES,
+        "required": ["task_id"],
+        "additionalProperties": False,
+    },
+    "submission_get": {
+        "type": "object",
+        "properties": {"submission_id": _UUID_INPUT},
+        "required": ["submission_id"],
+        "additionalProperties": False,
+    },
+    "management_task_submissions_list": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT, **_TASK_PAGE_PROPERTIES},
+        "required": ["project_id", "task_id"],
+        "additionalProperties": False,
+    },
+    "management_submission_get": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT, "submission_id": _UUID_INPUT},
+        "required": ["project_id", "submission_id"],
+        "additionalProperties": False,
+    },
+    "management_task_work_context_get": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT, "task_id": _UUID_INPUT},
+        "required": ["project_id", "task_id"],
+        "additionalProperties": False,
+    },
+    "management_task_submission_requirements_get": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT, "task_id": _UUID_INPUT},
+        "required": ["project_id", "task_id"],
+        "additionalProperties": False,
+    },
+}
+TASK_EXECUTION_CONTRACT_NAMES = tuple(TASK_EXECUTION_INPUT_SCHEMAS)
+
+
 class ContractError(RuntimeError):
     """The reviewed packaged contract is absent or invalid."""
 
@@ -852,7 +1036,14 @@ def _selected_schema(document: dict[str, Any]) -> dict[str, Any]:
         schemas = components.get("schemas")
         responses = operation.get("responses")
         if isinstance(schemas, dict) and isinstance(responses, dict):
-            success = responses.get("200") or responses.get("201")
+            success = next(
+                (
+                    response
+                    for status, response in sorted(responses.items())
+                    if status.startswith("2") and isinstance(response, dict)
+                ),
+                None,
+            )
             content = success.get("content") if isinstance(success, dict) else None
             media = content.get("application/json") if isinstance(content, dict) else None
             selected = media.get("schema") if isinstance(media, dict) else None
@@ -861,8 +1052,7 @@ def _selected_schema(document: dict[str, Any]) -> dict[str, Any]:
     raise ContractError("contract does not contain an output schema")
 
 
-@lru_cache(maxsize=128)
-def _contract_output_schema(name: str) -> dict[str, Any]:
+def _contract_document(name: str) -> dict[str, Any]:
     filename = f"{name}.json"
     resource = files("workstream_mcp").joinpath(f"contracts/{filename}")
     try:
@@ -877,6 +1067,12 @@ def _contract_output_schema(name: str) -> dict[str, Any]:
         raise ContractError(f"packaged {name} contract is missing or invalid") from exc
     if not isinstance(document, dict):
         raise ContractError(f"{name} contract must be a JSON object")
+    return document
+
+
+@lru_cache(maxsize=128)
+def _contract_output_schema(name: str) -> dict[str, Any]:
+    document = _contract_document(name)
     schema = _selected_schema(document)
     try:
         Draft202012Validator.check_schema(schema)
@@ -1031,3 +1227,263 @@ def contribution_policy_output_schema(name: str) -> dict[str, Any]:
 def contribution_policy_output_validator(name: str) -> Draft202012Validator:
     contribution_policy_output_schema(name)
     return _contract_output_validator(name)
+
+
+GUIDE_LIFECYCLE_CONTRACT_NAMES = (
+    "project_guides_list",
+    "project_guide_get",
+    "guide_activate",
+    "guide_activation_readiness_get",
+    "guide_proposal_correct",
+    "guide_correction_dispatch",
+    "guide_post_policy_get",
+    "guide_post_policy_approve",
+    "guide_post_policy_correct",
+    "guide_pre_submission_approve",
+    "guide_proposal_get",
+    "guide_document_upload",
+    "guide_document_content_get",
+    "guide_effective_submission_artifact_policy_get",
+    "guide_pre_submit_checker_policy_get",
+    "guide_setup_latest_get",
+    "guide_submission_artifact_policies_list",
+    "guide_submission_artifact_policy_create",
+    "guide_submission_artifact_policy_get",
+    "guide_submission_artifact_policy_update",
+    "guide_sufficiency_reports_list",
+    "guide_sufficiency_report_create",
+    "guide_sufficiency_report_get",
+    "guide_sufficiency_warnings_acknowledge",
+)
+
+GUIDE_DOCUMENT_CONTENT_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "media_type": {"type": "string", "minLength": 1, "maxLength": 200},
+        "content_base64": {"type": "string", "minLength": 1},
+        "byte_count": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": r"^sha256:[0-9a-f]{64}$"},
+    },
+    "required": ["media_type", "content_base64", "byte_count", "sha256"],
+    "additionalProperties": False,
+}
+
+_GUIDE_DOCUMENT_UPLOAD_INPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "project_id": _UUID_INPUT,
+        "guide_id": _UUID_INPUT,
+        "document_id": _UUID_INPUT,
+        "media_type": {
+            "type": "string",
+            "enum": list(GUIDE_DOCUMENT_MEDIA_TYPES),
+        },
+        "content_base64": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": GUIDE_DOCUMENT_MAX_BASE64_CHARS,
+        },
+        "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+    },
+    "required": [
+        "project_id",
+        "guide_id",
+        "document_id",
+        "media_type",
+        "content_base64",
+        "idempotency_key",
+    ],
+    "additionalProperties": False,
+}
+
+
+def guide_lifecycle_input_schema(name: str) -> dict[str, Any]:
+    """Build a closed MCP input from one reviewed fixed-route snapshot."""
+    if name not in GUIDE_LIFECYCLE_CONTRACT_NAMES:
+        raise ContractError("unknown guide lifecycle contract")
+    if name == "guide_document_upload":
+        return _GUIDE_DOCUMENT_UPLOAD_INPUT_SCHEMA
+    document = _contract_document(name)
+    operation = document.get("operation")
+    components = document.get("components")
+    if not isinstance(operation, dict) or not isinstance(components, dict):
+        raise ContractError("guide lifecycle contract is missing operation metadata")
+    schemas = components.get("schemas")
+    if not isinstance(schemas, dict):
+        raise ContractError("guide lifecycle contract is missing component schemas")
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+    for parameter in operation.get("parameters", []):
+        if not isinstance(parameter, dict):
+            raise ContractError("guide lifecycle parameter is invalid")
+        location = parameter.get("in")
+        wire_name = parameter.get("name")
+        if not isinstance(wire_name, str):
+            raise ContractError("guide lifecycle parameter name is invalid")
+        if location == "header":
+            if wire_name.lower() != "idempotency-key":
+                continue
+            field_name = "idempotency_key"
+        elif location in {"path", "query"}:
+            field_name = wire_name
+        else:
+            continue
+        raw_schema = parameter.get("schema")
+        if not isinstance(raw_schema, dict):
+            raise ContractError("guide lifecycle parameter schema is invalid")
+        properties[field_name] = _resolve_schema_refs(raw_schema, schemas)
+        if parameter.get("required") is True or field_name == "idempotency_key":
+            required.append(field_name)
+    request_body = operation.get("requestBody")
+    if isinstance(request_body, dict):
+        content = request_body.get("content")
+        media = content.get("application/json") if isinstance(content, dict) else None
+        raw_schema = media.get("schema") if isinstance(media, dict) else None
+        if isinstance(raw_schema, dict):
+            properties["body"] = _resolve_schema_refs(raw_schema, schemas)
+            if request_body.get("required") is True:
+                required.append("body")
+    result: dict[str, Any] = {
+        "type": "object",
+        "properties": properties,
+        "additionalProperties": False,
+    }
+    if required:
+        result["required"] = list(dict.fromkeys(required))
+    Draft202012Validator.check_schema(result)
+    return result
+
+
+def guide_lifecycle_output_schema(name: str) -> dict[str, Any]:
+    if name not in GUIDE_LIFECYCLE_CONTRACT_NAMES:
+        raise ContractError("unknown guide lifecycle contract")
+    if name == "guide_document_content_get":
+        return GUIDE_DOCUMENT_CONTENT_OUTPUT_SCHEMA
+    schema = _contract_output_schema(name)
+    if schema.get("type") == "array":
+        return {
+            "type": "object",
+            "properties": {"items": schema},
+            "required": ["items"],
+            "additionalProperties": False,
+        }
+    return schema
+
+
+def guide_lifecycle_output_validator(name: str) -> Draft202012Validator:
+    return Draft202012Validator(
+        guide_lifecycle_output_schema(name),
+        format_checker=_OUTPUT_FORMAT_CHECKER,
+    )
+
+
+CHECKER_ARTIFACT_CONTRACT_NAMES = (
+    "submission_checker_runs_list",
+    "submission_checker_runs_get",
+    "project_checker_runs_list",
+    "project_checker_runs_get",
+    "checker_retry_sources_list",
+    "checker_runs_retry",
+    "post_submit_deliveries_list",
+    "post_submit_deliveries_reconcile",
+    "checker_registry_read",
+    "checker_registry_register",
+    "artifact_readiness_get",
+    "artifact_bindings_list",
+    "artifact_replicas_list",
+    "artifact_receipts_list",
+    "artifact_verification_job_get",
+    "artifact_verification_job_retry",
+    "artifact_recovery_attempt_get",
+    "artifact_admission_usage_get",
+    "artifact_audit_events_list",
+)
+
+
+@lru_cache(maxsize=32)
+def checker_artifact_input_schema(name: str) -> dict[str, Any]:
+    """Build a closed MCP input from one reviewed public operation."""
+    if name not in CHECKER_ARTIFACT_CONTRACT_NAMES:
+        raise ContractError("unknown checker or artifact contract")
+    document = _contract_document(name)
+    operation = document.get("operation")
+    components = document.get("components")
+    if not isinstance(operation, dict) or not isinstance(components, dict):
+        raise ContractError(f"{name} contract is missing its operation")
+    schemas = components.get("schemas")
+    if not isinstance(schemas, dict):
+        raise ContractError(f"{name} contract is missing schemas")
+
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+    parameters = operation.get("parameters", [])
+    if not isinstance(parameters, list):
+        raise ContractError(f"{name} parameters are invalid")
+    for parameter in parameters:
+        if not isinstance(parameter, dict):
+            raise ContractError(f"{name} parameter is invalid")
+        location = parameter.get("in")
+        parameter_name = parameter.get("name")
+        if location == "header":
+            if parameter_name == "Idempotency-Key":
+                properties["idempotency_key"] = _IDEMPOTENCY_KEY_INPUT
+                if parameter.get("required") is True:
+                    required.append("idempotency_key")
+            continue
+        if location not in {"path", "query"} or not isinstance(parameter_name, str):
+            continue
+        parameter_schema = parameter.get("schema")
+        if not isinstance(parameter_schema, dict):
+            raise ContractError(f"{name} parameter schema is invalid")
+        properties[parameter_name] = _resolve_schema_refs(parameter_schema, schemas)
+        if parameter.get("required") is True:
+            required.append(parameter_name)
+
+    request_body = operation.get("requestBody")
+    if isinstance(request_body, dict):
+        content = request_body.get("content")
+        media = content.get("application/json") if isinstance(content, dict) else None
+        body_schema = media.get("schema") if isinstance(media, dict) else None
+        if not isinstance(body_schema, dict):
+            raise ContractError(f"{name} request body schema is invalid")
+        properties["body"] = _resolve_schema_refs(body_schema, schemas)
+        if request_body.get("required") is True:
+            required.append("body")
+
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": properties,
+        "additionalProperties": False,
+    }
+    if required:
+        schema["required"] = required
+    Draft202012Validator.check_schema(schema)
+    return schema
+
+
+def checker_artifact_output_schema(name: str) -> dict[str, Any]:
+    if name not in CHECKER_ARTIFACT_CONTRACT_NAMES:
+        raise ContractError("unknown checker or artifact contract")
+    return _contract_output_schema(name)
+
+
+def checker_artifact_output_validator(name: str) -> Draft202012Validator:
+    checker_artifact_output_schema(name)
+    return _contract_output_validator(name)
+
+
+def task_execution_output_schema(name: str) -> dict[str, Any]:
+    """Load one reviewed task/submission response or the bounded binary projection."""
+    if name not in TASK_EXECUTION_INPUT_SCHEMAS:
+        raise ContractError("unknown task execution contract")
+    if name == "task_guide_document_content_get":
+        return GUIDE_DOCUMENT_CONTENT_OUTPUT_SCHEMA
+    return _contract_output_schema(name)
+
+
+def task_execution_output_validator(name: str) -> Draft202012Validator:
+    """Validate one task/submission response projection."""
+    return Draft202012Validator(
+        task_execution_output_schema(name),
+        format_checker=_OUTPUT_FORMAT_CHECKER,
+    )

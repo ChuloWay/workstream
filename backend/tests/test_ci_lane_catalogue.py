@@ -65,6 +65,24 @@ def test_architecture_inspections_share_capacity_without_losing_nodes() -> None:
 
 def test_checker_delivery_and_routing_preparation_partition_every_node_once() -> None:
     delivery = {
+        "tests/checkers_model_calls/test_composed_execution.py",
+        "tests/checkers_model_calls/test_model_call_contract.py",
+        "tests/checkers_model_calls/test_model_call_transactions_postgresql.py",
+        "tests/checkers_model_calls/test_model_invocation_grants_postgresql.py",
+        "tests/checkers_model_calls/test_model_shared_setup_postgresql.py",
+        "tests/checkers_model_calls/test_model_terminal_authority_postgresql.py",
+        "tests/checkers_model_calls/test_model_usage_inspection.py",
+        "tests/checkers_model_calls/test_model_runtime.py",
+        "tests/checkers_model_calls/test_proxy_orchestration.py",
+        "tests/checkers_model_calls/test_public_api.py",
+        "tests/checkers_model_calls/test_setup_model_handler.py",
+        "tests/checkers_model_calls/test_setup_model_handler_postgresql.py",
+        "tests/checkers_model_calls/test_setup_model_proxy_transport.py",
+        "tests/checkers_model_calls/test_setup_output_custody.py",
+        "tests/checkers/model_provider/test_openai_responses.py",
+        "tests/checkers/external/test_model_transport.py",
+        "tests/checkers/external/test_model_proxy_transport.py",
+        "tests/authorization/checker_models/test_contracts.py",
         "tests/checkers/default/test_contract.py",
         "tests/checkers/default/test_execution.py",
         "tests/checkers/external/test_contracts.py",
@@ -268,12 +286,12 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
     """A catalogue-internal move across semantic families must fail this contract."""
     expected = {
         "shared": (
-            260,
-            "2fe14cb5b5987c540fc30a153a2429adc16243b55aca0e565892338c306282dd",
+            261,
+            "d903ceb93c8f54c401100a58226909458c4d41d10fd618421d8d0d1ec78f0c07",
         ),
         "project": (
-            213,
-            "3c2477009349137e7aefd268294a811c16ee8b2ffff23d5aa513f4b479b1889d",
+            231,
+            "e068985c9983114786ca11ef4a42f417845ec91cb81c71572e879ee0e473e42b",
         ),
         "task": (
             95,
@@ -345,9 +363,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 213
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 231
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "41e0285a424449b5d639407cfd4ca5a4ac1065baa8057198417274d310adc3a8"
+        "8578f3096122628d1a1e51ac60d03838a2a125d762867d77fdd335ed98054404"
     )
 
 

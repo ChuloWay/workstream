@@ -1,60 +1,68 @@
 """Authorization application adapters and same-owner composition."""
 
 import json
-
-from app.modules.authorization.domain.post_submit_routing import (
-    AutomatedAcceptanceConsequence,
-    CheckerRemediationConsequence, CheckerExhaustionConsequence,
-    HumanAdmissionConsequence,
-    PostSubmitRoutingResourceContext,
-)
-from app.modules.authorization.post_submit_routing_authorization import (
-    PostSubmitRoutingAuthorization,
-)
-from app.modules.tasks.api.routing_outcome import RoutingAuthorityFacts
-from app.modules.authorization.runtime import PreparedAuthorizationHandleInvalid
-
-from app.adapters.auth.assignment_invalidation_publication import assignment_invalidation_publication
-from app.modules.projects.api.guide_activation import GuideActivationAuthorizationPort
 from contextlib import asynccontextmanager
 from uuid import UUID, uuid5
-from app.modules.actors.api import ServiceIdentity
-from app.modules.authorization.api import (
-    ActorIdentityFacts, ActorKind, AuthorizationDenied, ProjectGuideCompilationAuthorizationPort,
-)
-from app.modules.authorization.api.guide_proposal_review import GuideProposalAuthorizationPort
-from app.modules.authorization.api.post_policy import PostPolicyAuthorizationPort
-from app.modules.authorization.api.outbox_dispatch import OutboxDispatchAuthorizationPort
-from app.modules.authorization.guide_compilation import ProjectGuideCompilationAuthorizationAdapter
-from app.modules.authorization.prepared import fixed_service_prepared_authorization
-from app.modules.authorization.runtime import PreparedAuthorizationUnsupported
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.auth.contribution_policies import ContributionPolicyAuthorization
-from app.modules.authorization.contribution_policy_authorization import (
-    ContributionPolicyAuthorizationAdapter,
-)
-
 from app.adapters.auth.adapter_bindings import CompensationAdapterBindingAuthorization
+from app.adapters.auth.assignment_invalidation_publication import (
+    assignment_invalidation_publication,
+)
+from app.adapters.auth.contribution_policies import ContributionPolicyAuthorization
+from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.adapter_binding_authorization import (
     AdapterBindingAuthorizationAdapter,
 )
-from app.modules.authorization.project_setup_finalization import SetupFinalizationAuthorization
-from app.modules.authorization.kernel import AuthorizationService
+from app.modules.authorization.api import (
+    ActorIdentityFacts,
+    ActorKind,
+    AuthorizationDenied,
+    ProjectGuideCompilationAuthorizationPort,
+)
+from app.modules.authorization.api.guide_proposal_review import GuideProposalAuthorizationPort
+from app.modules.authorization.api.outbox_dispatch import OutboxDispatchAuthorizationPort
+from app.modules.authorization.api.post_policy import PostPolicyAuthorizationPort
 from app.modules.authorization.artifact_operator_authorization import (
     ArtifactOperatorReadAuthorization,
     ArtifactOperatorRetryAuthorization,
 )
-from app.modules.authorization.prepared import PreparedAuthorizationService
-from app.modules.authorization.repository import AdminAuthorizationRepository
-from app.modules.authorization.runtime import AuthorizationContext
-from app.modules.authorization.task_authorization import PreparedTaskAuthorization
-from app.modules.authorization.task_import_sources import PreparedTaskImportSourceAuthorization
+from app.modules.authorization.contribution_policy_authorization import (
+    ContributionPolicyAuthorizationAdapter,
+)
+from app.modules.authorization.domain.post_submit_routing import (
+    AutomatedAcceptanceConsequence,
+    CheckerExhaustionConsequence,
+    CheckerRemediationConsequence,
+    HumanAdmissionConsequence,
+    PostSubmitRoutingResourceContext,
+)
+from app.modules.authorization.guide_compilation import ProjectGuideCompilationAuthorizationAdapter
 from app.modules.authorization.guide_compilation_projections import (
     ArtifactPolicyProjectionAuthorization,
     GuideSufficiencyProjectionAuthorization,
 )
+from app.modules.authorization.kernel import AuthorizationService
+from app.modules.authorization.post_submit_routing_authorization import (
+    PostSubmitRoutingAuthorization,
+)
+from app.modules.authorization.prepared import (
+    PreparedAuthorizationService,
+    fixed_service_prepared_authorization,
+)
+from app.modules.authorization.project_setup_finalization import SetupFinalizationAuthorization
+from app.modules.authorization.repository import AdminAuthorizationRepository
+from app.modules.authorization.runtime import (
+    AuthorizationContext,
+    PreparedAuthorizationHandleInvalid,
+    PreparedAuthorizationUnsupported,
+    ServiceAuthorizationContext,
+)
+from app.modules.authorization.task_authorization import PreparedTaskAuthorization
+from app.modules.authorization.task_import_sources import PreparedTaskImportSourceAuthorization
+from app.modules.projects.api.guide_activation import GuideActivationAuthorizationPort
+from app.modules.tasks.api.routing_outcome import RoutingAuthorityFacts
 
 
 def artifact_operator_read_authorization(
@@ -96,7 +104,9 @@ def task_import_source_authorization(
 
 def checker_retry_authorization(session: AsyncSession, context: AuthorizationContext):
     """Compose one hidden retry through canonical prepared Operator authority."""
-    from app.modules.authorization.checker_retry_authorization import PreparedCheckerRetryAuthorization
+    from app.modules.authorization.checker_retry_authorization import (
+        PreparedCheckerRetryAuthorization,
+    )
     return PreparedCheckerRetryAuthorization(session, context)
 
 
@@ -134,6 +144,69 @@ def checker_registry_authorization(
     kernel = AuthorizationService(session, context, admin_repository=repository)
     prepared = PreparedAuthorizationService(session, context, kernel, repository)
     return ExternalCheckerRegistryAuthorizationAdapter(kernel, prepared)
+
+
+def checker_model_authorization(session: AsyncSession, context: AuthorizationContext):
+    """Compose exact project-model authority using the existing AUTH/PREP graph."""
+    from app.modules.authorization.model_usage_authorization import CheckerModelAuthorization
+
+    repository = AdminAuthorizationRepository(session)
+    revalidate = None
+    if isinstance(context, ServiceAuthorizationContext):
+        from app.modules.authorization.prepared import fixed_service_context_revalidator
+
+        if context.service_identity not in {
+            ServiceIdentity.CHECKER_POST_SUBMIT,
+            ServiceIdentity.PROJECT_SETUP,
+        }:
+            raise TypeError("model usage service identity is unsupported")
+        revalidate = fixed_service_context_revalidator(repository, context.service_identity)
+    kernel = AuthorizationService(
+        session, context, admin_repository=repository, revalidate_service=revalidate,
+    )
+    prepared = PreparedAuthorizationService(session, context, kernel, repository)
+    return CheckerModelAuthorization(kernel, prepared)
+
+
+async def checker_model_service_authorization(session: AsyncSession, request_id: UUID):
+    """Resolve the fixed POST checker principal within the caller's transaction."""
+    from app.modules.authorization.prepared import fixed_service_authorization_context
+
+    context = await fixed_service_authorization_context(
+        session, ServiceIdentity.CHECKER_POST_SUBMIT, request_id, request_id,
+    )
+    return checker_model_authorization(session, context)
+
+
+async def setup_model_service_authorization(session: AsyncSession, request_id: UUID):
+    """Resolve the fixed PROJECT_SETUP principal for one setup model effect."""
+    from app.modules.authorization.prepared import fixed_service_authorization_context
+
+    context = await fixed_service_authorization_context(
+        session,
+        ServiceIdentity.PROJECT_SETUP,
+        request_id,
+        uuid5(request_id, "setup-model-authority"),
+    )
+    return checker_model_authorization(session, context)
+
+
+def checker_output_write_authorization(session: AsyncSession):
+    """Compose private model-evidence admission and recovery authority."""
+    from app.modules.authorization.checker_output_authorization import (
+        PreparedCheckerOutputWriteAuthorization,
+    )
+
+    return PreparedCheckerOutputWriteAuthorization(session)
+
+
+def checker_output_binding_authorization(session: AsyncSession):
+    """Compose verified call-evidence publication authority."""
+    from app.modules.authorization.checker_output_authorization import (
+        PreparedCheckerOutputBindingAuthorization,
+    )
+
+    return PreparedCheckerOutputBindingAuthorization(session)
 
 
 def guide_sufficiency_projection_authorization(
@@ -183,19 +256,19 @@ def contribution_read_authorization(session: AsyncSession, context: Authorizatio
 
 
 __all__ = (
-    "assignment_invalidation_publication",
-    "task_authorization",
-    "task_import_source_authorization",
-    "checker_registry_authorization",
-    "guide_compilation_request_authority",
-    "guide_compilation_execution_authority",
-    "ContributionPolicyAuthorization",
-    "contribution_policy_authorization",
     "CompensationAdapterBindingAuthorization",
-    "compensation_adapter_binding_authorization",
+    "ContributionPolicyAuthorization",
     "artifact_policy_projection_authorization",
+    "assignment_invalidation_publication",
+    "checker_registry_authorization",
+    "compensation_adapter_binding_authorization",
+    "contribution_policy_authorization",
+    "guide_compilation_execution_authority",
+    "guide_compilation_request_authority",
     "guide_sufficiency_projection_authorization",
     "setup_finalization_authorization",
+    "task_authorization",
+    "task_import_source_authorization",
 )
 
 
@@ -238,7 +311,9 @@ def guide_proposal_authorization(
     session: AsyncSession, context: AuthorizationContext,
 ) -> GuideProposalAuthorizationPort:
     """Bind the public proposal authority port to the canonical request adapter."""
-    from app.modules.authorization.guide_proposal_authorization import GuideProposalAuthorizationAdapter
+    from app.modules.authorization.guide_proposal_authorization import (
+        GuideProposalAuthorizationAdapter,
+    )
 
     return GuideProposalAuthorizationAdapter(session, context)
 
@@ -284,35 +359,45 @@ def guide_activation_authorization(
     session: AsyncSession, context: AuthorizationContext,
 ) -> GuideActivationAuthorizationPort:
     """Compose live manager authority for the sole complete-guide operation."""
-    from app.modules.authorization.guide_activation_authorization import GuideActivationAuthorizationAdapter
+    from app.modules.authorization.guide_activation_authorization import (
+        GuideActivationAuthorizationAdapter,
+    )
 
     return GuideActivationAuthorizationAdapter(session, context)
 
 
 def outbox_dispatch_authorization(session: AsyncSession) -> "OutboxDispatchAuthorizationPort":
     """Compose the one fixed dispatcher through canonical AUTH/PREP."""
-    from app.modules.authorization.outbox_dispatch_authorization import OutboxDispatchAuthorizationAdapter
+    from app.modules.authorization.outbox_dispatch_authorization import (
+        OutboxDispatchAuthorizationAdapter,
+    )
 
     return OutboxDispatchAuthorizationAdapter(session)
 
 
 def assignment_invalidation_authorization(session: AsyncSession):
     """Compose the exact reconciler through canonical fixed-service PREP."""
-    from app.modules.authorization.assignment_invalidation_authorization import AssignmentInvalidationAuthorizationAdapter
+    from app.modules.authorization.assignment_invalidation_authorization import (
+        AssignmentInvalidationAuthorizationAdapter,
+    )
 
     return AssignmentInvalidationAuthorizationAdapter(session)
 
 
 def revision_expiry_authorization(session: AsyncSession):
     """Bind TASK's deadline effect to canonical fixed-service AUTH."""
-    from app.modules.authorization.revision_expiry_authorization import RevisionExpiryAuthorizationAdapter
+    from app.modules.authorization.revision_expiry_authorization import (
+        RevisionExpiryAuthorizationAdapter,
+    )
 
     return RevisionExpiryAuthorizationAdapter(session)
 
 
 def revision_recovery_authorization(session: AsyncSession):
     """Bind retained-window recovery to canonical fixed-service AUTH."""
-    from app.modules.authorization.revision_recovery_authorization import RevisionRecoveryAuthorizationAdapter
+    from app.modules.authorization.revision_recovery_authorization import (
+        RevisionRecoveryAuthorizationAdapter,
+    )
 
     return RevisionRecoveryAuthorizationAdapter(session)
 
@@ -411,7 +496,9 @@ def selected_pre_submit_authority(session):
 
 def post_submit_materialization_authority(session):
     """Compose the separate fixed ART materializer principal."""
-    from app.modules.authorization.post_submit_authorization import PostSubmitMaterializationAuthorization
+    from app.modules.authorization.post_submit_authorization import (
+        PostSubmitMaterializationAuthorization,
+    )
     return PostSubmitMaterializationAuthorization(session)
 
 

@@ -1,38 +1,40 @@
 """Celery composition for automatic unified project-guide compilation."""
 
-from celery.utils.log import get_task_logger
 from functools import partial
 from pathlib import Path
+
+from celery.utils.log import get_task_logger
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.adapters.project_agents import (
-    RETAINED_OPENAI_GUIDE_RUNTIME_KEY,
-    create_guide_runtime_cleanup_factory,
-    create_project_guide_runtime,
-    build_project_guide_adapter_profile,
+from app.adapters.artifacts import guide_document_access_runtime, guide_document_manifest_port
+from app.adapters.auth import (
+    artifact_policy_projection_authorization,
+    guide_compilation_execution_authority,
+    guide_compilation_request_authority,
+    guide_sufficiency_projection_authorization,
+    setup_finalization_authorization,
 )
+from app.adapters.checkers import external_checker_capability_projection, model_profile_reader
 from app.adapters.guide_document_tools import (
     GUIDE_DOCUMENT_PARSER_PROVIDER_KEY,
     guide_document_parser_factory,
+)
+from app.adapters.project_agents import (
+    RETAINED_OPENAI_GUIDE_RUNTIME_KEY,
+    build_project_guide_adapter_profile,
+    create_guide_runtime_cleanup_factory,
+    create_project_guide_runtime,
+)
+from app.adapters.project_agents.setup_model_proxy import setup_model_session_factory
+from app.adapters.projects import (
+    project_guide_compilation_delivery_port,
+    project_guide_document_tools_factory,
 )
 from app.core.config import get_settings
 from app.core.project_agents import (
     project_guide_runtime_configuration,
 )
 from app.db.session import get_database_url
-from app.adapters.auth import (
-    guide_compilation_request_authority,
-    guide_compilation_execution_authority,
-    guide_sufficiency_projection_authorization,
-    artifact_policy_projection_authorization,
-    setup_finalization_authorization,
-)
-from app.adapters.projects import (
-    project_guide_compilation_delivery_port,
-    project_guide_document_tools_factory,
-)
-from app.adapters.checkers import external_checker_capability_projection
-from app.adapters.artifacts import guide_document_manifest_port, guide_document_access_runtime
 from app.modules.projects.api.guide_compilation import (
     ProjectGuideCompilationDelivery,
     ProjectGuideCompilationDeliveryError,
@@ -64,6 +66,10 @@ async def _coordinator(session_factory):
                 timeout_seconds=30.0,
             ).create(GUIDE_DOCUMENT_PARSER_PROVIDER_KEY),
         ),
+        model_session_factory=setup_model_session_factory(
+            sessions=session_factory,
+            socket_path=settings.checker_model_proxy_socket,
+        ),
         checker_capabilities=capabilities,
         request_authority=guide_compilation_request_authority,
         execution_authority=guide_compilation_execution_authority,
@@ -73,6 +79,7 @@ async def _coordinator(session_factory):
                 build_project_guide_adapter_profile, settings.project_agent_runtime
             ),
         ),
+        model_profiles=model_profile_reader,
         runtime_factory=create_project_guide_runtime,
         sufficiency_authorization_factory=guide_sufficiency_projection_authorization,
         policy_authorization_factory=artifact_policy_projection_authorization,

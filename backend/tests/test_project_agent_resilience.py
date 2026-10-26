@@ -323,13 +323,17 @@ async def test_open_circuit_prevents_product_fence_and_resource_allocation(monke
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-only")
     monkeypatch.setattr(module, "project_guide_compilation_prompt_bytes", lambda _: b"manifest")
     calls = []
+    runtime_configuration = configuration()
 
     class Backend:
         async def load(self, attempt):
-            return SimpleNamespace(classification=CompilationRecoveryClassification.RESERVED)
+            return SimpleNamespace(
+                classification=CompilationRecoveryClassification.RESERVED,
+                runtime_configuration=runtime_configuration,
+            )
 
         async def context(self, state):
-            return SimpleNamespace(runtime_configuration=configuration())
+            return SimpleNamespace(runtime_configuration=runtime_configuration)
 
         async def fence(self, state):
             calls.append("fence")

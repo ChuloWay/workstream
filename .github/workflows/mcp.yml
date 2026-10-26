@@ -75,7 +75,7 @@ jobs:
               --header 'Content-Type: application/json' \
               --data '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
               http://127.0.0.1:18080/mcp \
-              | python -c 'import json, sys; tools = [tool["name"] for tool in json.load(sys.stdin)["result"]["tools"]]; assert len(tools) == len(set(tools)) == 47; assert tools[-20:] == ["workstream_actor_projects_list", "workstream_actor_assignments_list", "workstream_actor_submissions_list", "workstream_actor_summary_get", "workstream_contributions_list", "workstream_project_contributions_export", "workstream_project_submissions_list", "workstream_project_assignments_list", "workstream_project_summary_get", "workstream_project_task_import_batches_list", "workstream_project_preparations_list", "workstream_active_guide_get", "workstream_ready_tasks_list", "workstream_contribution_policies_list", "workstream_contribution_policy_current_get", "workstream_contribution_policy_get", "workstream_contribution_policy_create", "workstream_contribution_policy_update", "workstream_contribution_policy_publish", "workstream_contribution_policy_retire"]'; then
+              | python -c 'import json, sys; tools = [tool["name"] for tool in json.load(sys.stdin)["result"]["tools"]]; assert len(tools) == len(set(tools)) == 108; assert tools[-18:] == ["workstream_preparation_create", "workstream_preparations_list", "workstream_preparation_get", "workstream_task_get", "workstream_task_submission_requirements_get", "workstream_task_screen", "workstream_task_release", "workstream_task_claim", "workstream_task_start", "workstream_task_work_context_get", "workstream_task_guide_document_content_get", "workstream_submission_create", "workstream_task_submissions_list", "workstream_submission_get", "workstream_management_task_submissions_list", "workstream_management_submission_get", "workstream_management_task_work_context_get", "workstream_management_task_submission_requirements_get"]'; then
               exit 0
             fi
             sleep 1
@@ -140,7 +140,8 @@ jobs:
         run: |
           set -euo pipefail
           export WORKSTREAM_MCP_OPENAPI_COMMAND="uv run --frozen python -c 'import json; from app.main import app; print(json.dumps(app.openapi()))'"
-          uv run --frozen pytest -q tests/test_contract_drift.py
+          uv run --frozen pytest -q tests/test_contract_drift.py \
+            tests/test_task_execution_contract_drift.py
 
       - name: Run real isolated API-to-MCP lifecycle parity
         working-directory: backend

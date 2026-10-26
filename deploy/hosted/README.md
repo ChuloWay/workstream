@@ -72,10 +72,14 @@ docker build --file docker/checker/Dockerfile.release \
 Both Dockerfiles pin their base images. Each backend build requires one exact SDK
 environment and installs only its committed `agents` or `omnicore` resolution,
 without the development extra. The image records that choice in a root-owned
-read-only marker; startup rejects a configured inference runtime that does not
-match it before reading the provider credential. `manager_authored` is accepted
-in either image with the exact `none/none/none` model tuple and reads no provider
-credential. The backend image
+read-only marker. Select the worker image that matches the configured setup SDK.
+For every model-proxy-enabled release, also publish the `agents` build separately as
+`WORKSTREAM_MODEL_PROXY_IMAGE`: the dedicated trusted proxy uses its pinned
+OpenAI 3.x input-count and Responses dependencies for both setup SDKs and POST
+checkers. The proxy rejects any non-`agents` image before reading the provider
+credential. `manager_authored` is accepted in either worker image with the exact
+`none/none/none` setup tuple; `WORKSTREAM_MODEL_PROXY_ENABLED` independently
+decides whether approved POST images can use the proxy. The backend image
 also installs the official Roles Anywhere helper 1.8.5 at its fixed path, with
 architecture-specific hashes checked during the build and image proof. The
 checker-service build compiles the committed Rust lock and copies the pinned
@@ -102,7 +106,12 @@ that no smoke container owned by that run remains after inspection or timeout.
 
 Install and configure Docker and gVisor using the approved host process. Confirm
 that Docker reports a `runsc` runtime. Installation and daemon configuration are
-outside this repository configuration.
+outside this repository configuration. When model access is enabled, the outer
+checker runtime must include exactly `--host-uds=open` so its invocation-local
+Unix socket works under gVisor; full preflight checks Docker's reported runtime
+arguments. This permits the mounted socket, not network access or a global proxy
+mount inside the image. A separate trial runtime remains configured with host
+Unix sockets disabled.
 
 The hosted profile fixes backend processes at UID/GID 10001 and the parser broker
 at UID 10002 with the shared client group 10001 after its identity bootstrap.
@@ -112,11 +121,13 @@ create the fixed private directories with these exact identities:
 ```sh
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/scratch
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/checker-runtime
+sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/model-runtime
+sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/model-relays
 sudo install -d -m 0750 -o 10002 -g 10001 /var/lib/workstream/guide-runtime
 stat -c '%g' /var/run/docker.sock
 ```
 
-The checker runtime directory must be on durable host storage, not `/run`,
+The checker and model runtime directories must be on durable host storage, not `/run`,
 tmpfs or ephemeral container storage. Its private `.workstream-checker-owner`
 file identifies containers recoverable after a service or host restart. Only the
 checker service has a writable mount; API and worker socket mounts are read-only
@@ -136,18 +147,33 @@ development authentication are absent.
 Create each secret selected by the configured runtime as a one-value regular file at the configured path. Make it
 owned by the runtime UID/GID with mode `0400`. The explicit role loader gives the
 API only the database, broker, rate-limit and pagination secrets; the worker
-gets the database and broker. Inference runtimes additionally select and mount
-one project-agent provider credential because the worker hosts setup jobs;
-`manager_authored` must omit that selector, mount and secret definition. Beat
+gets the database and broker. `WORKSTREAM_MODEL_PROXY_ENABLED=true` starts one
+trusted model-proxy process independently of the setup runtime. Only that process
+gets the database, the two closed provider credentials and the runtime ART identity.
+The setup worker receives a read-only
+mount of `/var/lib/workstream/model-runtime` and the fixed socket selector; it
+receives no provider credential or endpoint override. A proxy-disabled
+`manager_authored` release omits both credential selectors, mounts and secret
+definitions; a proxy-enabled one can still run approved POST model checks. Beat
 gets the database and broker secrets because its startup guard verifies the
 current artifact-provider activation before scheduling jobs. An absent required selector or unknown role stops
 startup, and an unrelated secret is neither mounted nor loaded. The loader
 independently requires the running identity and mode `0400`, performs no shell
 evaluation and never prints a value. Do not put AWS static keys in these files.
-The provider selector is trusted release configuration. For `openrouter`, the
-entrypoint loads the worker-only file as `OPENROUTER_API_KEY`; for `openai`, it
-loads the same selector as `OPENAI_API_KEY`. It clears both native variables
-before selecting one and never exports a neutral key variable. The endpoint is
+
+With the proxy enabled, the trusted checker service also mounts the global
+model socket directory read-only. Its separate writable
+`/var/lib/workstream/model-relays` directory has the same absolute path on the
+Docker host and in the service, owned by the runtime UID/GID with mode `0700`.
+The service waits for the proxy to become healthy and mounts only the current
+invocation's relay into a project image. Project images receive neither the
+global socket nor provider credentials. API, Beat and proof jobs receive
+neither model directory.
+The two provider selectors are trusted release configuration. The proxy loads
+only its dedicated files as `OPENROUTER_API_KEY` and `OPENAI_API_KEY`; this is
+independent of the setup provider because approved POST and setup profiles may
+use different providers. It clears both native variables before loading them
+and never exports a neutral key variable. The endpoints are
 fixed by the registered adapter and cannot be supplied in the release file.
 The parser receives no database, broker, S3, Flow, model or provider credential.
 The release file also fixes the runtime, provider, model, model API, adapter
@@ -157,9 +183,10 @@ same release. The parser receives only its fixed socket selector. The example
 selects `openai_agents_sdk` through OpenRouter with
 `openai/gpt-5.6-terra`; changing a trusted selector requires another reviewed
 release and never changes retained attempt evidence.
-To select `omnicore_agent`, publish and choose the `omnicore` image digest and
-retain OpenRouter with `chat_completions`; ordinary model identity remains a
-reviewed release choice. OpenRouter models with a colon routing suffix and
+To select `omnicore_agent`, publish and choose the `omnicore` worker image digest,
+retain the separate `agents` proxy digest, and retain OpenRouter with
+`chat_completions`; ordinary model identity remains a reviewed release choice.
+OpenRouter models with a colon routing suffix and
 `openrouter/*` router identities are rejected.
 
 Before either OpenRouter-backed runtime receives real guide material, the
@@ -231,6 +258,11 @@ activation.
 Copy `checker-service.example.json` to the configured private path, mode `0400`
 and the same runtime owner. Replace the example cache with every approved
 single-platform checker image supplied by the project checker/registry work.
+The example includes the exact `model_proxy_socket` and `model_relay_root`
+selectors for a proxy-enabled release. Remove both keys when
+`WORKSTREAM_MODEL_PROXY_ENABLED=false`; preflight rejects partial, substituted
+or disabled-proxy selectors. Rust consumes these paths from the private JSON
+configuration, not environment variables.
 For each entry, preserve the exact repository, platform manifest digest/media
 type/byte count, Linux architecture and Docker config image ID. Pull every
 `repository@sha256:...` identity before preflight. Full preflight checks that
@@ -297,9 +329,10 @@ python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
 python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env ps
 ```
 
-The API applies forward migrations before serving. The guide parser must pass
-its protocol health check before the worker starts. Worker startup uses the
-existing prefork lifecycle. Beat runs the existing recovery and cleanup
+The API applies forward migrations before serving. The guide parser and an
+enabled trusted model proxy must pass their protocol/socket health checks before
+the worker starts. Worker startup uses the existing prefork lifecycle. Beat runs the
+existing recovery and cleanup
 schedules. The checker health check requires its private socket and Docker's
 registered runsc runtime. It does not attest cache identity; full preflight
 observes the cache once, and the canonical runner verifies the exact image again
@@ -328,9 +361,10 @@ outage does not change product results. Configuration alone is not that proof.
 
 The wrapper's `stop` operation stops Beat and API first so they cannot produce
 new work, gives the prefork worker its configured 7,320-second graceful window,
-then stops the parser and checker controller. Keeping both socket services alive
-while the worker drains lets cancellation and terminal persistence finish against
-their original dependencies. Guide inference has a 7,260-second process backstop;
+then drains the model proxy before stopping the parser and checker controller.
+Keeping all socket services alive while the worker drains lets cancellation and
+terminal persistence finish against their original dependencies. Guide inference
+has a 7,260-second process backstop;
 the shared Redis transport uses a 7,380-second visibility timeout with prefetch
 disabled. The persisted guide-attempt deadline remains the ordinary, shorter
 execution bound. Celery task hard limits and durable database/outbox custody

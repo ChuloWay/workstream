@@ -33,7 +33,8 @@ recorded where implementers will read them.
 ## Design and decisions
 
 The overview records the six chunks, their dependencies on PRs #676 and #677,
-the security notes and the owner decisions. Chunks 02 and 03 branch from this
+the security notes, the owner decisions and the eight integrity layers from
+owner decision 20 (24 October 2026), with the chunk that owns each layer. Chunks 02 and 03 branch from this
 record independently, so either can merge first.
 
 The roadmap ledger is unchanged: this record adds no capability, exposure or
@@ -44,6 +45,8 @@ dependency on `main`.
 - [x] The overview names intent, non-goals, the chunk map, dependencies,
   security notes and the dated owner decisions.
 - [x] The index row and overview share the `Planned` disposition.
+- [x] The overview lists every integrity layer, the deferred GitHub-side
+  hardening and the current binding of required checks.
 
 ## Risk and review routing
 

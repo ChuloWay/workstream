@@ -243,6 +243,34 @@ def api_environment() -> dict[str, str]:
     return env
 
 
+def configure_scripted_model_session_environment(env: dict[str, str]) -> None:
+    """Provision the private test paths required only by the full setup drill."""
+    runtime_token = f"{os.getpid()}-{uuid4().hex}"
+    runner_temp = Path(env.get("RUNNER_TEMP", "/tmp"))
+    model_socket = runner_temp / f"workstream-api-contract-model-{runtime_token}.sock"
+    if os.path.lexists(model_socket):
+        raise RuntimeError("scripted model socket path is not fresh")
+    if env.get("WORKSTREAM_ARTIFACT_STORE_BACKEND", "disabled") == "disabled":
+        local_root = runner_temp / f"workstream-api-contract-artifacts-{runtime_token}"
+        scratch_root = runner_temp / f"workstream-api-contract-scratch-{runtime_token}"
+        local_root.mkdir(mode=0o700)
+        scratch_root.mkdir(mode=0o700)
+        env.update(
+            {
+                "WORKSTREAM_ARTIFACT_STORE_BACKEND": "local",
+                "WORKSTREAM_ARTIFACT_LOCAL_ROOT": str(local_root),
+                "WORKSTREAM_ARTIFACT_SCRATCH_ROOT": str(scratch_root),
+                "WORKSTREAM_ARTIFACT_ADMISSION_TASK_MAXIMUM_BYTES": "67108864",
+                "WORKSTREAM_ARTIFACT_ADMISSION_PRODUCER_MAXIMUM_BYTES": "67108864",
+                "WORKSTREAM_ARTIFACT_ADMISSION_PROJECT_MAXIMUM_BYTES": "67108864",
+                "WORKSTREAM_ARTIFACT_ADMISSION_DEPLOYMENT_MAXIMUM_BYTES": "67108864",
+            }
+        )
+    # The deterministic runtime does not call the capability. A concrete absent
+    # path proves typed profile/session admission without a provider bypass.
+    env["WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET"] = str(model_socket)
+
+
 async def exercise_rate_control_contract(env: dict[str, str]) -> None:
     """Prove one durable denial without exposing the pseudonymous key."""
     subject = f"api-contract-rate-{uuid4()}"
@@ -1544,6 +1572,37 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             idempotency_key=str(uuid4()),
         )
         assert patched_guide["change_summary"] == "Patched before activation through real API"
+        setup_operator_token = issue_flow_token(
+            f"real-api-setup-operator-{run_id}",
+            [],
+            issuer=flow_issuer,
+            audience=flow_audience,
+            secret=flow_secret,
+        )
+        setup_operator = await request_json(
+            client, "GET", "/api/v1/actors/me", setup_operator_token,
+        )
+        await request_json(
+            client,
+            "POST",
+            "/api/v1/admin-role-grants",
+            manager_token,
+            {
+                "target_actor_profile_id": setup_operator["actor_profile_id"],
+                "role": "operator",
+                "scope_type": "system",
+                "scope_project_id": None,
+                "reason": "Provision the scripted setup model profile",
+            },
+            201,
+            idempotency_key=str(uuid4()),
+        )
+        from guide_compilation_e2e import publish_scripted_model_profile
+        published_model_profile = await publish_scripted_model_profile(
+            client, setup_operator_token, project["id"],
+        )
+        assert published_model_profile["spec"]["project_id"] == project["id"]
+        assert published_model_profile["spec"]["profile_version"] == 1
         await exercise_guide_setup_contract(
             client,
             manager_token,
@@ -2246,6 +2305,7 @@ async def main(env: dict[str, str]) -> None:
 
 if __name__ == "__main__":
     api_env = api_environment()
+    configure_scripted_model_session_environment(api_env)
     assert_isolated_database_url(api_env["WORKSTREAM_DATABASE_URL"])
     os.environ.update(api_env)
     get_settings.cache_clear()

@@ -316,7 +316,8 @@ async def test_checker_output_shared_put_and_verification_lifecycle(
         async with factory() as session:
             relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(
-                tmp_path / f"checker-{expected_outcome}", b"checker lifecycle"
+                tmp_path / f"checker-{expected_outcome}", b'{"output":"checker lifecycle"}',
+                media_type="application/json",
             ) as source:
                 project_id, task_id, checker_run_id, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
@@ -344,12 +345,14 @@ async def test_checker_output_shared_put_and_verification_lifecycle(
                 assert attempt is not None and receipt is not None and job is not None
                 job_id = UUID(job.id)
                 assert attempt.producer_request_type == "checker_output"
-                assert (attempt.project_id, attempt.task_id, attempt.checker_run_id) == (
+                assert (attempt.project_id, attempt.task_id) == (
                     project_id,
                     task_id,
-                    checker_run_id,
                 )
-                assert receipt.checker_run_id == checker_run_id
+                assert attempt.checker_run_id is None
+                assert attempt.model_call_attempt_id is not None
+                assert receipt.checker_run_id is None
+                assert receipt.model_call_attempt_id == attempt.model_call_attempt_id
                 with pytest.raises(DBAPIError):
                     await session.execute(
                         text(
@@ -409,7 +412,8 @@ async def test_checker_output_put_observation_terminal_outcomes(
         async with factory() as session:
             relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(
-                tmp_path / f"checker-observation-{expected_outcome}", b"checker observation"
+                tmp_path / f"checker-observation-{expected_outcome}", b'{"output":"checker observation"}',
+                media_type="application/json",
             ) as source:
                 _project_id, _task_id, checker_run_id, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
@@ -491,7 +495,8 @@ async def test_checker_output_put_observation_terminal_outcomes(
                     assert receipt.observed_sha256 is None
                     assert receipt.observed_byte_count is None
                 assert receipt.execution_generation == attempt.execution_generation
-                assert checker_run_id == attempt.checker_run_id
+                assert attempt.checker_run_id is None
+                assert attempt.model_call_attempt_id is not None
                 assert orchestrator._require_terminal_activation.await_count >= 2
                 assert all(
                     call.args == (activation_id,)
@@ -526,7 +531,8 @@ async def test_expired_activation_rolls_back_provider_verification_facts(
             )
             async with minted_source(
                 tmp_path / f"expired-{provider_outcome}",
-                b"provider terminal evidence",
+                b'{"output":"provider terminal evidence"}',
+                media_type="application/json",
             ) as source:
                 _project_id, _task_id, _checker_run_id, admission = await _admit_checker_output(
                     session,
@@ -748,7 +754,9 @@ async def test_verification_unavailable_retries_then_exhausts(
     try:
         async with factory() as session:
             relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
-            async with minted_source(tmp_path / "unavailable", b"retry") as source:
+            async with minted_source(
+                tmp_path / "unavailable", b'{"output":"retry"}', media_type="application/json"
+            ) as source:
                 _, _, _, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
                 orchestrator = ArtifactStorageOrchestrator(

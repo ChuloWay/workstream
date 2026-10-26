@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 import hashlib
@@ -20,6 +21,7 @@ from app.adapters.artifacts.s3_compatible import (
     S3CompatibleArtifactStoreBootstrap,
 )
 import app.adapters.artifacts.s3_compatible as s3_module
+from app.core.cancellation import await_completion_preserving_cancellation
 from app.core.config import Settings
 from app.interfaces.artifacts import (
     ArtifactByteRange,
@@ -704,6 +706,63 @@ async def test_success_without_full_source_consumption_is_not_replay(
                 match="did not consume the sealed artifact source",
             ):
                 await store.put(source)
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("interruption", ["transport_timeout", "outer_cancellation"])
+async def test_interruption_joins_sdk_writer_before_releasing_partial_source(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    interruption: str,
+) -> None:
+    """An interrupted SDK writer cannot race recovery or outlive put."""
+    private_prefix = f"negative/writer-timeout-{hashlib.sha256(os.urandom(16)).hexdigest()[:20]}"
+    store = initialize_minio_store(private_prefix=private_prefix)
+    monkeypatch.setattr(
+        store,
+        "_operation_total_timeout_seconds",
+        0.1 if interruption == "transport_timeout" else 5,
+    )
+    content = b"cancellation-owned committed source"
+    read_started = asyncio.Event()
+    active_reads = 0
+    completed_reads = 0
+    try:
+        async with minted_source(tmp_path / "scratch", content) as source:
+            owner = source._owner  # noqa: SLF001 - exact sealed-source owner boundary
+            original_read = owner._read_chunk  # noqa: SLF001
+
+            async def slow_read(reader: object) -> bytes:
+                nonlocal active_reads, completed_reads
+                active_reads += 1
+                read_started.set()
+                try:
+                    await await_completion_preserving_cancellation(asyncio.sleep(0.3))
+                    return await original_read(reader)
+                finally:
+                    active_reads -= 1
+                    completed_reads += 1
+
+            monkeypatch.setattr(owner, "_read_chunk", slow_read)
+            put = asyncio.create_task(store.put(source))
+            await asyncio.wait_for(read_started.wait(), timeout=2)
+            if interruption == "outer_cancellation":
+                put.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(put, timeout=2)
+            else:
+                with pytest.raises(
+                    ArtifactStoreUnavailableError,
+                    match="S3 artifact operation failed",
+                ):
+                    await asyncio.wait_for(put, timeout=2)
+            assert active_reads == 0
+            reads_after_return = completed_reads
+            await asyncio.sleep(0.05)
+            assert active_reads == 0
+            assert completed_reads == reads_after_return
     finally:
         store.close()
 

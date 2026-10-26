@@ -11,6 +11,9 @@ from typing import Any
 
 import pytest
 
+from workstream_mcp.http_gateway import GUIDE_LIFECYCLE_OPERATIONS
+from workstream_mcp.schemas import GUIDE_LIFECYCLE_CONTRACT_NAMES
+
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS = ROOT / "mcp_server" / "contracts"
 BACKEND = ROOT / "backend"
@@ -116,6 +119,107 @@ OPERATIONS = {
     ),
     "active_guide_get": ("/api/v1/projects/{project_id}/active-guide", "get"),
     "ready_tasks_list": ("/api/v1/projects/{project_id}/tasks/ready", "get"),
+    "project_guides_list": ("/api/v1/projects/{project_id}/guides", "get"),
+    "project_guide_get": ("/api/v1/projects/{project_id}/guides/{guide_id}", "get"),
+    "guide_activate": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/activate",
+        "post",
+    ),
+    "guide_activation_readiness_get": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/activation-readiness",
+        "get",
+    ),
+    "guide_proposal_correct": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/"
+        "{compilation_id}/corrections",
+        "post",
+    ),
+    "guide_correction_dispatch": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/"
+        "{compilation_id}/corrections/{correction_operation_id}/dispatch",
+        "post",
+    ),
+    "guide_post_policy_get": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/"
+        "{compilation_id}/post-submission-policies/{policy_id}",
+        "get",
+    ),
+    "guide_post_policy_approve": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/"
+        "{compilation_id}/post-submission-policies/{policy_id}/approval",
+        "post",
+    ),
+    "guide_post_policy_correct": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/"
+        "{compilation_id}/post-submission-policies/{policy_id}/corrections",
+        "post",
+    ),
+    "guide_pre_submission_approve": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/"
+        "{compilation_id}/pre-submission-approval",
+        "post",
+    ),
+    "guide_proposal_get": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/"
+        "{compilation_id}/proposal",
+        "get",
+    ),
+    "guide_document_upload": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/documents/{document_id}/content",
+        "post",
+    ),
+    "guide_document_content_get": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/documents/{document_id}/content",
+        "get",
+    ),
+    "guide_effective_submission_artifact_policy_get": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/"
+        "effective-submission-artifact-policy",
+        "get",
+    ),
+    "guide_pre_submit_checker_policy_get": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/pre-submit-checker-policy",
+        "get",
+    ),
+    "guide_setup_latest_get": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/setup-runs/latest",
+        "get",
+    ),
+    "guide_submission_artifact_policies_list": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies",
+        "get",
+    ),
+    "guide_submission_artifact_policy_create": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies",
+        "post",
+    ),
+    "guide_submission_artifact_policy_get": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/"
+        "submission-artifact-policies/{policy_id}",
+        "get",
+    ),
+    "guide_submission_artifact_policy_update": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/"
+        "submission-artifact-policies/{policy_id}",
+        "patch",
+    ),
+    "guide_sufficiency_reports_list": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports",
+        "get",
+    ),
+    "guide_sufficiency_report_create": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports",
+        "post",
+    ),
+    "guide_sufficiency_report_get": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports/{report_id}",
+        "get",
+    ),
+    "guide_sufficiency_warnings_acknowledge": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports/"
+        "{report_id}/acknowledge-warnings",
+        "post",
+    ),
 }
 
 
@@ -220,6 +324,20 @@ def test_selected_fragment_follows_transitive_schema_references() -> None:
     }
     selected = _selected(openapi, "/selected", "get")
     assert set(selected["components"]["schemas"]) == {"Inner", "Outer"}
+
+
+def test_guide_gateway_bindings_match_reviewed_contract_snapshots() -> None:
+    assert set(GUIDE_LIFECYCLE_OPERATIONS) == set(GUIDE_LIFECYCLE_CONTRACT_NAMES)
+    for name in GUIDE_LIFECYCLE_CONTRACT_NAMES:
+        method, path, status = GUIDE_LIFECYCLE_OPERATIONS[name]
+        assert OPERATIONS[name] == (path, method.lower())
+        snapshot = json.loads((CONTRACTS / f"{name}.json").read_text(encoding="utf-8"))
+        success_codes = {
+            int(code)
+            for code in snapshot["operation"]["responses"]
+            if str(code).startswith("2")
+        }
+        assert success_codes == {status}
 
 
 def test_contract_comparison_ignores_only_schema_titles() -> None:

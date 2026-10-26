@@ -7,6 +7,7 @@ import json
 import re
 from collections.abc import Mapping
 from typing import TypeAlias
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
@@ -87,6 +88,11 @@ class ProjectGuideRuntimeConfiguration(BaseModel):
     model_provider: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,63}$")
     model: str = Field(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$")
     model_api: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    model_profile_id: UUID | None = None
+    model_profile_version: StrictInt | None = Field(default=None, ge=1)
+    model_profile_digest: str | None = Field(
+        default=None, pattern=r"^sha256:[0-9a-f]{64}$"
+    )
     adapter_profile: str = Field(min_length=2, max_length=MAXIMUM_ADAPTER_PROFILE_BYTES)
     instruction_id: str = Field(
         default="project_guide_compilation", pattern=r"^[a-z][a-z0-9_]{0,63}$"
@@ -115,7 +121,20 @@ class ProjectGuideRuntimeConfiguration(BaseModel):
             raise ValueError("project guide instruction hash mismatch")
         if self.maximum_document_bytes > self.maximum_total_document_bytes:
             raise ValueError("document byte limit exceeds the run total")
-        require_project_guide_inference_identity(self.model_provider, self.model_api, self.model)
+        uses_inference = require_project_guide_inference_identity(
+            self.model_provider, self.model_api, self.model
+        )
+        selector = (
+            self.model_profile_id,
+            self.model_profile_version,
+            self.model_profile_digest,
+        )
+        if any(value is not None for value in selector) and not all(
+            value is not None for value in selector
+        ):
+            raise ValueError("guide runtime model profile selector is incomplete")
+        if not uses_inference and any(value is not None for value in selector):
+            raise ValueError("provider-free guide runtime cannot select a model profile")
         try:
             profile = json.loads(self.adapter_profile)
         except (TypeError, ValueError):

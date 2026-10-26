@@ -1,6 +1,6 @@
 # Workstream MCP Adapter
 
-An independently installed adapter exposing forty-seven tools under the caller's authority:
+An independently installed adapter exposing 108 tools under the caller's authority:
 
 - `workstream_profile_get` calls `GET /api/v1/actors/me`.
 - `workstream_profile_update` calls the unkeyed `PATCH /api/v1/actors/me`.
@@ -54,6 +54,16 @@ An independently installed adapter exposing forty-seven tools under the caller's
   selection and one exact version.
 - Four keyed contribution-policy mutations create, replace, publish and retire
   an exact policy version.
+- Twenty-four guide-lifecycle tools cover retained guide reads, bounded verified
+  document bytes, setup and sufficiency records, submission-artifact policies,
+  compiled proposals, corrections, approvals and activation.
+- Ten checker/delivery/registry tools cover contributor and manager checker
+  projections plus deliberate operator retry, reconciliation and registration.
+- Nine operator-artifact tools cover readiness, bindings, replicas, receipts,
+  verification/recovery, admission usage and audit events.
+- Eighteen task-execution tools cover bounded preparation ZIPs, contributor and
+  manager task context, screen/release/claim/start, guide-document reads and
+  admission-backed submission creation/history.
 
 Each call forwards the caller's bearer to its fixed public Workstream operation.
 There are no MCP resources or prompts. Workstream, not the adapter, owns every
@@ -92,6 +102,13 @@ The endpoint is `http://127.0.0.1:8080/mcp`. The default listener is loopback.
 Configuration is read from environment variables; `.env.example` documents
 the settings but is not loaded automatically. No server-wide caller token is
 configured. A separate Workstream API must already be running.
+
+Ordinary JSON responses default to a 64 KiB bound. Guide-document reads and
+submission-bundle uploads use separate 64 MiB bounds and a 120-second operation
+timeout so binary transfers do not enlarge the allowance or timeout for every API
+call. Configure document reads independently with `WORKSTREAM_MCP_MAX_DOCUMENT_BYTES` and
+`WORKSTREAM_MCP_DOCUMENT_TIMEOUT_SECONDS`; the adapter still buffers one bounded
+document before returning its Base64 representation.
 
 The profile read takes `{}`. Profile update accepts at least one of
 `display_name` and `contact_email`, preserving omission and explicit `null` while
@@ -186,6 +203,18 @@ empty objects. The adapter forwards each body and key once to its fixed route,
 binds successful receipts to the requested project, policy, version and
 operation IDs, and reports unverifiable success as uncertain execution.
 
+Task execution uses separate contributor and manager read tools so the adapter
+never chooses an authority path on the caller's behalf. Screen, release, claim
+and start require typed UUID idempotency keys; claim performs only the claim
+request. Submission creation consumes caller-supplied admission and assignment
+identifiers and stays unkeyed because that is the current backend contract.
+Preparation accepts a bounded Base64 ZIP, decodes it once and forwards the
+caller's typed assignment/key and optional submission or revision fields as the
+fixed backend headers. Revision preparation ID and digest must be supplied
+together. Workstream owns ZIP validation, pre-submit checks, replay and all task
+state changes. A checker rejection is a normal safe tool failure; an unverified
+mutation success remains uncertain and is never retried automatically.
+
 ## Deployment Boundary
 
 Build from this directory only:
@@ -208,7 +237,7 @@ retries. A mutation transport failure, upstream 5xx response, or unexpected
 success/redirect response is reported as non-retryable uncertain execution.
 Connections may be pooled, but
 caller credentials and results are not shared or cached. Response validation is
-pinned to the forty-seven selected public contracts in `contracts/`; upstream drift
+pinned to the 108 selected public contracts in `contracts/`; upstream drift
 must be reviewed, not silently accepted. There is no fallback service or
 backend-private import.
 
@@ -225,7 +254,7 @@ Real API tests require the repository's isolated PostgreSQL runner, controlled
 fixture identities and a separate installed adapter process. Never supply a
 production database or real user token to a test. Integration and container
 commands are recorded in the additive MCP workflow and the
-[current chunk record](../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-10.md).
+[current chunk record](../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-12.md).
 Selected schemas are compared with the running backend OpenAPI operations;
 custom admission, lifecycle and exact-project semantics are exercised separately.
 

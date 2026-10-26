@@ -193,30 +193,14 @@ async def test_action_authority_is_not_interchangeable(
 async def test_zero_output_finalization(tmp_path, isolated_database_env):
     from pydantic import ValidationError
     from app.core.identifiers import new_record_id
-    from app.modules.checkers.api.output_custody import (
-        CheckerOutputSelector,
-        CheckerOutputUnavailable,
-    )
-    from app.modules.checkers.execution_coordination import CheckerOutputReservations
     from .test_concurrency import final_facts
 
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
         executor = live_executor(h)
         lease, _ = await executor._claim(h.request)
-        selector = CheckerOutputSelector(
-            evaluation=h.request,
-            checker_run_id=lease.reservation.attempt_id,
-            worker_lease_id=lease.lease_id,
-            worker_lease_generation=lease.lease_generation,
-            slot_key="invented",
-        )
-        async with h.factory() as session, session.begin():
-            slots = await CheckerOutputReservations(session).resolve(selector)
-            assert slots.slots == ()
-            with pytest.raises(CheckerOutputUnavailable, match="slot_unavailable"):
-                slots.select(selector)
         facts = await final_facts(h, lease)
+        assert facts.output_binding_ids == ()
         with pytest.raises(ValidationError):
             await executor.finalize(
                 facts.model_copy(update={"output_binding_ids": (new_record_id(),)})

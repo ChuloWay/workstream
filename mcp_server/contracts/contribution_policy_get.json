@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "774e72d694dc009de38d5ab2fc73803359c1e8b8522831d62ec5d0ef9bf5c75c",
+  "canonical_sha256": "4193c66d5e25098a3a238a04560c75b1154943fd0e26925f5d249cebff04b67d",
   "components": {
     "schemas": {
       "ApiError": {
@@ -7,24 +7,19 @@
         "description": "Canonical machine-readable API error.",
         "properties": {
           "code": {
-            "title": "Code",
             "type": "string"
           },
           "correlation_id": {
-            "title": "Correlation Id",
             "type": "string"
           },
           "details": {
             "additionalProperties": true,
-            "title": "Details",
             "type": "object"
           },
           "message": {
-            "title": "Message",
             "type": "string"
           },
           "retryable": {
-            "title": "Retryable",
             "type": "boolean"
           }
         },
@@ -35,7 +30,6 @@
           "correlation_id",
           "retryable"
         ],
-        "title": "ApiError",
         "type": "object"
       },
       "ApiErrorResponse": {
@@ -48,8 +42,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Detail"
+            ]
           },
           "error": {
             "$ref": "#/components/schemas/ApiError"
@@ -58,7 +51,6 @@
         "required": [
           "error"
         ],
-        "title": "ApiErrorResponse",
         "type": "object"
       },
       "CompensationInstrumentType": {
@@ -67,7 +59,6 @@
           "money",
           "project_points"
         ],
-        "title": "CompensationInstrumentType",
         "type": "string"
       },
       "ContributionPolicyView": {
@@ -75,16 +66,13 @@
         "properties": {
           "contribution_policy_id": {
             "format": "uuid",
-            "title": "Contribution Policy Id",
             "type": "string"
           },
           "contribution_policy_version_id": {
             "format": "uuid",
-            "title": "Contribution Policy Version Id",
             "type": "string"
           },
           "name": {
-            "title": "Name",
             "type": "string"
           },
           "policy_status": {
@@ -93,23 +81,19 @@
               "active",
               "retired"
             ],
-            "title": "Policy Status",
             "type": "string"
           },
           "project_id": {
             "format": "uuid",
-            "title": "Project Id",
             "type": "string"
           },
           "rules": {
             "items": {
               "$ref": "#/components/schemas/PolicyRuleView"
             },
-            "title": "Rules",
             "type": "array"
           },
           "version_number": {
-            "title": "Version Number",
             "type": "integer"
           },
           "version_status": {
@@ -118,7 +102,6 @@
               "published",
               "retired"
             ],
-            "title": "Version Status",
             "type": "string"
           }
         },
@@ -132,7 +115,6 @@
           "version_status",
           "rules"
         ],
-        "title": "ContributionPolicyView",
         "type": "object"
       },
       "PolicyDefinitionView": {
@@ -140,23 +122,19 @@
         "properties": {
           "adapter_binding_id": {
             "format": "uuid",
-            "title": "Adapter Binding Id",
             "type": "string"
           },
           "definition_id": {
             "format": "uuid",
-            "title": "Definition Id",
             "type": "string"
           },
           "instrument_type": {
             "$ref": "#/components/schemas/CompensationInstrumentType"
           },
           "quantity": {
-            "title": "Quantity",
             "type": "string"
           },
           "unit_code": {
-            "title": "Unit Code",
             "type": "string"
           }
         },
@@ -167,7 +145,6 @@
           "quantity",
           "adapter_binding_id"
         ],
-        "title": "PolicyDefinitionView",
         "type": "object"
       },
       "PolicyRuleView": {
@@ -178,7 +155,6 @@
               "unpaid",
               "compensated"
             ],
-            "title": "Compensation Mode",
             "type": "string"
           },
           "contribution_type": {
@@ -186,19 +162,16 @@
               "accepted_submission",
               "completed_review"
             ],
-            "title": "Contribution Type",
             "type": "string"
           },
           "definitions": {
             "items": {
               "$ref": "#/components/schemas/PolicyDefinitionView"
             },
-            "title": "Definitions",
             "type": "array"
           },
           "rule_id": {
             "format": "uuid",
-            "title": "Rule Id",
             "type": "string"
           }
         },
@@ -208,7 +181,6 @@
           "compensation_mode",
           "definitions"
         ],
-        "title": "PolicyRuleView",
         "type": "object"
       }
     }
@@ -223,7 +195,6 @@
         "required": true,
         "schema": {
           "format": "uuid",
-          "title": "Project Id",
           "type": "string"
         }
       },
@@ -233,7 +204,6 @@
         "required": true,
         "schema": {
           "format": "uuid",
-          "title": "Policy Id",
           "type": "string"
         }
       },
@@ -250,8 +220,7 @@
             {
               "type": "null"
             }
-          ],
-          "title": "Version Id"
+          ]
         }
       },
       {
@@ -533,6 +502,6 @@
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/contribution-policies/{policy_id}",
-    "repository_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694"
+    "repository_sha": "59c52cc81179611ea316935552cc177f83eec687"
   }
 }

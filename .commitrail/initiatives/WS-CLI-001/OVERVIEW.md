@@ -58,6 +58,13 @@ integrity metadata and a separately gated manual GitHub Releases publisher;
 the environment and immutable tag ruleset remain external prerequisites.
 It does not claim a tag, published binary or signed/notarized artifact.
 
+[WS-CLI-001-48](WS-CLI-001-48.md) adds the opt-in read-only contributor
+workbench: exact-grant projects, one-page Ready/active Mine/own Submissions,
+fresh details and explicit Mine context/intake reads. Detailed findings and
+contribution evidence remain inert CLI handoffs. All mutations, management
+screens and operation-specific recovery remain separate TUI boundaries; this
+interface does not depend on first binary publication or system-wide discovery.
+
 ## Current boundary
 
 [WS-CLI-001-26](WS-CLI-001-26.md) adds deliberate draft-guide summary editing
@@ -66,7 +73,7 @@ and separate guide-bound review/revision policy configuration. The commands
 the existing public writes with caller-owned replay keys and policy `If-Match`.
 The backend owns manager authorization for new writes, policy semantics, replay and activation;
 editing/configuring a guide does not approve or activate it. Other public API
-client gaps and the optional TUI remain separate work. Binary distribution's
+client gaps and the broader TUI beyond -48 remain separate work. Binary distribution's
 workflow is prepared by -44; a protected release run and public-asset audit
 remain operational work.
 
@@ -316,14 +323,15 @@ that human's credential, not a registered agent identity.
 
 Make every operation complete without a terminal: stable JSON output, safe
 errors, exit status, and no required prompts. Add optional terminal assistance
-only where it improves an actual workflow. A future `workstream ui` can browse
-public queues and evidence when enough of that lifecycle is ready; it must use
-the same client operations and never become a second state machine. Prefer
+only where it improves an actual workflow. The opt-in `workstream tui` browses
+the bounded contributor reads in -48 using the same client operations and never
+becomes a second state machine. Further screens require stable public contracts
+and their own proof. Prefer
 purposeful commands over generating a flag mirror of every OpenAPI route.
 
 Go is the chosen implementation language. Cobra owns command parsing/help and
-completion. Bubble Tea is a candidate for a later, bounded TUI change, not a
-dependency of the foundation. Do not add Python, TypeScript, or Rust duplicate
+completion. The bounded -48 workbench uses Bubble Tea, Bubbles and Lip Gloss;
+noninteractive commands retain their existing behavior. Do not add Python, TypeScript, or Rust duplicate
 CLIs. Keep the package independent of backend and MCP runtime dependencies.
 
 ## Delivered and later boundaries
@@ -414,8 +422,11 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
    journey through contribution export, with negative intake and authority checks.
    Hosted and human-review journey proof remain separate.
    Unfinished human review/revision is not current CLI implementation scope.
-26. **Optional TUI:** Add a focused public queue/evidence view after its API
-   workflow is complete. Never require a TUI for agents or scripts.
+26. **Optional TUI:** -48 supplies read-only contributor navigation through
+   existing typed reads. In-TUI findings/Evidence, writes and management remain
+   separate boundaries; Evidence first needs a shared typed single-page client
+   port without changing complete CLI exports. Never require a TUI for agents
+   or scripts.
 
 ## Risks and proof
 
@@ -437,6 +448,6 @@ cannot create a private CLI dependency.
 
 The CLI is a separate client package, not an ADR 0014 backend adapter. It does
 not change backend authority or deploy an external provider. Protected first CLI
-publication, optional package-manager installers and signing, and a full
-contribution journey remain future boundaries; source build and CI are not
+publication, optional package-manager installers and signing, broader TUI
+journeys and hosted contribution proof remain separate boundaries; source build and CI are not
 claims of public distribution.

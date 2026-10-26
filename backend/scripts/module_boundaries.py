@@ -22,7 +22,7 @@ DEFAULT_AUTH_LEDGER = (
     / ".ci/auth-boundaries/IMPORT_LEDGER.md"
 )
 MODULE_PREFIX = "app.modules."
-BUSINESS_MODULES = 9
+BUSINESS_MODULES = 10
 SUPPORTING_MODULES = 3
 
 

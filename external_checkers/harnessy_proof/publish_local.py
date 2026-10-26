@@ -35,11 +35,17 @@ INPUT_SCHEMA_ID = "external_checker_post_submit_input"
 # The socket stays on a named volume: Docker Desktop host-shared paths refuse
 # chmod on Unix sockets, and AF_UNIX paths must stay within 107 bytes.
 SOCKET_PATH = "/run/ws-checker/checker.sock"
+MODEL_PROXY_SOCKET = "/run/ws-model-proxy/model-proxy.sock"
 
 
 def material_root(compose_project: str) -> str:
     """The Docker-VM path of the named material volume, identical in every container."""
     return f"/var/lib/docker/volumes/{compose_project}-checker-material/_data"
+
+
+def model_relay_root(compose_project: str) -> str:
+    """Daemon-visible private root for invocation-local model sockets."""
+    return f"/var/lib/docker/volumes/{compose_project}-checker-relay/_data"
 
 
 def _hash(value: object) -> str:
@@ -120,9 +126,14 @@ def registry_spec(image_digest: str, capability_version: str) -> dict[str, objec
 
 
 def service_config(
-    image: dict[str, object], *, compose_project: str, sandbox_uid: int, sandbox_gid: int
+    image: dict[str, object],
+    *,
+    compose_project: str,
+    sandbox_uid: int,
+    sandbox_gid: int,
+    enable_model_proxy: bool = False,
 ) -> dict[str, object]:
-    return {
+    config = {
         "socket_path": SOCKET_PATH,
         "material_root": material_root(compose_project),
         "docker_binary": "/usr/local/bin/docker",
@@ -134,6 +145,20 @@ def service_config(
         "sandbox_gid": sandbox_gid,
         "cache": [image],
     }
+    if enable_model_proxy:
+        relay_root = model_relay_root(compose_project)
+        maximum_socket = f"{relay_root}/.model-{'0' * 16}/model.sock"
+        if len(maximum_socket.encode()) >= 108:
+            raise ValueError(
+                "compose project makes the model relay socket path too long"
+            )
+        config.update(
+            {
+                "model_proxy_socket": MODEL_PROXY_SOCKET,
+                "model_relay_root": relay_root,
+            }
+        )
+    return config
 
 
 def _docker(*arguments: str) -> str:
@@ -187,6 +212,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--sandbox-uid", type=int, required=True)
     parser.add_argument("--sandbox-gid", type=int, required=True)
     parser.add_argument("--out-dir", type=Path, required=True)
+    parser.add_argument(
+        "--enable-model-proxy",
+        action="store_true",
+        help="emit fixed local proxy and daemon-visible relay paths",
+    )
     # The registry holds one immutable entry per phase, capability and version,
     # so a rebuilt image (new digest) needs a new version. v2 compares the
     # proof with GitHub facts and is post-submission only.
@@ -200,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
             compose_project=args.compose_project,
             sandbox_uid=args.sandbox_uid,
             sandbox_gid=args.sandbox_gid,
+            enable_model_proxy=args.enable_model_proxy,
         ),
         "registry-post.json": registry_spec(
             image["platform_manifest_digest"], args.capability_version

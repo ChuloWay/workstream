@@ -567,6 +567,7 @@ def test_published_registry_body_is_post_only_and_backend_valid() -> None:
 
 def test_published_service_paths_match_the_compose_overlay() -> None:
     """The service config and the overlay must name the same daemon and socket paths."""
+    base = yaml.safe_load((CHECKER_ROOT.parents[1] / "docker-compose.yml").read_text())
     overlay = yaml.safe_load(
         (CHECKER_ROOT.parents[1] / "docker-compose.agent-loop.yml").read_text()
     )
@@ -580,6 +581,8 @@ def test_published_service_paths_match_the_compose_overlay() -> None:
     assert config["material_root"] == environment["WORKSTREAM_EXTERNAL_CHECKER_MATERIAL_ROOT"]
     assert config["material_root"] == environment["WORKSTREAM_ARTIFACT_SCRATCH_ROOT"]
     assert config["socket_path"] == environment["WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET"]
+    assert "model_proxy_socket" not in config
+    assert "model_relay_root" not in config
     assert len(config["socket_path"].encode()) <= 107
     for name in ("backend", "worker", "beat", "checker", "checker-volumes-init"):
         socket_mounts = [
@@ -590,6 +593,63 @@ def test_published_service_paths_match_the_compose_overlay() -> None:
         ]
         mode = ":ro" if name in ("backend", "worker", "beat") else ""
         assert socket_mounts == [f"checker_socket:/run/ws-checker{mode}"], name
+
+    model_config = publish_local.service_config(
+        {"operating_system": "linux", "architecture": "arm64"},
+        compose_project="${COMPOSE_PROJECT_NAME}",
+        sandbox_uid=501,
+        sandbox_gid=20,
+        enable_model_proxy=True,
+    )
+    relay_root = "/var/lib/docker/volumes/${COMPOSE_PROJECT_NAME}-checker-relay/_data"
+    assert model_config["model_proxy_socket"] == "/run/ws-model-proxy/model-proxy.sock"
+    assert model_config["model_relay_root"] == relay_root
+    assert len(f"{relay_root}/.model-{'0' * 16}/model.sock".encode()) < 108
+    base_proxy = base["services"]["model-proxy"]
+    overlay_proxy = overlay["services"]["model-proxy"]
+    assert base_proxy["profiles"] == ["model-proxy"]
+    assert base_proxy["command"] == ["python", "-m", "app.workers.checker_model_proxy"]
+    assert base_proxy["stop_grace_period"] == "125m"
+    assert "extends" not in overlay_proxy
+    assert "profiles" not in overlay_proxy
+    assert overlay_proxy["environment"]["WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET"] == (
+        "/run/ws-model-proxy/model-proxy.sock"
+    )
+    assert "checker_model_proxy:/run/ws-model-proxy" in overlay_proxy["volumes"]
+    for name in ("backend", "worker", "beat", "model-proxy"):
+        assert all(
+            "/var/run/docker.sock" not in str(mount)
+            for mount in overlay["services"].get(name, {}).get("volumes", ())
+        )
+    for name in ("backend", "beat"):
+        assert all(
+            "checker_model_proxy" not in str(mount)
+            for mount in overlay["services"][name]["volumes"]
+        )
+    worker = overlay["services"]["worker"]
+    assert worker["environment"]["WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET"] == (
+        "/run/ws-model-proxy/model-proxy.sock"
+    )
+    assert "checker_model_proxy:/run/ws-model-proxy:ro" in worker["volumes"]
+    assert "checker_model_proxy:/run/ws-model-proxy:ro" in overlay["services"]["checker"]["volumes"]
+    assert (
+        "checker_model_relay:"
+        "/var/lib/docker/volumes/${COMPOSE_PROJECT_NAME}-checker-relay/_data"
+        in overlay["services"]["checker"]["volumes"]
+    )
+    for volume in ("checker_model_proxy", "checker_model_relay"):
+        assert any(
+            isinstance(mount, str) and mount.startswith(f"{volume}:")
+            for mount in overlay["services"]["checker-volumes-init"]["volumes"]
+        )
+    with pytest.raises(ValueError, match="relay socket path too long"):
+        publish_local.service_config(
+            {"operating_system": "linux", "architecture": "arm64"},
+            compose_project="x" * 80,
+            sandbox_uid=501,
+            sandbox_gid=20,
+            enable_model_proxy=True,
+        )
 
 
 def test_long_or_control_check_names_are_bounded_in_messages() -> None:
