@@ -89,9 +89,9 @@ suggestions; those counts describe the historical handoff, not an eligibility
 set or approval. The project agent now has strict material/rubric validation, a
 bounded source-cited plan, invocation-local model-session and execution-socket
 clients, protected build/state projections, and receipt-bound runtime and author
-assessment cores. The shared runner has a generic offline Kaniko/runsc trial
-engine with resource, cancellation, cleanup and recovery controls. The production
-Rust service and Python project image have passed the complete
+assessment cores. The shared runner implements generic offline image building
+and trials in Smol sibling microVMs, with resource, cancellation, cleanup and
+recovery controls. An earlier Rust service and Python project image passed the
 model→trial→retained-receipt→model flow with a controlled provider, real gVisor
 execution, PostgreSQL and MinIO at `3e67d39c8`. That run retained two verified trial
 receipts with 17 step outcomes each and four settled model effects; replay made
@@ -100,12 +100,12 @@ This qualifies the runtime composition using a qualification package. It does
 not establish live-model grading or the public guide-to-contribution journey.
 This POST image has not been published, registered, approved or activated.
 
-The deployment target is Smol microVMs. The qualification above exercised the
-gVisor implementation only. Smol currently refuses the model/trial callbacks
-and predecessor material required by this image, so that result does not qualify
-this project for its intended deployment. Readiness requires those capabilities
-through the existing Smol guest and lease boundaries, followed by a real microVM
-composition test. A passing gVisor run cannot substitute for that proof.
+The deployment target is Smol microVMs. The historical qualification above
+exercised the superseded gVisor trial implementation only. Smol now implements
+model/trial callbacks and predecessor material through the existing guest and
+lease boundaries; its real microVM composition qualification remains required.
+The earlier result does not qualify this project for its intended deployment.
+There is no Docker/runsc trial fallback.
 
 [`post/model/execution-rubrics.json`](post/model/execution-rubrics.json) is an
 exact semantic projection of that historical handoff. Its

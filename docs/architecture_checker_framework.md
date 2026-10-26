@@ -308,8 +308,9 @@ closed deployment pairs are `runsc/gvisor`, `runc/docker-dev`, and
 KVM VM, a static trusted bootstrap, workload and host resource limits, bounded
 concurrency and independent exact-lease cleanup guardians. Its node requires
 Linux amd64, KVM and delegated cgroup v2. The existing hosted Docker composition
-still requires `runsc`; Smol deployment and guest ZIP/default integration are
-separate boundaries. See the [node contract](../external_checkers/README.md#smol-microvm-engine).
+still requires `runsc`; replacing that hosted project-execution wiring is a
+separate integration boundary. Trusted ZIP/default checking already uses the
+Smol intake capability. See the [node contract](../external_checkers/README.md#smol-microvm-engine).
 
 Project-specific requirements are implemented by registered external images.
 The shared service accepts the normalized result contract; it does not interpret
