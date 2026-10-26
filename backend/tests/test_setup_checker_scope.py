@@ -468,3 +468,40 @@ async def test_recorded_public_journey_runtime_emits_admissible_inference(monkey
     assert validate_project_guide_runtime_result(compilation, output, opened) == output
     assert len(output.pre_submit_bindings) == len(output.post_submit_bindings) == 1
     assert runtime.calls == 1
+
+
+@pytest.mark.parametrize("profile_refused", [False, True])
+async def test_public_drill_requires_operator_profile_before_guide_setup(monkeypatch, profile_refused):
+    """A missing/refused model profile must never start the guide's upload flow."""
+    from pathlib import Path
+    from unittest.mock import AsyncMock
+
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2]))
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
+    import guide_compilation_e2e
+    from experiments.pilot04_external_checker_runtime import public_guide_setup as probe
+
+    project_id = "00000000-0000-4000-8000-000000000021"
+    manager, operator = object(), object()
+    async def seed(_factory, _project, **kwargs):
+        return (operator if kwargs.get("role") == "operator" else manager), None
+    monkeypatch.setattr(probe, "seed_review_actor", seed)
+    denied = RuntimeError("profile publication refused")
+    publish = AsyncMock(side_effect=denied if profile_refused else None,
+                        return_value={"spec": {"project_id": project_id, "profile_version": 1}})
+    monkeypatch.setattr(guide_compilation_e2e, "publish_scripted_model_profile", publish)
+    reached_guide = RuntimeError("guide setup reached")
+    client = object()
+    async def call(_client, method, path, token, status, **kwargs):
+        assert method == "POST"
+        if path == "/api/v1/projects":
+            return {"id": project_id}
+        assert path == f"/api/v1/projects/{project_id}/guides"
+        publish.assert_awaited_once_with(client, "operator-token", project_id)
+        raise reached_guide
+    def token_for(actor):
+        return "operator-token" if actor is operator else "manager-token"
+    with pytest.raises(RuntimeError) as error:
+        await probe.public_guide_setup(client, object(), True, call, token_for)
+    assert error.value is (denied if profile_refused else reached_guide)
+    publish.assert_awaited_once_with(client, "operator-token", project_id)

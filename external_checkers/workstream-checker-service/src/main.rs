@@ -1322,6 +1322,10 @@ fn collect_bounded_command(
                 return Err("process wait failed".into());
             }
         };
+        if Instant::now() >= deadline {
+            stop_command_group(&mut child, command_cleanup_deadline(&mut cleanup))?;
+            return Err("process deadline exceeded".into());
+        }
         if let Some(status) = status.filter(|_| stdout_read == Ok(true) && stderr_read == Ok(true))
         {
             read_available(&mut stdout, &mut stdout_bytes, maximum_output)?;
@@ -1334,10 +1338,6 @@ fn collect_bounded_command(
                 stdout: stdout_bytes,
                 _stderr: stderr_bytes,
             });
-        }
-        if Instant::now() >= deadline {
-            stop_command_group(&mut child, command_cleanup_deadline(&mut cleanup))?;
-            return Err("process deadline exceeded".into());
         }
         thread::sleep(Duration::from_millis(5));
     }
@@ -4294,6 +4294,38 @@ exit 2
         assert!(cleanup.remaining_output < CLEANUP_MAXIMUM_OUTPUT_BYTES);
         assert!(!container.exists());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn expired_collection_rejects_an_already_reaped_child() {
+        for exit_code in [0, 7] {
+            for expired in [false, true] {
+                let mut child = Command::new("/bin/sh")
+                    .args(["-c", &format!("printf done; exit {exit_code}")])
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .process_group(0)
+                    .spawn()
+                    .unwrap();
+                // Model the independent guardian winning the exit/reap race.
+                child.wait().unwrap();
+                let deadline = if expired {
+                    Instant::now() - Duration::from_millis(1)
+                } else {
+                    Instant::now() + Duration::from_secs(10)
+                };
+                let result = collect_bounded_command(child, deadline, 1024, None, None);
+                if expired {
+                    assert!(
+                        matches!(result, Err(ref error) if error == "process deadline exceeded")
+                    );
+                } else {
+                    let output = result.unwrap();
+                    assert_eq!(output.status.code(), Some(exit_code));
+                    assert_eq!(output.stdout, b"done");
+                }
+            }
+        }
     }
 
     #[test]

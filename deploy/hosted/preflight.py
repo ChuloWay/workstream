@@ -1450,7 +1450,7 @@ def validate_trusted_intake(values: dict[str, str]) -> None:
         "print(json.dumps(asdict(asyncio.run(trusted_submission_intake(s).health()))))"
     )
     health = _run_json(
-        ["docker", "run", "--rm", "--network", "none", "--read-only",
+        ["docker", "run", "--rm", "--pull=never", "--network", "none", "--read-only",
          "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=64",
          "--memory=512m", "--cpus=1", "--user",
          values["WORKSTREAM_RUNTIME_UID"] + ":" + values["WORKSTREAM_RUNTIME_GID"],

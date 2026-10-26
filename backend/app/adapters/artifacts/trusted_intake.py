@@ -374,25 +374,31 @@ class _Session:
             if self._state != "inspected":
                 raise ExternalServiceProtocolError(self._adapter.identity)
             self._state = "exporting"
-            self._command("export", {})
-            for entry in self._inspection.entries:
-                if entry.entry_type is not SubmissionArchiveEntryType.FILE:
-                    continue
-                if _entry(self._response("file")) != entry:
-                    raise ExternalServiceProtocolError(self._adapter.identity)
-                digest = hashlib.sha256()
-                remaining = entry.byte_count
-                if remaining == 0:
-                    sink(entry, b"")
-                while remaining:
-                    chunk = self._read(min(remaining, _CHUNK))
-                    digest.update(chunk)
-                    sink(entry, chunk)
-                    remaining -= len(chunk)
-                if "sha256:" + digest.hexdigest() != entry.sha256:
-                    raise ExternalServiceProtocolError(self._adapter.identity)
-            _object(self._response("export"), set())
-            self._state = "exported"
+            try:
+                self._command("export", {})
+                for entry in self._inspection.entries:
+                    if entry.entry_type is not SubmissionArchiveEntryType.FILE:
+                        continue
+                    if _entry(self._response("file")) != entry:
+                        raise ExternalServiceProtocolError(self._adapter.identity)
+                    digest = hashlib.sha256()
+                    remaining = entry.byte_count
+                    if remaining == 0:
+                        sink(entry, b"")
+                    while remaining:
+                        chunk = self._read(min(remaining, _CHUNK))
+                        digest.update(chunk)
+                        sink(entry, chunk)
+                        remaining -= len(chunk)
+                    if "sha256:" + digest.hexdigest() != entry.sha256:
+                        raise ExternalServiceProtocolError(self._adapter.identity)
+                _object(self._response("export"), set())
+                self._state = "exported"
+            except BaseException:
+                # Export mixes framed metadata with raw bytes. After any failure,
+                # no subsequent response can be parsed safely on this connection.
+                self.abort()
+                raise
 
     async def evaluate_default(
         self, binding: TrustedDefaultBinding, value: WorkstreamDefaultCheckerInput
