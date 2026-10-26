@@ -227,6 +227,7 @@ PROJECT_AGENT_RUNTIME_OPTION_BOUNDS = {
     "circuit_cooldown_seconds": (1, 600),
 }
 TIMEOUT_KEYS = (
+    "WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS",
     "WORKSTREAM_ARTIFACT_S3_CONNECT_TIMEOUT_SECONDS",
     "WORKSTREAM_ARTIFACT_S3_READ_TIMEOUT_SECONDS",
     "WORKSTREAM_ARTIFACT_S3_WRITE_TIMEOUT_SECONDS",
@@ -418,6 +419,15 @@ def validate_environment(values: dict[str, str]) -> None:
             raise PreflightError(f"unsupported release setting: {key}")
     for key in TIMEOUT_KEYS:
         _positive_decimal(values, key)
+    preparation_deadline = _positive_decimal(
+        values, "WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS"
+    )
+    # The canonical Settings owner keeps ZIP inspection at 300s, cleanup at
+    # 300s and scratch TTL at 3900s. No other scratch timing is configurable here.
+    if not 300 < float(preparation_deadline) < 3600:
+        raise PreflightError(
+            "artifact preparation deadline must be greater than 300 and less than 3600 seconds"
+        )
     for key in PROJECT_AGENT_LIMIT_KEYS:
         _positive_id(values, key)
     if (
@@ -1615,6 +1625,11 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         service_environment = services[name].get("environment")
         if not isinstance(service_environment, dict):
             raise PreflightError(f"{name} release environment is unavailable")
+        deadline_key = "WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS"
+        if str(service_environment.get(deadline_key, "")) != values[deadline_key]:
+            raise PreflightError(
+                f"rendered artifact preparation deadline differs from release: {name}.{deadline_key}"
+            )
         for key in PROJECT_AGENT_CONFIGURATION_KEYS:
             if str(service_environment.get(key, "")) != values[key]:
                 raise PreflightError(

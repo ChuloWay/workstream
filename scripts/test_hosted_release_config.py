@@ -1000,6 +1000,64 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertEqual(calls[1], ["docker", "rm", "--force", name])
         self.assertFalse(any("aws-proof-coordinate" in command for command in calls))
 
+    def test_artifact_preparation_deadline_is_required_bounded_and_shared(self):
+        key = "WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS"
+        for deadline in ("360", "3400"):
+            values = self.environment | {key: deadline}
+            with self.subTest(deadline=deadline):
+                preflight.validate_environment(values)
+                rendered = preflight.render_compose(self.environment_path, values)
+                preflight.validate_compose(rendered, values)
+                for role in (
+                    *preflight.ROLE_SECRET_FILE_KEYS,
+                    *preflight.PROOF_SERVICES,
+                ):
+                    self.assertEqual(
+                        rendered["services"][role]["environment"][key], deadline
+                    )
+                for mutation in ("missing", "different"):
+                    changed = copy.deepcopy(rendered)
+                    if mutation == "missing":
+                        del changed["services"]["worker"]["environment"][key]
+                    else:
+                        changed["services"]["worker"]["environment"][key] = "600"
+                    with (
+                        self.subTest(mutation=mutation),
+                        self.assertRaises(preflight.PreflightError),
+                    ):
+                        preflight.validate_compose(changed, values)
+                changed = copy.deepcopy(rendered)
+                del changed["services"]["aws-proof-runtime"]["environment"][key]
+                with self.assertRaisesRegex(
+                    preflight.PreflightError, "preparation deadline"
+                ):
+                    preflight.validate_compose(changed, values)
+                changed = copy.deepcopy(rendered)
+                for role in preflight.ROLE_SECRET_FILE_KEYS:
+                    changed["services"][role]["environment"][key] = "600"
+                with self.assertRaisesRegex(preflight.PreflightError, key):
+                    preflight.validate_compose(changed, values)
+        for deadline in (
+            "",
+            "NaN",
+            "Infinity",
+            "-Infinity",
+            "300",
+            "3600",
+            "0",
+            "-1",
+            "true",
+        ):
+            with (
+                self.subTest(deadline=deadline),
+                self.assertRaises(preflight.PreflightError),
+            ):
+                preflight.validate_environment(self.environment | {key: deadline})
+        missing = dict(self.environment)
+        del missing[key]
+        with self.assertRaises(preflight.PreflightError):
+            preflight.validate_environment(missing)
+
     def test_environment_rejects_mutable_or_development_settings(self) -> None:
         cases = {
             "mutable image": (

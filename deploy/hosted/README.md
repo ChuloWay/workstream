@@ -307,6 +307,18 @@ canonical application owner validates eligibility at startup. Replace the exampl
 drill; satisfying the arithmetic does not prove live latency, AWS identity or
 activation.
 
+`WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS` explicitly carries the
+existing ART processing deadline to every backend role and proof job. The
+template preserves its 3,400-second default. With the unchanged ZIP inspection,
+cleanup margin and scratch TTL defaults, it must be finite and strictly between
+300 and 3,600 seconds: ZIP inspection must fit inside processing, and processing
+plus the 300-second cleanup margin must expire before the 3,900-second scratch
+reservation TTL. Canonical Settings validates the same relationships at startup.
+This is an operational deadline, not a project/checker resource cap. Choose a
+value that accommodates the selected workload; a shorter owned qualification
+may observe real expiry sooner, without resetting its original deadline or
+changing registered checker limits.
+
 Copy `checker-service.example.json` to the configured private mode-`0400`
 path. The unit reads `/etc/workstream/checker-service.json`. Replace all example
 binary, guest, archive, platform-manifest and config digests with independently
