@@ -182,8 +182,11 @@ verified the shared syscall filter. The [qualification record](../.commitrail/ch
 binds the exact source, artifacts and 2 GiB aggregate disk profile. This initial
 submission composition does not exercise predecessor material; direct proof 36
 separately covers predecessor transport/custody and guest resource ceilings.
-The three active nested cancellation/death cases remain pending. Hosted Smol
-composition and its scoped AWS proof are tracked separately in
+Active nested caller cancellation, exact child VMM death and controller death/restart
+passed in physical cases 026–028 at proof source `8012f2792`, using the same native
+build: no false completion or trial ART effects, full owned cleanup, and both
+admission slots reusable. See the [interruption evidence](../.commitrail/changes/terminal-systems-project-checkers.md#active-nested-interruption-qualification-on-real-kvm).
+Hosted Smol composition and its scoped AWS proof are tracked separately in
 [PR #692](https://github.com/Flow-Research/workstream/pull/692); that owned baseline
 does not establish live-model grading or the full Terminal Systems
 guide-to-contribution journey.
