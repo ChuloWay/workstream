@@ -91,6 +91,7 @@ class Terminal:
         self.sent_after = None
         self.x = self.y = 0
         self.cells = [[" "] * columns for _ in range(rows)]
+        self.scroll_top, self.scroll_bottom = 0, rows - 1
 
     def _write(self, data):
         os.write(self.master, data)
@@ -103,6 +104,7 @@ class Terminal:
         if notify:
             self.cells = [[" "] * columns for _ in range(rows)]
             self.x = self.y = 0
+            self.scroll_top, self.scroll_bottom = 0, rows - 1
             self.process.send_signal(signal.SIGWINCH)
 
     @property
@@ -147,6 +149,23 @@ class Terminal:
                         self.x = max(0, self.x - n)
                     elif command == "G":
                         self.x = min(self.columns - 1, n - 1)
+                    elif command == "r" and not params.startswith(("?", "<", ">", "=")):
+                        top = (values[0] or 1) - 1
+                        bottom = (
+                            (values[1] or self.rows) if len(values) > 1 else self.rows
+                        ) - 1
+                        if 0 <= top < bottom < self.rows:
+                            self.scroll_top, self.scroll_bottom = top, bottom
+                            self.x = self.y = 0
+                    elif command == "T":
+                        # Bubble Tea emits SD inside DECSTBM to shift only the
+                        # detail viewport; header/status rows must stay put.
+                        top, bottom = self.scroll_top, self.scroll_bottom
+                        amount = min(n, bottom - top + 1)
+                        retained = self.cells[top : bottom + 1 - amount]
+                        self.cells[top : bottom + 1] = [
+                            [" "] * self.columns for _ in range(amount)
+                        ] + retained
                     elif command == "P":
                         deleted = min(n, self.columns - self.x)
                         row = self.cells[self.y]
@@ -200,11 +219,11 @@ class Terminal:
             elif character == "\t":
                 self.x = min(self.columns - 1, (self.x // 8 + 1) * 8)
             elif character == "\n":
-                self.y += 1
-                if self.y == self.rows:
-                    self.cells.pop(0)
-                    self.cells.append([" "] * self.columns)
-                    self.y -= 1
+                if self.y == self.scroll_bottom:
+                    self.cells.pop(self.scroll_top)
+                    self.cells.insert(self.scroll_bottom, [" "] * self.columns)
+                else:
+                    self.y = min(self.rows - 1, self.y + 1)
             elif character == "\b":
                 self.x = max(0, self.x - 1)
             elif character >= " " and not unicodedata.combining(character):
@@ -748,6 +767,7 @@ if os.name == "nt":
             self.columns, self.rows = columns, rows
             self.cells = [[" "] * columns for _ in range(rows)]
             self.x = self.y = 0
+            self.scroll_top, self.scroll_bottom = 0, rows - 1
 
         def _assert_restored(self):
             assert self._receipt.stat().st_size < 4096, "unbounded mode receipt"

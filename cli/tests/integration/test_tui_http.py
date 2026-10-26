@@ -5,6 +5,7 @@ import hashlib
 import os
 import re
 import subprocess
+import time
 from threading import Event
 from urllib.parse import parse_qs, urlsplit
 
@@ -187,7 +188,9 @@ def reveal_detail(terminal, text):
         if text in terminal.screen:
             return
         terminal.send("\x1b[B")
-    assert text in terminal.screen, (text, terminal.screen)
+    assert text in terminal.screen, (
+        f"missing {text!r} after scrolling:\n{terminal.screen}"
+    )
 
 
 @pytest.mark.parametrize("light", [False, True])
@@ -219,7 +222,23 @@ def test_minimum_terminal_navigation_and_light_background(light, rows):
         assert len(requests) == calls, "resize dispatched a read"
         terminal.send("\x1b")
         terminal.wait("Ready terminal task")
+        if os.name == "nt":
+            # Bare ConPTY does not forward OSC 11 queries to its outer host.
+            # Until a terminal supplies a background report, the workbench
+            # must stay readable without assuming either palette.
+            assert terminal.background_queries == 0
+            assert set(re.findall(rb"\x1b\[[0-9;:]*m", terminal.raw)) <= {
+                b"\x1b[m",
+                b"\x1b[0m",
+            }
+            background = "ffff/ffff/ffff" if light else "0000/0000/0000"
+            terminal.send(f"\x1b]11;rgb:{background}\x1b\\")
+        else:
+            assert terminal.background_queries > 0, "PTY did not answer OSC 11"
         expected_focus = b"38;2;8;126;140" if light else b"38;2;105;215;227"
+        deadline = time.monotonic() + 10
+        while expected_focus not in terminal.raw and time.monotonic() < deadline:
+            terminal.pump(0.05)
         assert expected_focus in terminal.raw, (
             "terminal background did not select its readable palette",
             {
@@ -650,6 +669,52 @@ def test_terminal_observer_applies_character_deletion_and_reports_actual_cursor(
     terminal._render("\x1b[1;79Hxy\x1b[6n\r\x1b[79G\x1b[999P")
     assert replies[-1] == b"\x1b[1;80R"
     assert terminal.screen.splitlines()[0] == "local filter: nothing-matches"
+
+
+def test_terminal_observer_applies_native_scroll_region_down_sequence():
+    terminal = object.__new__(Terminal)
+    terminal._screen_setup(80, 24)
+    terminal._write = lambda _: None
+    terminal._render(
+        "\x1b[1;1HHEADER\x1b[4;1HSECTION\x1b[5;1HTop detail"
+        + "\x1b[15;1H"
+        + TASK
+        + "\x1b[21;1HOld bottom\x1b[22;1HSTATUS"
+    )
+    # Captured native renderer sequence when a 24-row detail viewport scrolls.
+    terminal._render("\x1b[5;21r\x1b[5;1H\x1b[6")
+    terminal._render("T\x1b[1;24r\x1b[5;1H")
+    lines = terminal.screen.splitlines()
+    assert lines[0] == "HEADER"
+    assert lines[3] == "SECTION"
+    assert lines[4] == ""
+    assert lines[10] == "Top detail"
+    assert lines[20] == TASK
+    assert lines[21] == "STATUS"
+
+
+def test_terminal_observer_scrolls_on_line_feed_at_region_bottom():
+    terminal = object.__new__(Terminal)
+    terminal._screen_setup(80, 24)
+    terminal._write = lambda _: None
+    terminal._render(
+        "\x1b[1;1HHEADER\x1b[4;1HSECTION\x1b[5;1HOld top"
+        + "\x1b[6;1HNext detail\x1b[20;1H"
+        + TASK
+        + "\x1b[21;1HOld bottom\x1b[22;1HSTATUS"
+    )
+    # Captured native renderer sequence for one upward viewport scroll.
+    terminal._render("\x1b[5;21r\x1b[21;1H\n\x1b[1;24r\x1b[21;1H")
+    lines = terminal.screen.splitlines()
+    assert lines[0] == "HEADER"
+    assert lines[3] == "SECTION"
+    assert lines[4] == "Next detail"
+    assert lines[18] == TASK
+    assert lines[20] == ""
+    assert lines[21] == "STATUS"
+    terminal._render("\x1b[5;21r\x1b[24;1H\n")
+    assert terminal.screen.splitlines()[0] == "HEADER"
+    assert terminal.screen.splitlines()[21] == "STATUS"
 
 
 def test_explicit_pagination_refresh_and_local_filter_do_not_walk_pages():
