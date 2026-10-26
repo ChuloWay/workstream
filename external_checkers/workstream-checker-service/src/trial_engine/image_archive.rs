@@ -269,6 +269,10 @@ fn read_outer_archive(
     let mut offset = 0_u64;
     let mut manifest = None;
     let mut entries = HashMap::new();
+    let mut directories = HashSet::new();
+    let mut ancestors = HashSet::new();
+    let mut regular_ancestors = HashSet::new();
+    let mut headers = 0_usize;
     while offset.saturating_add(512) <= length {
         require_available(deadline, cancellations)?;
         file.seek(SeekFrom::Start(offset)).map_err(|_| invalid())?;
@@ -295,8 +299,14 @@ fn read_outer_archive(
             offset = length;
             break;
         }
+        headers += 1;
+        if headers > 4096 {
+            return Err(invalid());
+        }
         validate_tar_checksum(&header)?;
-        if !matches!(header[156], 0 | b'0') || header[157..257].iter().any(|byte| *byte != 0) {
+        let directory = header[156] == b'5';
+        if !matches!(header[156], 0 | b'0' | b'5') || header[157..257].iter().any(|byte| *byte != 0)
+        {
             return Err(invalid());
         }
         let name = tar_text(&header[0..100])?;
@@ -306,14 +316,35 @@ fn read_outer_archive(
         } else {
             format!("{prefix}/{name}")
         };
-        if !valid_archive_path(&path)
-            || entries.len() >= 4096
-            || entries.contains_key(&path)
-            || path == "repositories"
-        {
+        // A single trailing slash is optional for an explicit directory. No
+        // other spelling is normalized: aliases, links and traversal stay invalid.
+        let path = if directory {
+            path.strip_suffix('/').unwrap_or(&path).to_owned()
+        } else {
+            path
+        };
+        if !valid_archive_path(&path) || entries.contains_key(&path) || path == "repositories" {
             return Err(invalid());
         }
         let size = tar_octal(&header[124..136])?;
+        if directory {
+            if size != 0 || !directories.insert(path.clone()) {
+                return Err(invalid());
+            }
+        } else if directories.contains(&path) || ancestors.contains(&path) {
+            return Err(invalid());
+        }
+        let mut parent = path.as_str();
+        while let Some((ancestor, _)) = parent.rsplit_once('/') {
+            if entries.contains_key(ancestor) {
+                return Err(invalid());
+            }
+            ancestors.insert(ancestor.to_owned());
+            if !directory {
+                regular_ancestors.insert(ancestor.to_owned());
+            }
+            parent = ancestor;
+        }
         let data = offset.checked_add(512).ok_or_else(invalid)?;
         let padded = size
             .checked_add(511)
@@ -323,6 +354,9 @@ fn read_outer_archive(
             .checked_add(padded)
             .filter(|value| *value <= length)
             .ok_or_else(invalid)?;
+        if directory {
+            continue;
+        }
         entries.insert(path.clone(), (data, size));
         if path == "manifest.json" {
             if manifest.is_some() || size > 1024 * 1024 {
@@ -334,7 +368,11 @@ fn read_outer_archive(
             manifest = Some(bytes);
         }
     }
-    if offset != length {
+    if offset != length
+        || directories
+            .iter()
+            .any(|path| !regular_ancestors.contains(path))
+    {
         return Err(invalid());
     }
     let manifest = manifest.ok_or_else(invalid)?;
@@ -1134,7 +1172,9 @@ mod tests {
             "Layers": ["layer.tar"],
         }]))
         .unwrap();
-        let mut result = entry("manifest.json", b'0', &manifest);
+        let mut result = entry("blobs", b'5', &[]);
+        result.extend(entry("blobs/sha256", b'5', &[]));
+        result.extend(entry("manifest.json", b'0', &manifest));
         result.extend(entry(&config_path, b'0', &config));
         result.extend(entry("layer.tar", b'0', &plain));
         result.extend(entry(&platform_path, b'0', &platform));
@@ -1173,6 +1213,153 @@ mod tests {
         );
         std::fs::remove_file(path).unwrap();
         result
+    }
+
+    fn read_outer_bytes(bytes: &[u8]) -> Result<OuterArchive, ImageArchiveFailure> {
+        let path = std::env::temp_dir().join(format!(
+            "ws-outer-archive-{}-{}",
+            std::process::id(),
+            SEQUENCE.fetch_add(1, Ordering::SeqCst)
+        ));
+        std::fs::write(&path, bytes).unwrap();
+        let result = read_outer_archive(
+            &path,
+            bytes.len() as u64,
+            Instant::now() + Duration::from_secs(5),
+            None,
+        );
+        std::fs::remove_file(path).unwrap();
+        result
+    }
+
+    fn outer_members(members: impl IntoIterator<Item = Vec<u8>>) -> Vec<u8> {
+        let mut bytes = entry(
+            "manifest.json",
+            b'0',
+            br#"[{"Config":"config.json","RepoTags":[],"Layers":[]}]"#,
+        );
+        for member in members {
+            bytes.extend(member);
+        }
+        bytes.extend([0; 1024]);
+        bytes
+    }
+
+    #[test]
+    fn canonical_outer_directories_preserve_the_pinned_builder_graph() {
+        let (archive, platform, config) = pinned_builder_archive(false);
+        let validated = validate_builder(&archive, &platform, &config, &[]).unwrap();
+        assert_eq!(validated.config_image_id, config);
+        assert_eq!(validated.archive_byte_count, archive.len() as u64);
+        // Explicit parent directories may follow their indexed file children;
+        // one trailing slash is the only permitted alternate directory spelling.
+        let mut late_directories = archive[1024..archive.len() - 1024].to_vec();
+        late_directories.extend(entry("blobs/sha256/", b'5', &[]));
+        late_directories.extend(entry("blobs/", b'5', &[]));
+        late_directories.extend([0; 1024]);
+        assert_eq!(
+            validate_builder(&late_directories, &platform, &config, &[])
+                .unwrap()
+                .config_image_id,
+            config
+        );
+        let mut unreferenced_file = archive[..archive.len() - 1024].to_vec();
+        unreferenced_file.extend(entry("blobs/sha256/unreferenced", b'0', b"unapproved"));
+        unreferenced_file.extend([0; 1024]);
+        assert_eq!(
+            validate_builder(&unreferenced_file, &platform, &config, &[]),
+            Err(ImageArchiveFailure::Invalid)
+        );
+    }
+
+    #[test]
+    fn outer_directories_reject_payload_aliases_links_and_unused_names() {
+        for path in ["", "/a", "../a", "./a", "a//", "a/./b", "a/../b", "a\\b"] {
+            let bytes = outer_members([entry(path, b'5', &[]), entry("a/b", b'0', b"data")]);
+            assert!(
+                matches!(read_outer_bytes(&bytes), Err(ImageArchiveFailure::Invalid)),
+                "{path}"
+            );
+        }
+        let sized = outer_members([entry("a", b'5', b"not empty"), entry("a/b", b'0', b"data")]);
+        assert!(matches!(
+            read_outer_bytes(&sized),
+            Err(ImageArchiveFailure::Invalid)
+        ));
+        let unused = outer_members([entry("unused", b'5', &[])]);
+        assert!(matches!(
+            read_outer_bytes(&unused),
+            Err(ImageArchiveFailure::Invalid)
+        ));
+        let mut linked = entry("a", b'5', &[]);
+        linked[157..163].copy_from_slice(b"target");
+        linked[148..156].fill(b' ');
+        let checksum: u64 = linked[..512].iter().map(|byte| u64::from(*byte)).sum();
+        linked[148..156].copy_from_slice(format!("{checksum:06o}\0 ").as_bytes());
+        let bytes = outer_members([linked, entry("a/b", b'0', b"data")]);
+        assert!(matches!(
+            read_outer_bytes(&bytes),
+            Err(ImageArchiveFailure::Invalid)
+        ));
+    }
+
+    #[test]
+    fn outer_directory_duplicates_and_file_ancestry_conflicts_fail_in_both_orders() {
+        for members in [
+            vec![
+                entry("a", b'5', &[]),
+                entry("a", b'5', &[]),
+                entry("a/b", b'0', &[]),
+            ],
+            vec![
+                entry("a", b'5', &[]),
+                entry("a/", b'5', &[]),
+                entry("a/b", b'0', &[]),
+            ],
+            vec![entry("a", b'5', &[]), entry("a", b'0', &[])],
+            vec![entry("a", b'0', &[]), entry("a", b'5', &[])],
+            vec![entry("a", b'0', &[]), entry("a/b", b'0', &[])],
+            vec![entry("a/b", b'0', &[]), entry("a", b'0', &[])],
+            vec![
+                entry("a", b'0', &[]),
+                entry("a/b", b'5', &[]),
+                entry("a/b/c", b'0', &[]),
+            ],
+            vec![
+                entry("a/b", b'5', &[]),
+                entry("a", b'0', &[]),
+                entry("a/b/c", b'0', &[]),
+            ],
+        ] {
+            assert!(matches!(
+                read_outer_bytes(&outer_members(members)),
+                Err(ImageArchiveFailure::Invalid)
+            ));
+        }
+    }
+
+    #[test]
+    fn outer_header_ceiling_counts_directories_as_well_as_regular_files() {
+        let mut members = Vec::new();
+        for index in 0..2047 {
+            let directory = format!("d{index:04}");
+            members.push(entry(&directory, b'5', &[]));
+            let file = if index == 0 {
+                format!("{directory}/extra/deeper/file")
+            } else {
+                format!("{directory}/file")
+            };
+            members.push(entry(&file, b'0', &[]));
+        }
+        members.push(entry("d0000/extra", b'5', &[]));
+        // One manifest + 2047 directories + 2047 regular children + one
+        // explicit extra parent totals exactly 4096 nonzero tar headers.
+        assert!(read_outer_bytes(&outer_members(members.clone())).is_ok());
+        members.push(entry("d0000/extra/deeper", b'5', &[]));
+        assert!(matches!(
+            read_outer_bytes(&outer_members(members)),
+            Err(ImageArchiveFailure::Invalid)
+        ));
     }
 
     #[test]
