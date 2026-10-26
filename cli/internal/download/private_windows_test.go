@@ -11,6 +11,23 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+func TestAtomicPrivateFileCreation(t *testing.T) {
+	directory := t.TempDir()
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	const name = ".workstream-download-diagnostic"
+	file, err := createPrivateFile(root, name)
+	if err != nil {
+		t.Fatalf("createPrivateFile raw Windows error: %T: %v", err, err)
+	}
+	defer root.Remove(name)
+	defer file.Close()
+	assertPrivateStage(t, file)
+}
+
 func assertPrivateStage(t *testing.T, file *os.File) {
 	t.Helper()
 	sd, err := windows.GetSecurityInfo(windows.Handle(file.Fd()), windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)

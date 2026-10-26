@@ -770,6 +770,7 @@ def test_hostile_text_resizing_plain_and_ctrl_c_restore_terminal(
         terminal.wait(SECRET)
         before = len(requests)
         terminal.resize(80, 24)
+        terminal.wait(TASK)
         terminal.wait(SECRET)
         assert TASK in terminal.screen
         assert len(requests) == before

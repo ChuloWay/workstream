@@ -133,6 +133,9 @@ func TestGuideRefreshAbortsDownloadAndReloadsFreshContext(t *testing.T) {
 	press(t, m, directory)
 	press(t, m, "enter")
 	_, downloadCmd := m.Update(keyMessage("y"))
+	if downloadCmd == nil {
+		t.Fatal("download was not staged")
+	}
 	_, refreshCmd := m.Update(keyMessage("r"))
 	if refreshCmd == nil || m.request.kind != contextRead {
 		t.Fatal("refresh did not replace pending download with Guide context read")

@@ -3,6 +3,7 @@
 package download
 
 import (
+	"fmt"
 	"os"
 	"runtime"
 	"unsafe"
@@ -18,13 +19,13 @@ const fileAllAccess = windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0
 func createPrivateFile(root *os.Root, name string) (*os.File, error) {
 	directory, err := root.Open(".")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open bound directory handle: %w", err)
 	}
 	defer directory.Close()
 
 	user, err := windows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read token user: %w", err)
 	}
 	var pinner runtime.Pinner
 	pinner.Pin(user.User.Sid)
@@ -41,22 +42,22 @@ func createPrivateFile(root *os.Root, name string) (*os.File, error) {
 	}}
 	descriptor, err := windows.BuildSecurityDescriptor(nil, nil, access, nil, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build current-user descriptor: %w", err)
 	}
 	absolute, err := descriptor.ToAbsolute()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("make descriptor absolute: %w", err)
 	}
 	if err := absolute.SetControl(windows.SE_DACL_PROTECTED, windows.SE_DACL_PROTECTED); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("protect descriptor DACL: %w", err)
 	}
 	descriptor, err = absolute.ToSelfRelative()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("make descriptor self-relative: %w", err)
 	}
 	objectName, err := windows.NewNTUnicodeString(name)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode private leaf: %w", err)
 	}
 	attributes := &windows.OBJECT_ATTRIBUTES{
 		RootDirectory:      windows.Handle(directory.Fd()),
@@ -83,7 +84,7 @@ func createPrivateFile(root *os.Root, name string) (*os.File, error) {
 	runtime.KeepAlive(descriptor)
 	runtime.KeepAlive(user)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create protected private file: %w", err)
 	}
 	file := os.NewFile(uintptr(handle), name)
 	if file == nil {
