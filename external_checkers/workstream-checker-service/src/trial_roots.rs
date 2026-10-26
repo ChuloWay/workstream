@@ -211,12 +211,16 @@ fn inspect_entry(
 ) -> Result<(), String> {
     budget.check(depth)?;
     let metadata = fs::symlink_metadata(path).map_err(|_| "trial recovery identity unavailable")?;
-    let socket = metadata.file_type().is_socket();
+    // Smol's private home retains owned AF_UNIX agent/control/log/ready
+    // sockets across abrupt loss. Preflight must let the exact VM lease owner
+    // settle them before residual home cleanup; scratch never admits sockets.
+    let socket =
+        metadata.file_type().is_socket() && matches!(custody.role.as_str(), "relay" | "child_home");
     if metadata.dev() != custody.device
         || metadata.uid() != unsafe { libc::geteuid() }
         || metadata.gid() != unsafe { libc::getegid() }
         || metadata.file_type().is_symlink()
-        || (!metadata.is_dir() && !metadata.is_file() && !(socket && custody.role == "relay"))
+        || (!metadata.is_dir() && !metadata.is_file() && !socket)
         || (metadata.is_file() && metadata.nlink() != 1)
         || (depth == 1 && !metadata.is_dir())
     {
@@ -400,6 +404,124 @@ mod tests {
             assert!(path.join(MARKER).is_file());
         }
         claim(&config).unwrap().unwrap().recover().unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn startup_recovers_owned_smol_home_with_abandoned_unix_sockets() {
+        let (root, mut config) = super::super::tests::test_config();
+        configure(&mut config, &root);
+        let runtime = config.trial_runtime.as_ref().unwrap().clone();
+        let ordinary_home = root.join("ordinary-home");
+        let groups = root.join("groups");
+        private_directory(&ordinary_home);
+        private_directory(&groups);
+        let binary = root.join("smol-recovery");
+        let name = format!("ws-{}", "a".repeat(32));
+        let owner = container_owner(&config).unwrap().to_owned();
+        let disk = format!("{:x}", Sha256::digest(name.as_bytes()))[..16].to_owned();
+        fs::write(
+            &binary,
+            format!(
+                r#"#!/bin/sh
+case "$1 $2" in
+  "machine ls")
+    if test -e "$HOME/active"; then
+      printf '%s' '[{{"name":"{name}","labels":{{"workstream.external-checker-owner":"{owner}"}}}}]'
+    else
+      printf '[]'
+    fi;;
+  "machine delete")
+    rm -rf "$HOME/.cache/smolvm/vms/{disk}"
+    rm "$HOME/active";;
+  *) exit 2;;
+esac
+"#
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).unwrap();
+        config.smol = Some(smol::SmolConfig {
+            binary,
+            binary_sha256: format!("sha256:{}", "b".repeat(64)),
+            home: ordinary_home,
+            guest_binary: root.join("guest"),
+            guest_sha256: format!("sha256:{}", "c".repeat(64)),
+            cgroup_root: groups,
+            maximum_parallel: 2,
+            maximum_storage_bytes: 4 * 1024 * 1024 * 1024,
+        });
+        claim(&config).unwrap();
+        let home = runtime.child_home_root.join(format!("{name}.home"));
+        private_directory(&home);
+        let state = home.join(".cache/smolvm/vms").join(&disk);
+        fs::create_dir_all(&state).unwrap();
+        let state_directory = File::open(&state).unwrap();
+        let mut sockets = Vec::new();
+        for socket in ["agent.logs", "control.sock", "agent.sock", "agent.ready"] {
+            let path = state.join(socket);
+            // Bind through the directory descriptor so the temporary fixture's
+            // long path does not exceed AF_UNIX's address-length limit.
+            sockets.push(
+                UnixListener::bind(format!(
+                    "/proc/self/fd/{}/{socket}",
+                    state_directory.as_raw_fd()
+                ))
+                .unwrap(),
+            );
+            // These are the actual permissions observed on the native Smol node.
+            fs::set_permissions(
+                &path,
+                fs::Permissions::from_mode(if socket == "agent.sock" { 0o777 } else { 0o700 }),
+            )
+            .unwrap();
+        }
+        drop(sockets); // Retain abandoned socket nodes, with no live owner process.
+        fs::write(home.join("active"), b"owned VM").unwrap();
+        let leases = config.socket_path.parent().unwrap().join("smol-leases");
+        private_directory(&leases);
+        let mut child_runtime = config.smol.as_ref().unwrap().clone();
+        child_runtime.home = home.clone();
+        let lease = leases.join(format!("{name}.json"));
+        fs::write(
+            &lease,
+            serde_json::to_vec(&serde_json::json!({
+                "name": name, "owner": owner, "epoch": "e".repeat(64),
+                "expires_ms": 1, "lifetime_ms": 1, "root": leases,
+                "runtime": child_runtime, "private_home_root": runtime.child_home_root,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::set_permissions(&lease, fs::Permissions::from_mode(0o600)).unwrap();
+        // Permission is role-scoped: a socket in invocation scratch still
+        // refuses startup before any owned VM/home is removed.
+        let scratch = runtime
+            .scratch_root
+            .join(format!("trial_{}", "f".repeat(32)));
+        private_directory(&scratch);
+        let foreign = UnixListener::bind(scratch.join("socket")).unwrap();
+        assert!(claim(&config).unwrap().unwrap().preflight().is_err());
+        assert!(home.exists());
+        assert!(lease.exists());
+        drop(foreign);
+        fs::remove_file(scratch.join("socket")).unwrap();
+        fs::remove_dir(&scratch).unwrap();
+        let roots = claim(&config).unwrap().unwrap();
+        // Match production startup ordering: full residue preflight, exact
+        // lease-custodian VM cleanup, then remaining exclusive-root cleanup.
+        roots.preflight().unwrap();
+        smol::recover(&config).unwrap();
+        assert!(!home.exists());
+        assert!(!lease.exists());
+        roots.recover().unwrap();
+        for path in [
+            &runtime.relay_root,
+            &runtime.scratch_root,
+            &runtime.child_home_root,
+        ] {
+            assert_eq!(fs::read_dir(path).unwrap().count(), 1);
+        }
         fs::remove_dir_all(root).unwrap();
     }
 
