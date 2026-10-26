@@ -864,3 +864,24 @@ current-only package proof: predecessor/revision material, live-model grading,
 actual hosted deployment and the public guide-to-contribution journey remain
 separate. Further resource-boundary qualification is not inferred from this
 composition result.
+
+### Final boundary-inventory and transport review
+
+Hosted CI run `40364068595` completed all backend lanes but failed one retained
+architecture assertion in `shared_foundations_c` (1 failed, 1,925 passed). The
+assertion still listed the pre-trial artifact-port methods. Its exact closed
+inventories now include the four existing typed trial-evidence operations on the
+same CHECKERS-owned ports implemented by ART. Authority-handle exclusions,
+retired-port refusal and import-boundary checks are unchanged. Independent
+review traced those operations through the existing ART services and trial
+consumer and confirmed no gate weakening or new owner.
+The complete affected `tests/test_artifact_architecture.py` suite passed all 48
+tests in 248.85 seconds after the repair; Ruff and diff checks passed.
+
+Independent review of the `ee9436e19` transport found no implementation defect:
+execution handlers close and are reaped, model sessions remain persistent, and
+fresh execution connections require exact EOF under the original cancellation
+and deadline. It identified a README overclaim about sequential trials. The
+README now distinguishes the transport primitive from the current trial relay,
+which still authorizes one plan/connection per checker invocation. Native
+composition's two trial receipts belong to separate selected checker members.
