@@ -194,3 +194,12 @@ changing the input path cannot allocate another paid project. Both evaluation
 and completion duplicates are observed through real Celery task identities, with
 unchanged model, grant, slot, account and governed-outcome facts required. No
 live provider call is established by these tests.
+
+Actual systemd startup then refused `User=10001` with `217/USER` because the
+host had no account/group entries for that identity. Bounded controls reproduced
+the refusal both without and with numeric KVM supplementary-group selection.
+Host preparation now explicitly requires a dedicated locked no-login/no-home
+account and primary group at the fixed IDs, with collision refusal and no Docker
+or sudo grant. The isolated node provisions only its newly owned service identity;
+existing accounts, services and `/etc/workstream` are preserved. This fixes the
+missing prerequisite without changing node privileges or execution behavior.

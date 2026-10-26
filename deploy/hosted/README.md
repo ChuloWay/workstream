@@ -160,6 +160,24 @@ independent guardians with `KillMode=process`. Review its explicit deployment
 CPU/memory/PID/storage capacity against intake, checker and sequential trial
 peak demand; this configuration does not increase registered checker limits.
 
+Provision a dedicated host service account and group at UID/GID `10001:10001`
+before starting the unit. Numeric file ownership alone is insufficient: systemd
+must resolve this account, otherwise it can fail with `217/USER`. Inspect
+`getent passwd 10001` and `getent group 10001` first. If either ID belongs to an
+unrelated identity, stop and resolve that host allocation; do not modify or reuse
+the unrelated account. When both IDs and the name `workstream-checker` are unused:
+
+```sh
+sudo groupadd --gid 10001 workstream-checker
+sudo useradd --system --uid 10001 --gid 10001 --no-create-home \
+  --home-dir /nonexistent --shell /usr/sbin/nologin workstream-checker
+```
+
+Keep the account password locked and without a login or home directory. Grant no
+sudo or Docker access. The unit's `SupplementaryGroups=kvm` supplies KVM access;
+ensure that host group owns `/dev/kvm`. Existing dedicated service identities
+must have the same UID, primary GID and restrictions.
+
 Create canonical private roots on durable host storage:
 
 ```sh
