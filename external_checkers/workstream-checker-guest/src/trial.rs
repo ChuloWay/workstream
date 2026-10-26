@@ -62,6 +62,56 @@ struct BackingGuard {
     armed: bool,
 }
 
+struct OutputCapture {
+    digest: Sha256,
+    bytes: u64,
+    eof: bool,
+}
+
+impl OutputCapture {
+    fn new() -> Self {
+        Self {
+            digest: Sha256::new(),
+            bytes: 0,
+            eof: false,
+        }
+    }
+
+    fn drain<R: Read>(&mut self, reader: &mut R, remaining: u64) -> Result<bool> {
+        let mut buffer = [0_u8; 8 * 1024];
+        let mut allowance = remaining;
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) => {
+                    self.eof = true;
+                    return Ok(false);
+                }
+                Ok(count) => {
+                    let retained = count.min(allowance as usize);
+                    self.digest.update(&buffer[..retained]);
+                    self.bytes = self
+                        .bytes
+                        .checked_add(retained as u64)
+                        .ok_or("trial output byte count overflow")?;
+                    allowance -= retained as u64;
+                    if retained != count {
+                        return Ok(true);
+                    }
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    return Ok(false);
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+
+    fn finish(self) -> (u64, String) {
+        (self.bytes, format!("sha256:{:x}", self.digest.finalize()))
+    }
+}
+
 impl Drop for BackingGuard {
     fn drop(&mut self) {
         if self.armed {
@@ -787,6 +837,36 @@ fn digest_file(path: &Path) -> Result<(u64, String)> {
     Ok((length, format!("sha256:{:x}", hash.finalize())))
 }
 
+fn set_nonblocking<T: AsRawFd>(value: &T) -> Result<()> {
+    let descriptor = value.as_raw_fd();
+    let flags = unsafe { libc::fcntl(descriptor, libc::F_GETFL) };
+    if flags < 0 || unsafe { libc::fcntl(descriptor, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0
+    {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    Ok(())
+}
+
+fn drain_outputs<O: Read, E: Read>(
+    stdout: &mut O,
+    stderr: &mut E,
+    stdout_capture: &mut OutputCapture,
+    stderr_capture: &mut OutputCapture,
+    maximum: u64,
+) -> Result<bool> {
+    let used = stdout_capture
+        .bytes
+        .checked_add(stderr_capture.bytes)
+        .ok_or("trial output byte count overflow")?;
+    let mut exceeded = stdout_capture.drain(stdout, maximum.saturating_sub(used))?;
+    let used = stdout_capture
+        .bytes
+        .checked_add(stderr_capture.bytes)
+        .ok_or("trial output byte count overflow")?;
+    exceeded |= stderr_capture.drain(stderr, maximum.saturating_sub(used))?;
+    Ok(exceeded)
+}
+
 fn write_frame(result: &TrialChildResult) -> Result<()> {
     let bytes = serde_json::to_vec(result)?;
     if bytes.is_empty() || bytes.len() > 1024 * 1024 {
@@ -851,18 +931,6 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
     }
     let started = Instant::now();
     let limits = request_limits(&request);
-    let stdout_path = Path::new("/work/.trial-stdout");
-    let stderr_path = Path::new("/work/.trial-stderr");
-    let stdout = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(stdout_path)?;
-    let stderr = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(stderr_path)?;
     let mut command = Command::new(LAUNCHER);
     command
         .args(launcher_arguments(job, &request)?)
@@ -873,9 +941,17 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
                 .map(|value| value.split_once('=').expect("validated environment")),
         )
         .stdin(Stdio::null())
-        .stdout(stdout)
-        .stderr(stderr);
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     let mut child = command.spawn()?;
+    let mut stdout = child.stdout.take().ok_or("trial stdout unavailable")?;
+    let mut stderr = child.stderr.take().ok_or("trial stderr unavailable")?;
+    set_nonblocking(&stdout)?;
+    set_nonblocking(&stderr)?;
+    let mut stdout_capture = OutputCapture::new();
+    let mut stderr_capture = OutputCapture::new();
+    let mut output_exceeded = false;
+    let mut child_status = None;
     let deadline = started + Duration::from_millis(limits.timeout_ms);
     let mut forced = None;
     let mut cpu_time_ms = 0;
@@ -884,8 +960,27 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
     let mut written_bytes = 0;
     let mut written_entries = 0;
     let status = loop {
-        if let Some(status) = child.try_wait()? {
-            break status;
+        output_exceeded |= drain_outputs(
+            &mut stdout,
+            &mut stderr,
+            &mut stdout_capture,
+            &mut stderr_capture,
+            limits.output_bytes,
+        )?;
+        if child_status.is_none() {
+            child_status = child.try_wait()?;
+        }
+        if child_status.is_some() {
+            output_exceeded |= drain_outputs(
+                &mut stdout,
+                &mut stderr,
+                &mut stdout_capture,
+                &mut stderr_capture,
+                limits.output_bytes,
+            )?;
+            if stdout_capture.eof && stderr_capture.eof {
+                break child_status.expect("checked child status");
+            }
         }
         cpu_time_ms = cpu_time_ms.max(cgroup_cpu_ms()?);
         peak_memory_bytes = peak_memory_bytes.max(cgroup_value("memory.peak")?);
@@ -893,9 +988,6 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
         let usage = filesystem_usage(&filesystems)?;
         written_bytes = written_bytes.max(usage.0);
         written_entries = written_entries.max(usage.1);
-        let output_bytes = fs::metadata(stdout_path)?
-            .len()
-            .saturating_add(fs::metadata(stderr_path)?.len());
         let cause = if Instant::now() >= deadline {
             Some(TrialTermination::DeadlineExceeded)
         } else if cpu_time_ms >= limits.cpu_time_ms {
@@ -906,7 +998,7 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
             Some(TrialTermination::PidExceeded)
         } else if usage.2 {
             Some(TrialTermination::DiskExceeded)
-        } else if output_bytes > limits.output_bytes {
+        } else if output_exceeded {
             Some(TrialTermination::OutputExceeded)
         } else {
             None
@@ -924,10 +1016,13 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
     let usage = filesystem_usage(&filesystems)?;
     written_bytes = written_bytes.max(usage.0);
     written_entries = written_entries.max(usage.1);
-    let output_bytes = fs::metadata(stdout_path)?
-        .len()
-        .checked_add(fs::metadata(stderr_path)?.len())
-        .ok_or("trial output byte count overflow")?;
+    output_exceeded |= drain_outputs(
+        &mut stdout,
+        &mut stderr,
+        &mut stdout_capture,
+        &mut stderr_capture,
+        limits.output_bytes,
+    )?;
     if forced.is_none() {
         forced = if Instant::now() >= deadline {
             Some(TrialTermination::DeadlineExceeded)
@@ -939,14 +1034,14 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
             Some(TrialTermination::PidExceeded)
         } else if usage.2 {
             Some(TrialTermination::DiskExceeded)
-        } else if output_bytes > limits.output_bytes {
+        } else if output_exceeded {
             Some(TrialTermination::OutputExceeded)
         } else {
             None
         };
     }
-    let stdout = digest_file(stdout_path)?;
-    let stderr = digest_file(stderr_path)?;
+    let stdout = stdout_capture.finish();
+    let stderr = stderr_capture.finish();
     if forced.is_none() && !status.success() {
         return Err("trusted trial launcher failed".into());
     }
@@ -988,22 +1083,17 @@ pub(crate) fn run(job: &GuestJob, staged: &StagedJob, _input: &mut File) -> Resu
         )
     };
     written_bytes = written_bytes
-        .checked_add(stdout.0)
-        .and_then(|value| value.checked_add(stderr.0))
-        .and_then(|value| value.checked_add(export_usage.0))
+        .checked_add(export_usage.0)
         .ok_or("trial written byte count overflow")?;
-    // stdout, stderr, and the export tree are outside the bounded child
-    // filesystems; exported files are a physical duplicate.
+    // Output remains in bounded kernel pipes and is not charged as disk.
+    // The export tree is a physical duplicate outside the bounded child filesystems.
     written_entries = written_entries
-        .checked_add(2)
-        .and_then(|value| value.checked_add(export_usage.1))
+        .checked_add(export_usage.1)
         .ok_or("trial written entry count overflow")?;
     for filesystem in filesystems.into_iter().rev() {
         filesystem.cleanup()?;
     }
     cleanup_cgroup()?;
-    fs::remove_file(stdout_path)?;
-    fs::remove_file(stderr_path)?;
     let result = TrialChildResult {
         schema_version: TRIAL_CHILD_PROTOCOL.into(),
         operation_id: request_operation(&request).into(),
@@ -1166,5 +1256,32 @@ mod tests {
             ..wrong_phase
         };
         assert!(classify_status(&request, &contradictory).is_err());
+    }
+
+    #[test]
+    fn output_bursts_are_drained_without_exceeding_the_aggregate_capture() {
+        let prefix = vec![b'a'; 2 * 1024];
+        let mut stdout = std::io::Cursor::new(prefix.clone());
+        let mut stderr = std::io::Cursor::new(vec![b'b'; 1024 * 1024]);
+        let mut stdout_capture = OutputCapture::new();
+        let mut stderr_capture = OutputCapture::new();
+        let mut exceeded = false;
+        while !stdout_capture.eof || !stderr_capture.eof {
+            exceeded |= drain_outputs(
+                &mut stdout,
+                &mut stderr,
+                &mut stdout_capture,
+                &mut stderr_capture,
+                4096,
+            )
+            .unwrap();
+        }
+        assert!(exceeded);
+        let stdout = stdout_capture.finish();
+        let stderr = stderr_capture.finish();
+        assert_eq!(stdout.0, 2048);
+        assert_eq!(stderr.0, 2048);
+        assert_eq!(stdout.1, format!("sha256:{:x}", Sha256::digest(prefix)));
+        assert_eq!(stdout.0 + stderr.0, 4096);
     }
 }
