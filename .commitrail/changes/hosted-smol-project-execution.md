@@ -26,7 +26,7 @@ PRE model access is unsupported: `configured_model_profile_selector` rejects mod
 - `external_checkers/deploy/workstream-checker.service` and `external_checkers/README.md`: align the existing native service configuration and document operator-managed provisioning and shutdown.
 - `scripts/verify_hosted_release_images.py`, `scripts/test_hosted_release_images.py`, `scripts/test_hosted_release_config.py` and existing focused deployment tests: qualify hosted backend images separately from native-node readiness, and exercise the rendered topology and meaningful refusal paths.
 - Existing `experiments/pilot04_external_checker_runtime/` public journey helpers and their focused `scripts/` tests: attach to the actual hosted API and durable workers, retain scoped fault injection and verify native acknowledgements without substituting an in-process API or recorded worker.
-- Owned disposable EC2 qualification resources, source-pinned release builds and an isolated AWS artifact namespace: exercise the rendered hosted release without modifying shared services or production state. Reuse the existing simulated RS256 issuer fixture and label its identity proof accurately.
+- Owned disposable EC2 qualification resources, source-pinned release builds and isolated database/release records and newly owned content-addressed keys within the existing approved AWS namespace: exercise the rendered hosted release without modifying shared services or production state. Reuse the existing simulated RS256 issuer fixture and label its identity proof accurately.
 - `docs/decision_0014_external_service_adapter_convention.md`, `docs/architecture_checker_framework.md` and affected `docs/roadmap_status.md` claims: reconcile the intended hosted boundary and explicit evidence limits.
 - This combined change record.
 
@@ -34,7 +34,7 @@ PRE model access is unsupported: `configured_model_profile_selector` rejects mod
 
 - No runtime implementation changes in the PR #677 worktree, duplicate guest transport, fallback controller or provider implementation changes.
 - No new adapter convention, service locator, backend business policy, schema migration, auth/payment authority, PRE model entitlement or paid retry.
-- No shared service restart, `/etc/workstream` change, product deployment, cloud image publication, global cleanup or merge. Activation is limited to the owned disposable qualification database and artifact namespace; it does not activate the real pilot project.
+- No shared service restart, `/etc/workstream` change, product deployment, cloud image publication, global cleanup or merge. Activation is limited to the owned disposable qualification database/release and the existing approved artifact namespace; it does not activate the real pilot project.
 - Do not weaken existing credential, identity, material, deadline, cleanup or evidence checks to make a deployment fixture pass.
 
 ## Design and decisions
@@ -131,3 +131,10 @@ parser with its declared capabilities and resource limits. The regression fails
 against the earlier validator. Nineteen focused attachment/Smol-proof tests pass;
 the root independently inspected the repair and reran its five custody cases.
 These are fixture and source checks, not a completed hosted journey.
+
+The existing AWS role grants only the approved `workstream/artifacts/sha256/`
+object prefix. Qualification reuses that immutable namespace without IAM changes,
+using a separate database/release and nonce-bound challenge objects. Existing
+same-digest objects remain untouched. Record newly created durable object keys
+and their retention separately from disposable container/VM cleanup; do not
+claim deletion of the shared namespace or bypass its immutability policy.
