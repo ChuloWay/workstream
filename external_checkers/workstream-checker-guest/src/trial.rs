@@ -183,7 +183,7 @@ impl BoundedFilesystem {
             .write(true)
             .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
             .open("/dev/loop-control")?;
-        let index = unsafe { libc::ioctl(control.as_raw_fd(), LOOP_CTL_GET_FREE) };
+        let index = unsafe { libc::ioctl(control.as_raw_fd(), LOOP_CTL_GET_FREE as _) };
         if index < 0 {
             return Err(std::io::Error::last_os_error().into());
         }
@@ -194,7 +194,7 @@ impl BoundedFilesystem {
             .write(true)
             .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
             .open(&loop_path)?;
-        if unsafe { libc::ioctl(loop_file.as_raw_fd(), LOOP_SET_FD, file.as_raw_fd()) } != 0 {
+        if unsafe { libc::ioctl(loop_file.as_raw_fd(), LOOP_SET_FD as _, file.as_raw_fd()) } != 0 {
             return Err(std::io::Error::last_os_error().into());
         }
         let private_mount = base.join("mounted");
@@ -280,7 +280,7 @@ impl BoundedFilesystem {
         }
         if self.loop_attached {
             let loop_file = self.loop_file.as_ref().ok_or("loop device handle absent")?;
-            if unsafe { libc::ioctl(loop_file.as_raw_fd(), LOOP_CLR_FD) } != 0 {
+            if unsafe { libc::ioctl(loop_file.as_raw_fd(), LOOP_CLR_FD as _) } != 0 {
                 return Err(std::io::Error::last_os_error().into());
             }
             self.loop_attached = false;
