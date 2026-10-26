@@ -223,6 +223,8 @@ PYTHONPATH=backend python external_checkers/workstream-checker-service/tests/tru
   --socket /absolute/node.sock --image sha256:... --config sha256:...
 ```
 
-This is adapter/ART custody evidence; public API authorization, durable workers,
-and governed acceptance require the separate
-[WS-EXEC-001](../.commitrail/initiatives/WS-EXEC-001/OVERVIEW.md) drill.
+This matrix proves the adapter/ART boundary. The separate
+[public lifecycle drill](../experiments/pilot04_external_checker_runtime/README.md)
+connects the same node to API uploads and durable workers, including the public
+Operator retry and both governed policy branches. Its recorded Flow/inference
+fixtures do not certify production identity, live models or hosted deployment.
