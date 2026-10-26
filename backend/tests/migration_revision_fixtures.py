@@ -103,6 +103,12 @@ async def historical_revision_source(tmp_path, database_url, monkeypatch, snapsh
     seed = await _restore_historical_revision_rows(database_url, snapshot_name)
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
+    # Restore and validate the exact archived column inventory first. Only then
+    # add the nullable current-ORM projection, removed before the real upgrade.
+    async with engine.begin() as connection:
+        await connection.execute(text(
+            "ALTER TABLE public.checker_runs ADD COLUMN input_context_custody jsonb"
+        ))
     settings = _settings(tmp_path, maximum_bytes=1024 * 1024)
     manager = ArtifactScratchManager(
         root=tmp_path / "historical-post-scratch",
@@ -301,7 +307,6 @@ ALTER TABLE public.submissions ADD COLUMN attempt_status varchar(30) DEFAULT 'ev
   ADD COLUMN updated_at timestamptz DEFAULT now() NOT NULL;
 ALTER TABLE public.task_assignments ADD COLUMN started_at timestamptz,
   ADD COLUMN updated_at timestamptz DEFAULT now() NOT NULL;
-ALTER TABLE public.checker_runs ADD COLUMN input_context_custody jsonb;
 CREATE TABLE public.checker_result_findings (
   id uuid PRIMARY KEY, checker_result_id uuid NOT NULL, checker_run_id uuid NOT NULL,
   task_id uuid NOT NULL, submission_id uuid NOT NULL, member_order integer NOT NULL,
