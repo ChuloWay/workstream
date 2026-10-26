@@ -971,17 +971,14 @@ async def _one_mode(client, factory, env, *,
                  and [(award["instrument"], award["unit"], Decimal(award["quantity"]))
                  for award in item["awards"]] == ([("project_points", "PTS", Decimal("7"))] if awards else []),
                  "public contribution source or award set differs")
-    # Observe this exact duplicate in the actual prefork worker. The local
-    # fixture has a result backend; hosted custody uses production task logs.
+    # Arm hosted task events before duplicate publication. The local fixture
+    # has a result backend; neither path changes the production worker.
     before_delivery = await _outbox_snapshot(factory, completion_id)
-    duplicate = await asyncio.to_thread(
-        deliver_event.apply_async,
-        args=(str(completion_id), project_id),
-        ignore_result=attachment is not None,
-    )
     if attachment:
-        duplicate_result = await attachment.wait_duplicate(duplicate.id)
+        duplicate_result = (await attachment.deliver_duplicate(completion_id, project_id))['result']
     else:
+        duplicate = await asyncio.to_thread(deliver_event.apply_async,
+                                          args=(str(completion_id), project_id))
         try:
             duplicate_result = await asyncio.to_thread(
                 duplicate.get, timeout=120, propagate=True,

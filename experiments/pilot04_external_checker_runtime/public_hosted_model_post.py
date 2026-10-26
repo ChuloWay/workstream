@@ -366,7 +366,6 @@ async def run_model_post(attachment, client, factory, qualification):
     from experiments.pilot04_external_checker_runtime.run_public_journey_probe import (
         _submit, _outbox_snapshot, _project_effects_snapshot, _assert_outcome, _assert_revision,
     )
-    from app.workers.outbox import deliver_event
 
     qualification.verify_cache(attachment)
     await attachment.transition('live')
@@ -465,9 +464,10 @@ async def run_model_post(attachment, client, factory, qualification):
     require(replay == saved, 'completed public Submission replay changed its receipt')
     duplicate_tasks = []
     for identifier in (event_id, completion):
-        duplicate = await asyncio.to_thread(deliver_event.apply_async, args=(str(identifier), project_id), ignore_result=True)
-        await attachment.wait_duplicate(duplicate.id)
-        duplicate_tasks.append({'event_id': str(identifier), 'task_id': duplicate.id})
+        duplicate = await attachment.deliver_duplicate(identifier, project_id)
+        require(duplicate['result'] == {'status': 'delivery_unavailable'},
+                'duplicate model delivery result differs')
+        duplicate_tasks.append({'event_id': str(identifier), 'task_id': duplicate['task_id']})
     require(await account_snapshot(factory, project_id) == ledger
             and {str(identifier): await _outbox_snapshot(factory, identifier) for identifier in (event_id, completion)} == before
             and await paid_custody(factory, project_id, run_id, saved['submission_id'], members[0], qualification) == custody,

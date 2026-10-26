@@ -4,11 +4,13 @@ import copy
 import asyncio
 import hashlib
 import json
+from itertools import count as sequence
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import AsyncMock, patch
 from types import SimpleNamespace
@@ -19,8 +21,133 @@ sys.path.insert(0, str(ROOT))
 sys.path[:0] = [str(ROOT / 'backend'), str(ROOT / 'backend/scripts'), str(ROOT / 'backend/tests')]
 from experiments.pilot04_external_checker_runtime.public_hosted_attachment import (  # noqa: E402
     validate_container,
-    HostedAttachment, manager_rules, duplicate_completed,
+    HostedAttachment, manager_rules, deliver_duplicate,
 )
+
+
+class HostedDuplicateEvents(unittest.TestCase):
+    def observe(self, event_change=None, *, already_enabled=False, restore_reply=None):
+        from celery import Celery
+        from kombu.transport.memory import Channel
+
+        app = Celery('hosted-duplicate-proof', broker='memory://')
+        self.addCleanup(app.close)
+        hostname = 'worker@owned-fixture'
+        stopped = threading.Event()
+        errors = []
+        commands = []
+        published = []
+        listeners = []
+        receiver_type = app.events.Receiver
+
+        def receiver(connection, **options):
+            listeners.append(connection)
+            return receiver_type(connection, **options)
+
+        def heartbeats():
+            try:
+                with app.connection_for_write() as connection:
+                    with app.events.Dispatcher(connection, hostname=hostname) as dispatcher:
+                        while not stopped.is_set():
+                            dispatcher.send('worker-heartbeat')
+                            stopped.wait(.01)
+            except Exception as error:
+                errors.append(error)
+
+        def control(command, **options):
+            if command == 'enable_events':
+                # The in-memory transport's queue registry is process-global;
+                # finish its heartbeat producer before queue deletion. Real Redis
+                # separately qualifies concurrent worker heartbeats and control.
+                stopped.set()
+                heartbeat_thread.join(timeout=2)
+                self.assertFalse(heartbeat_thread.is_alive())
+            self.assertEqual(len(listeners), 1)
+            self.assertIsNot(options['connection'], listeners[0],
+                             'Redis event subscription must not share pidbox control connection')
+            self.assertEqual(options['destination'], [hostname])
+            self.assertTrue(options['reply'])
+            self.assertEqual(options['timeout'], 5)
+            commands.append(command)
+            reply = ({'ok': 'task events already enabled'} if already_enabled
+                     else {'ok': 'task events enabled'}) if command == 'enable_events' else (
+                         restore_reply or {'ok': 'task events disabled'})
+            return [{hostname: reply}]
+
+        def publish(**options):
+            published.append(options)
+            self.assertEqual(commands, ['enable_events'])
+            self.assertFalse(options['retry'])
+            self.assertTrue(options['ignore_result'])
+            identifier = options['task_id']
+            queue = app.conf.event_queue_prefix + '.ws-proof-' + identifier
+            self.assertIn(queue, Channel.queues)
+            events = [
+                ('task-received', {'uuid': str(uuid4()), 'name': 'unrelated'}),
+                ('task-received', {'uuid': identifier, 'name': task.name}),
+                ('task-succeeded', {'uuid': identifier, 'result': "{'status': 'delivery_unavailable'}"}),
+            ]
+            if event_change:
+                event_change(events, identifier)
+            with app.connection_for_write() as connection:
+                for kind, fields in events:
+                    worker = fields.pop('_worker', hostname)
+                    with app.events.Dispatcher(connection, hostname=worker) as dispatcher:
+                        dispatcher.send(kind, **fields)
+
+        task = SimpleNamespace(app=app, name='workstream.outbox.deliver_event', apply_async=publish)
+        heartbeat_thread = threading.Thread(target=heartbeats, daemon=True)
+        heartbeat_thread.start()
+        try:
+            with patch.object(app.events, 'Receiver', side_effect=receiver), \
+                    patch.object(app.control, 'broadcast', side_effect=control):
+                result = deliver_duplicate(task, hostname, 'event-id', 'project-id')
+            self.assertEqual(result, {'task_id': published[0]['task_id'],
+                                     'result': {'status': 'delivery_unavailable'}})
+            self.assertEqual(published[0]['args'], ('event-id', 'project-id'))
+            return result
+        finally:
+            stopped.set()
+            heartbeat_thread.join(timeout=2)
+            self.assertFalse(heartbeat_thread.is_alive())
+            self.assertFalse(errors)
+            self.assertEqual(commands, ['enable_events'] if already_enabled
+                             else ['enable_events', 'disable_events'])
+            for item in published:
+                self.assertNotIn(app.conf.event_queue_prefix + '.ws-proof-' + item['task_id'], Channel.queues)
+
+    def test_real_event_queue_is_armed_before_dispatch_and_then_removed(self):
+        self.observe()
+        self.observe(already_enabled=True)
+
+    def test_wrong_task_result_failure_and_terminal_before_received_are_refused(self):
+        def wrong_name(events, identifier):
+            events[1][1]['name'] = 'another.task'
+        def wrong_result(events, identifier):
+            events[2][1]['result'] = "{'status': 'delivered'}"
+        def wrong_worker(events, identifier):
+            events[2][1]['_worker'] = 'worker@another-fixture'
+        def failed(events, identifier):
+            events[2] = ('task-failed', {'uuid': identifier})
+        def reversed_order(events, identifier):
+            events[1], events[2] = events[2], events[1]
+        for change in (wrong_name, wrong_result, wrong_worker, failed, reversed_order):
+            with self.subTest(change=change.__name__), self.assertRaises(RuntimeError):
+                self.observe(change)
+
+    def test_absolute_completion_deadline_is_enforced(self):
+        def elapsed(events, identifier):
+            timer = patch('experiments.pilot04_external_checker_runtime.public_hosted_attachment.time.monotonic',
+                          side_effect=lambda: next(ticks))
+            ticks = sequence(step=121)
+            timer.start()
+            self.addCleanup(timer.stop)
+        with self.assertRaisesRegex(RuntimeError, 'completion was not observed'):
+            self.observe(elapsed)
+
+    def test_failed_event_restore_cannot_claim_success(self):
+        with self.assertRaisesRegex(RuntimeError, 'not restored'):
+            self.observe(restore_reply={'error': 'not restored'})
 
 
 class HostedContainerCustody(unittest.TestCase):
@@ -311,17 +438,6 @@ class HostedFixtureContracts(unittest.TestCase):
         self.assertTrue(all(item[:3] == ('POST', '/api/v1/service-actors', 'Bearer scoped-rs256-token')
                             for item in observed))
         self.assertEqual(len({item[3] for item in observed}), count)
-
-    def test_duplicate_requires_same_task_received_then_exact_terminal_worker_result(self):
-        identifier = str(uuid4())
-        prefix = 'Task workstream.outbox.deliver_event[' + identifier + ']'
-        received = '[INFO/MainProcess] ' + prefix + ' received\n'
-        completed = "[INFO/ForkPoolWorker-2] " + prefix + " succeeded in 0.124s: {'status': 'delivery_unavailable'}\n"
-        self.assertTrue(duplicate_completed(received + completed, identifier))
-        for logs in (received, completed, completed + received,
-                     received + completed.replace(identifier, str(uuid4())),
-                     received + completed.replace('delivery_unavailable', 'delivered')):
-            self.assertFalse(duplicate_completed(logs, identifier))
 
     def test_scoped_fixture_token_uses_rs256_without_embedded_product_roles(self):
         import jwt

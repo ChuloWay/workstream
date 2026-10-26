@@ -88,6 +88,37 @@ only the existing authorized recovery rules may resolve an effect.
 
 ## Review findings
 
+The first actual hosted baseline reached the correct failed/passed POST pair and
+`review_pending`, then exposed an invalid proof assumption: production
+`SafeJsonFormatter` deliberately omits Celery's free-form messages/results, so
+the attachment's raw-log duplicate matcher can never observe completion. Repair
+only the existing attachment, both duplicate-delivery callers and their focused
+tests: subscribe to a private bounded Celery event queue before publishing one
+explicit task UUID, observe that exact worker/task's received and successful
+duplicate refusal, then retain the existing immutable database/account checks.
+Enable task events only for the owned worker and restore its prior state; remove
+the obsolete log matcher. No product logging, worker configuration, result
+backend, task implementation or paid retry changes are allowed. Verify real
+event routing with focused positive/negative controls, rerun the hosted baseline
+with retained failure evidence, and independently review the observer before
+the live model call.
+
+The replacement subscribes before dispatch and waits for a real heartbeat from
+the exact worker, because Redis installs fanout subscriptions during event
+draining. It uses separate, finite event and control/publish connections; a real
+Redis/Celery control reproduced a missing restoration acknowledgement when those
+consumers shared one connection. The corrected control passed with the production
+closed formatter, no raw success messages, one exact succeeded task event, and
+both owned processes reaped. This synthetic task qualifies the observer mechanism,
+not the real OUTBOX or public journey. The combined 29 attachment/model tests
+passed, including wrong task/worker/result, reversed ordering, failure, absolute
+deadline, prior event state and restoration failure. An in-memory broker fixture
+race was removed by finishing its heartbeat producer before queue deletion;
+concurrent real heartbeats remain covered by the Redis control. Ruff and independent
+source review passed. The failed hosted attempt remains retained; the next
+baseline uses a fresh owned database and Redis logical database before any paid
+claim.
+
 Root plan review of `e07f28b4a`: PASS WITH LOW RISKS for implementation only. The review required exact numeric identity, native/Compose path parity in both directions, native health before API/worker release and explicit drain ordering. Runtime signoff remains separate. The root subsequently approved one trusted deployment-root selector and explicit pinned native binary path because fixed production paths prevented an isolated rendered-topology proof without touching shared resources. Exact UID/GID and live health requirements remain unchanged.
 
 Cold-start inspection found a schema/activation/proxy/node cycle: the proxy reads the activated ART namespace, the native node requires its model socket, and API normally applies migrations. The fixed `migrate`, AWS `proof` and exact proxy-only `up -d model-proxy` stages therefore validate static custody while releasing no application producer/worker; full `up` still requires both typed native health checks. AWS proof itself uses DB/AWS directly and retains its exact existing credential-separated observations.

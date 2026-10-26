@@ -25,12 +25,13 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+from functools import partial
 import hashlib
 import importlib.util
 import json
 import os
 from pathlib import Path
-import re
+import socket
 import subprocess
 import sys
 import time
@@ -55,13 +56,92 @@ def _command(arguments, *, timeout=30, environment=None, combined=False):
     return output
 
 
-def duplicate_completed(logs, identifier):
-    """Match the exact production task's received and terminal INFO records."""
-    task = re.escape('Task workstream.outbox.deliver_event[' + str(UUID(identifier)) + ']')
-    received = re.search(task + r' received\s*$', logs, re.MULTILINE)
-    completed = re.search(task + r" succeeded in [0-9.eE+-]+s: \{'status': 'delivery_unavailable'\}\s*$",
-                          logs, re.MULTILINE)
-    return bool(received and completed and received.start() < completed.start())
+def deliver_duplicate(task, hostname, event_id, project_id):
+    """Observe one real broker delivery without changing production logging."""
+    from kombu import Consumer
+
+    identifier = str(uuid4())
+    ready = False
+    received = False
+    completed = False
+
+    def observe(event):
+        nonlocal ready, received, completed
+        if event['type'] == 'worker-heartbeat' and event.get('hostname') == hostname:
+            ready = True
+            return
+        if event.get('uuid') != identifier or event['type'] not in {
+            'task-received', 'task-succeeded', 'task-failed', 'task-rejected',
+            'task-revoked', 'task-retried',
+        }:
+            return
+        require(event.get('hostname') == hostname, 'duplicate ran on another worker')
+        if event['type'] == 'task-received':
+            require(event.get('name') == task.name, 'duplicate task name differs')
+            received = True
+        elif event['type'] == 'task-succeeded':
+            require(received and event.get('result') == "{'status': 'delivery_unavailable'}",
+                    'duplicate terminal result differs')
+            completed = True
+        elif event['type'] in {'task-failed', 'task-rejected', 'task-revoked', 'task-retried'}:
+            raise RuntimeError('duplicate task did not succeed')
+
+    def control(command):
+        replies = task.app.control.broadcast(command, destination=[hostname], reply=True,
+                                            timeout=5, connection=control_connection)
+        require(len(replies) == 1 and set(replies[0]) == {hostname},
+                'owned worker event-control acknowledgement differs')
+        return replies[0][hostname]
+
+    restore = False
+    options = {'connect_timeout': 5, 'transport_options': {
+        'max_retries': 0, 'socket_connect_timeout': 5, 'socket_timeout': 5,
+        'retry_on_timeout': False,
+    }}
+    # Redis's event subscription and control replies use distinct consumers.
+    # Sharing their connection can lose the restoration acknowledgement.
+    with task.app.connection_for_read(**options) as connection, \
+            task.app.connection_for_write(**options) as control_connection:
+        connection.ensure_connection(max_retries=0, timeout=5)
+        control_connection.ensure_connection(max_retries=0, timeout=5)
+        receiver = task.app.events.Receiver(
+            connection, handlers={'*': observe}, node_id='ws-proof-' + identifier,
+            routing_key='#', queue_ttl=30, queue_expires=180,
+            queue_exclusive=True, queue_durable=False, accept={'json'},
+        )
+        try:
+            # Redis installs its fanout subscription on the first drain, not
+            # basic_consume. A real heartbeat proves this queue is listening.
+            with receiver.get_consumers(partial(Consumer, receiver.channel), receiver.channel)[0]:
+                deadline = time.monotonic() + 15
+                while not ready:
+                    require(time.monotonic() < deadline, 'owned worker event subscription is not ready')
+                    try:
+                        connection.drain_events(timeout=max(.01, min(1, deadline - time.monotonic())))
+                    except socket.timeout:
+                        pass
+                reply = control('enable_events')
+                require(reply in ({'ok': 'task events enabled'}, {'ok': 'task events already enabled'}),
+                        'owned worker did not enable task events')
+                restore = reply == {'ok': 'task events enabled'}
+                task.apply_async(args=(str(event_id), str(project_id)), task_id=identifier,
+                                 ignore_result=True, retry=False,
+                                 producer=task.app.amqp.Producer(control_connection))
+                deadline = time.monotonic() + 120
+                while not completed:
+                    require(time.monotonic() < deadline, 'exact duplicate completion was not observed')
+                    try:
+                        connection.drain_events(timeout=max(.01, min(1, deadline - time.monotonic())))
+                    except socket.timeout:
+                        pass
+        finally:
+            try:
+                if restore:
+                    require(control('disable_events') == {'ok': 'task events disabled'},
+                            'owned worker task events were not restored')
+            finally:
+                receiver.queue(connection.default_channel).delete(if_unused=False, if_empty=False)
+    return {'task_id': identifier, 'result': {'status': 'delivery_unavailable'}}
 
 
 def validate_container(service, rendered, container, image, secrets, networks):
@@ -363,19 +443,18 @@ class HostedAttachment:
         self.inspect()
         return {'previous_container': old, 'container': self.custody['worker']['container_id']}
 
-    async def wait_duplicate(self, identifier):
-        # Hosted workers intentionally have no result backend. Observe their real
-        # production task completion, then the caller checks immutable DB state.
-        identifier = str(UUID(identifier))
-        deadline = time.monotonic() + 120
-        while time.monotonic() < deadline:
-            logs = await asyncio.to_thread(_command, ['docker', 'logs', '--tail', '1000',
-                                            self.custody['worker']['container_id']], combined=True,
-                                            environment=self.docker_environment)
-            if duplicate_completed(logs.decode(errors='replace'), identifier):
-                return {'status': 'delivery_unavailable'}
-            await asyncio.sleep(.3)
-        raise RuntimeError('hosted worker did not observe the exact duplicate completion')
+    async def deliver_duplicate(self, event_id, project_id):
+        from app.workers.outbox import deliver_event
+
+        hostname = (await asyncio.to_thread(
+            _command, ['docker', 'inspect', '--format', '{{.Config.Hostname}}',
+                       self.custody['worker']['container_id']], environment=self.docker_environment,
+        )).decode().strip()
+        require(hostname and len(hostname) <= 253
+                and all(c.isascii() and (c.isalnum() or c in '.-_') for c in hostname),
+                'owned worker hostname is invalid')
+        return await asyncio.to_thread(deliver_duplicate, deliver_event, 'worker@' + hostname,
+                                       event_id, project_id)
 
 
 def manager_rules(original, capabilities, count):
