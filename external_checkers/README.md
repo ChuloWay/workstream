@@ -279,14 +279,31 @@ keep it operator-controlled. Build `workstream-checker-guest` for
 `x86_64-unknown-linux-musl`; the node and bootstrap must come from the same source.
 Each existing cache entry additionally has `smol.archive`,
 `smol.archive_sha256` and `smol.image_config`. The
-[cache preparation command](../backend/scripts/checker_smol_cache.py) checks an already local
-Docker-save archive against its platform manifest, config and rootfs identities.
-Run it from `backend/` with `uv run python -m scripts.checker_smol_cache`.
-It shares platform-manifest validation with the image publisher and verifies
-every declared layer blob and its uncompressed identity. It emits cache configuration; it neither registers the image nor activates a
-policy. Runtime execution needs no Docker daemon, registry credentials or image
-pull. Smol retains private hard links to imported archives; link count alone is
-not an image-integrity check.
+[cache preparation command](../backend/scripts/checker_smol_cache.py) verifies an already local
+Docker-save archive against its approved platform manifest, config and rootfs identities.
+It writes a distinct canonical USTAR archive containing only the closed Docker-save
+manifest and exact approved platform/config and selected/approved layer bytes. Nullable
+source tags, layer-source hints and unrelated compatibility metadata confer no authority
+and are omitted. The source archive and its permissions remain unchanged; the new archive
+has its own hash while the approved platform/config/layer identities stay the same.
+
+Run from `backend/` with two new, distinct output paths:
+
+```sh
+uv run python -m scripts.checker_smol_cache \
+  --archive /absolute/source/image.tar --repository registry.example/checker \
+  --manifest sha256:<approved-platform-manifest> \
+  --archive-output /absolute/cache/image.tar --config-output /absolute/cache/config.json
+```
+
+The command bounds raw headers, paths and metadata before parsing, rejects aliases,
+links, unsupported tar extensions and conflicting ancestry, and rehashes graph bytes
+while copying. Outputs are created exclusively and sealed read-only; failure removes
+only partial files still matching this invocation's created inodes. It shares platform
+validation with the image publisher and verifies each layer's uncompressed identity.
+It emits cache configuration; it neither registers the image nor activates a policy.
+Runtime execution needs no Docker daemon, registry credentials or image pull. Smol
+retains private hard links to imported archives; link count alone is not an integrity check.
 
 The node reserves aggregate memory, disk and concurrent slots before launch.
 A trial invocation reserves the outer checker plus one sequential child VM
