@@ -338,7 +338,12 @@ def test_task_action_requires_visible_acknowledged_confirmation_and_exact_wire(a
     key = CLAIM_KEY if action == "claim" else START_KEY
     posts = []
     with (
-        socket_peer(peer, capture_post=lambda path, headers, body: posts.append((path, headers, body))) as (origin, requests),
+        socket_peer(
+            peer,
+            capture_post=lambda path, headers, body: posts.append(
+                (path, headers, body)
+            ),
+        ) as (origin, requests),
         Terminal(origin, TOKEN, "--plain") as terminal,
     ):
         action_detail(terminal, action)
@@ -379,7 +384,12 @@ def test_pasted_replay_key_requires_manual_confirmation_and_pasted_commands_are_
     peer = Writes()
     posts = []
     with (
-        socket_peer(peer, capture_post=lambda path, headers, body: posts.append((path, headers, body))) as (origin, _),
+        socket_peer(
+            peer,
+            capture_post=lambda path, headers, body: posts.append(
+                (path, headers, body)
+            ),
+        ) as (origin, _),
         Terminal(origin, TOKEN, "--plain") as terminal,
     ):
         action_detail(terminal, "claim")
@@ -437,7 +447,12 @@ def test_task_action_corrupt_success_is_unknown_and_not_retried(action, corrupti
     peer.replies = [(200, value)]
     posts = []
     with (
-        socket_peer(peer, capture_post=lambda path, headers, body: posts.append((path, headers, body))) as (origin, _),
+        socket_peer(
+            peer,
+            capture_post=lambda path, headers, body: posts.append(
+                (path, headers, body)
+            ),
+        ) as (origin, _),
         Terminal(origin, TOKEN, "--plain") as terminal,
     ):
         action_detail(terminal, action)
@@ -498,7 +513,12 @@ def test_unknown_replay_denial_preserves_original_unknown_packet():
     ]
     posts = []
     with (
-        socket_peer(peer, capture_post=lambda path, headers, body: posts.append((path, headers, body))) as (origin, _),
+        socket_peer(
+            peer,
+            capture_post=lambda path, headers, body: posts.append(
+                (path, headers, body)
+            ),
+        ) as (origin, _),
         Terminal(origin, TOKEN, "--plain") as terminal,
     ):
         action_detail(terminal, "claim")
@@ -514,7 +534,9 @@ def test_unknown_replay_denial_preserves_original_unknown_packet():
         terminal.send("y")
         terminal.wait("Request denied")
         assert len(posts) == 2
-        assert [(path, headers["Idempotency-Key"], body) for path, headers, body in posts] == [
+        assert [
+            (path, headers["Idempotency-Key"], body) for path, headers, body in posts
+        ] == [
             (TASK_PATH + "/claim", CLAIM_KEY, b"{}"),
             (TASK_PATH + "/claim", CLAIM_KEY, b"{}"),
         ]
@@ -526,7 +548,12 @@ def test_confirmed_claim_survives_separate_read_failure_without_restoring_text()
     peer = Writes()
     posts = []
     with (
-        socket_peer(peer, capture_post=lambda path, headers, body: posts.append((path, headers, body))) as (origin, _),
+        socket_peer(
+            peer,
+            capture_post=lambda path, headers, body: posts.append(
+                (path, headers, body)
+            ),
+        ) as (origin, _),
         Terminal(origin, TOKEN, "--plain") as terminal,
     ):
         action_detail(terminal, "claim")

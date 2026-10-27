@@ -257,7 +257,9 @@ async def test_tui_real_signed_claim_replay_start_replay_then_fresh_revocation(
         claim_key, start_key = str(uuid4()), str(uuid4())
         writes = []
         app = client._transport.app
-        assert not app.dependency_overrides, "public proof cannot replace AUTH/TASK owners"
+        assert not app.dependency_overrides, (
+            "public proof cannot replace AUTH/TASK owners"
+        )
 
         async def observed(scope, receive, send):
             if scope["type"] == "http" and scope["method"] == "POST":
@@ -282,7 +284,9 @@ async def test_tui_real_signed_claim_replay_start_replay_then_fresh_revocation(
                     terminal.send("\r")
                     await wait("Confirm " + action)
                     assert task in terminal.screen and key in terminal.screen
-                    assert project in terminal.screen and str(owner.id) in terminal.screen
+                    assert (
+                        project in terminal.screen and str(owner.id) in terminal.screen
+                    )
                     terminal.send("s")
                     terminal.send("y")
                     await wait(action.capitalize() + " confirmed")
