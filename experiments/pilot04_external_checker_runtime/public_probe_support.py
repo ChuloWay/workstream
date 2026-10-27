@@ -44,6 +44,10 @@ def _assert_input_hashes(row, expected):
 
 
 def _token(env: dict[str, str], actor) -> str:
+    from experiments.pilot04_external_checker_runtime.public_hosted_attachment import HostedAttachment
+
+    if isinstance(env, HostedAttachment):
+        return env.token(actor)
     issuer, audience, secret = flow_settings(env)
     return issue_flow_token(
         str(actor.actor_profile_id), [], issuer=issuer, audience=audience, secret=secret
@@ -201,13 +205,16 @@ async def _started_public_task(client, *, project_id: str, manager_token: str,
 
 async def _public_project(client, factory, env, *, human_review_required, pre_requirements=1):
     """Public guide activation and submitter grant shared by every runtime trial."""
+    from experiments.pilot04_external_checker_runtime.public_hosted_attachment import HostedAttachment
+
+    attachment = env if isinstance(env, HostedAttachment) else None
     compilation = await public_guide_setup(
         client, factory, human_review_required, _json, lambda actor: _token(env, actor),
-        pre_requirements=pre_requirements,
+        pre_requirements=pre_requirements, attachment=attachment,
     )
     manager = compilation.manager
     guide_id = str(compilation.guide_id)
-    contributor = await _seed_contributor(factory)
+    contributor = attachment.actors['contributor'] if attachment else await _seed_contributor(factory)
 
     manager_token, contributor_token = _token(env, manager), _token(env, contributor)
     project_id = str(compilation.project_id)

@@ -412,7 +412,7 @@ async def _wait_outbox_due(factory, event_id: UUID) -> None:
 
 async def _ready_admission(client, factory, task_id: str, assignment_id: str,
                            contributor_token: str, archive: bytes, summary: str,
-                           attestation: str, predecessor_id: str | None = None) -> str:
+                           attestation: str, predecessor_id: str | None = None, *, hosted=False) -> str:
     from app.workers.artifacts import verify_object
 
     expected_input = _fixture_hashes(archive)
@@ -467,7 +467,7 @@ async def _ready_admission(client, factory, task_id: str, assignment_id: str,
         if now - status_since >= 60:
             puts, jobs = await _artifact_task_state(factory, task_id)
             pending = [identifier for identifier, state, _ in jobs if state == "pending"]
-            if status == "object_confirmed" and len(pending) == 1:
+            if not hosted and status == "object_confirmed" and len(pending) == 1:
                 verification = await asyncio.to_thread(
                     verify_object.apply_async, args=(pending[0],),
                     ignore_result=False,
@@ -497,10 +497,10 @@ async def _ready_admission(client, factory, task_id: str, assignment_id: str,
 
 async def _submit(client, factory, *, task_id: str, assignment_id: str,
                   contributor_token: str, archive: bytes, summary: str,
-                  attestation: str, predecessor_id: str | None, before_create=None) -> dict:
+                  attestation: str, predecessor_id: str | None, before_create=None, hosted=False) -> dict:
     admission_id = await _ready_admission(
         client, factory, task_id, assignment_id, contributor_token,
-        archive, summary, attestation, predecessor_id,
+        archive, summary, attestation, predecessor_id, hosted=hosted,
     )
     if before_create is not None:
         await before_create()
@@ -680,6 +680,7 @@ async def _assert_outcome(factory, *, guide_source, project_id: UUID, task_id: s
                 and row.acceptance_source == "task_post_submit_route",
                 "submitter ContributionRecord lost its exact source or artifact lineage",
             )
+        if expected_awards:
             award = (await session.execute(text(
                 "SELECT contribution_record_id,contributor_id,contribution_policy_version_id,"
                 "instrument_type,unit_code,quantity FROM public.compensation_awards "
@@ -789,7 +790,10 @@ async def _one_mode(client, factory, env, *,
                     human_review_required: bool, operator_id: UUID | None,
                     stop_worker: Callable[[], None] | None = None,
                     start_worker: Callable[[], Awaitable[None]] | None = None, fault_root=None, operator_token=None) -> dict:
-    awards = () if human_review_required else ("project_points",)
+    from experiments.pilot04_external_checker_runtime.public_hosted_attachment import HostedAttachment
+
+    attachment = env if isinstance(env, HostedAttachment) else None
+    awards = () if human_review_required or attachment else ("project_points",)
     from app.workers.outbox import deliver_event
 
     compilation, contributor, manager_token, contributor_token = await _public_project(
@@ -877,6 +881,7 @@ async def _one_mode(client, factory, env, *,
         contributor_token=contributor_token, archive=first_archive,
         summary=summary, attestation=attestation, predecessor_id=None,
         before_create=fail_post_launch if not human_review_required and fault_root else None,
+        hosted=attachment is not None,
     )
     submission_path = f"/api/v1/tasks/{task_id}/submissions"
     history = await _json(client, "GET", submission_path, contributor_token, 200)
@@ -910,6 +915,7 @@ async def _one_mode(client, factory, env, *,
             contributor_token=contributor_token,
             archive=replacement_archive, summary=summary,
             attestation=attestation, predecessor_id=first_submission_id,
+            hosted=attachment is not None,
         )
         expected_inputs[saved["submission_id"]] = _fixture_hashes(replacement_archive)
         _require(saved["submission_version"] == 2,
@@ -930,8 +936,11 @@ async def _one_mode(client, factory, env, *,
         _require(stop_worker is not None and start_worker is not None,
                  "prefork restart control is absent")
         stop_worker()
-        from tests.reviews.lifecycle.transition_support import command_for, transition
-        await transition(await command_for(operator_id, "live"))
+        if attachment:
+            await attachment.transition('live')
+        else:
+            from tests.reviews.lifecycle.transition_support import command_for, transition
+            await transition(await command_for(operator_id, "live"))
         await _wait_outbox_due(factory, completion_id)
         await start_worker()
         await _wait_outbox_acknowledged(factory, completion_id,
@@ -960,22 +969,25 @@ async def _one_mode(client, factory, env, *,
         _require(item["submission_id"] == saved["submission_id"]
                  and item["acceptance_source"] == "task_post_submit_route"
                  and [(award["instrument"], award["unit"], Decimal(award["quantity"]))
-                 for award in item["awards"]] == [("project_points", "PTS", Decimal("7"))],
+                 for award in item["awards"]] == ([("project_points", "PTS", Decimal("7"))] if awards else []),
                  "public contribution source or award set differs")
-    # A result for this one probe publish proves the prefork child consumed
-    # the duplicate; the production task still ignores results by default.
+    # Arm hosted task events before duplicate publication. The local fixture
+    # has a result backend; neither path changes the production worker.
     before_delivery = await _outbox_snapshot(factory, completion_id)
-    duplicate = await asyncio.to_thread(
-        deliver_event.apply_async,
-        args=(str(completion_id), project_id),
-        ignore_result=False,
-    )
-    try:
-        duplicate_result = await asyncio.to_thread(
-            duplicate.get, timeout=120, propagate=True,
-        )
-    finally:
-        await asyncio.to_thread(duplicate.forget)
+    if attachment:
+        duplicate_receipt = await attachment.deliver_duplicate(completion_id, project_id)
+        duplicate_result = duplicate_receipt['result']
+        duplicate_task_id = duplicate_receipt['task_id']
+    else:
+        duplicate = await asyncio.to_thread(deliver_event.apply_async,
+                                          args=(str(completion_id), project_id))
+        duplicate_task_id = duplicate.id
+        try:
+            duplicate_result = await asyncio.to_thread(
+                duplicate.get, timeout=120, propagate=True,
+            )
+        finally:
+            await asyncio.to_thread(duplicate.forget)
     _require(duplicate_result == {"status": "delivery_unavailable"},
              "prefork child did not refuse duplicate completion delivery")
     _require(await _outbox_snapshot(factory, completion_id) == before_delivery,
@@ -990,7 +1002,7 @@ async def _one_mode(client, factory, env, *,
     )
     _require(again == outcome, "duplicate completion changed governed outcome")
     late_revocation = None
-    if not human_review_required:
+    if not human_review_required and attachment is None:
         late_revocation = await _late_revocation_trial(
             client, factory, env, project_id=compilation.project_id,
             accepted_task_id=task_id, manager_token=manager_token,
@@ -1014,6 +1026,10 @@ async def _one_mode(client, factory, env, *,
         ),
         "outcome": outcome,
         "submitted_inputs": expected_inputs,
+        'duplicate_delivery': {
+            'task_id': duplicate_task_id,
+            'observation': 'scoped_worker_events' if attachment else 'result_backend',
+        },
         "late_revocation": late_revocation,
     }
 
@@ -1249,13 +1265,29 @@ def main() -> int:
     parser.add_argument("--image-reference")
     parser.add_argument("--node-config", type=Path, help="Owned provisioned Smol node configuration")
     parser.add_argument("--broker-url")
-    parser.add_argument("--expected-custody", type=Path, required=True)
+    parser.add_argument("--expected-custody", type=Path)
     parser.add_argument("--work-dir", type=Path,
                         help="Unique private directory retaining API and worker diagnostics")
+    parser.add_argument('--hosted-attachment', type=Path,
+                        help='Private attachment manifest for an existing hosted API/worker/Beat')
+    parser.add_argument('--hosted-model-post', type=Path,
+                        help='Private model qualification input; requires hosted attachment and completed actor bootstrap')
     args = parser.parse_args()
     if not args.database_url:
         parser.error("isolated --database-url or WORKSTREAM_TEST_DATABASE_URL is required")
-    if not args.image_reference or not args.node_config or not args.broker_url:
+    if args.hosted_model_post and not args.hosted_attachment:
+        parser.error('model POST qualification requires explicit hosted attachment')
+    if args.hosted_attachment:
+        if (not args.broker_url or args.image_reference or args.node_config
+                or args.work_dir or args.expected_custody):
+            parser.error('hosted attachment requires broker URL and excludes local launch arguments')
+        from experiments.pilot04_external_checker_runtime.public_hosted_attachment import HostedAttachment, run as attach
+        attachment = HostedAttachment.read(args.hosted_attachment)
+        value = asyncio.run(attach(attachment, args.database_url, args.broker_url, args.hosted_model_post)
+                            if args.hosted_model_post else attach(attachment, args.database_url, args.broker_url))
+        print(json.dumps(value, sort_keys=True, separators=(',', ':')))
+        return 0
+    if not args.image_reference or not args.node_config or not args.broker_url or not args.expected_custody:
         parser.error("full drill requires image, node config, and broker URL")
     workspace = (nullcontext(args.work_dir) if args.work_dir else
                  tempfile.TemporaryDirectory(prefix="ws-pilot04-public-"))

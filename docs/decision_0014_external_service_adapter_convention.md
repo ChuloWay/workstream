@@ -64,16 +64,20 @@ authority or construct a transport. The adapter factory is instance-local and ex
 hidden CHECKERS composition. Durable PRE/POST owners retain request, lease and
 result custody, while ART owns verified material and callback-scoped grants.
 Production request/completion registration does not expose public intake.
-Local integration uses runc/docker-dev; hosted gVisor proof remains separate.
+Local Docker integration uses runc/docker-dev. Hosted release configuration
+selects the existing native Smol node through the same typed port; actual hosted
+qualification remains separate.
 
-The Rust service alone owns container-engine access. Python sends an opaque,
+The Rust service alone owns sandbox-engine access. Python sends an opaque,
 request-bound callback grant issued from ART's existing pre-admission scratch
 lifetime. The service resolves it beneath the configured private scratch root,
 recomputes exact file and directory facts, and mounts only the sealed workspace
 read-only. Its trusted cache binds one OCI platform-manifest digest to repository,
 OS, architecture and observed config image ID; it never pulls or resolves tags.
-Hosted health fails closed without `runsc`. The explicit `docker-dev` mode is a
-local mechanism qualification and cannot report hosted gVisor isolation.
+Hosted readiness requires the configured native Smol identity, delegation and
+pinned cached inputs; the release does not start a Docker/runsc fallback. The
+explicit `docker-dev` mode remains local mechanism qualification, outside the
+selected hosted topology.
 
 For an approved POST capability that needs to build or execute submitted work,
 the same service may expose one invocation-local Unix socket to the selected

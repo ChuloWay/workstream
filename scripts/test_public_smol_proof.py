@@ -2,7 +2,10 @@
 
 import hashlib
 import json
+from contextlib import nullcontext
+import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 import tempfile
@@ -13,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from experiments.pilot04_external_checker_runtime.public_fault_files import (  # noqa: E402
     PrivateControlDirectory,
+    private_path,
 )
 from experiments.pilot04_external_checker_runtime import public_node_faults as faults  # noqa: E402
 from experiments.pilot04_external_checker_runtime.public_node_faults import validate_node  # noqa: E402
@@ -52,6 +56,154 @@ class PrivateFaultControls(unittest.TestCase):
         alias.symlink_to(self.root, target_is_directory=True)
         with self.assertRaises(ValueError):
             PrivateControlDirectory(alias)
+
+    def test_root_sticky_ancestor_requires_private_anchor_and_rejects_foreign_parent(self):
+        with tempfile.TemporaryDirectory(prefix='ws-sticky-proof-', dir='/tmp') as name:
+            directory = Path(name)
+            private_path(directory, 0o700, directory=True)
+            directory.chmod(0o755)
+            with self.assertRaises(ValueError):
+                private_path(directory, 0o700, directory=True)
+        parent = self.root / 'parent'
+        parent.mkdir(mode=0o700)
+        directory = parent / 'control'
+        directory.mkdir(mode=0o700)
+        parent.chmod(0o777)
+        with self.assertRaises(ValueError):
+            PrivateControlDirectory(directory)
+        parent.chmod(0o755)
+        original = Path.lstat
+
+        def foreign(path):
+            info = original(path)
+            if path == parent:
+                fields = list(info)
+                fields[4] = os.getuid() + 20000
+                return os.stat_result(fields)
+            return info
+
+        with patch.object(Path, 'lstat', foreign):
+            with self.assertRaises(ValueError):
+                PrivateControlDirectory(directory)
+        parent.chmod(0o1777)
+        with patch.object(Path, 'lstat', foreign):
+            with self.assertRaises(ValueError):
+                PrivateControlDirectory(directory)
+
+    def test_control_hardlinks_and_foreign_bindings_are_refused(self):
+        control = PrivateControlDirectory(self.root)
+        self.addCleanup(control.close)
+        control.write('original', {'safe': True})
+        os.link(self.root / 'original', self.root / 'linked')
+        with self.assertRaises(ValueError):
+            control.read('linked')
+        with self.assertRaises(ValueError):
+            control.write('original', {})
+        self.assertEqual(json.loads((self.root / 'original').read_text()), {'safe': True})
+        control.write('runtime-controls.json', {'root': '/unrelated', 'uid': 10002, 'gid': 10002})
+        with self.assertRaises(ValueError):
+            faults.runtime_control_root(self.root)
+
+    def test_control_fifo_is_refused_without_waiting_for_a_writer(self):
+        os.mkfifo(self.root / 'pipe', 0o600)
+        program = (
+            'import sys; from experiments.pilot04_external_checker_runtime.public_fault_files '
+            'import PrivateControlDirectory; c=PrivateControlDirectory(sys.argv[1]); '
+            '\ntry: c.read("pipe")\nexcept ValueError: pass\nelse: raise RuntimeError("FIFO accepted")'
+            '\nfinally: c.close()\n'
+        )
+        result = subprocess.run([sys.executable, '-c', program, str(self.root)], cwd=ROOT,
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_hosted_config_writes_preserve_readonly_custody_and_reject_replacement(self):
+        directory = self.root / 'runtime-config'
+        directory.mkdir(mode=0o700)
+        config = directory / 'service.json'
+        config.write_bytes(b'original')
+        write_descriptor = os.open(config, os.O_WRONLY)
+        self.addCleanup(os.close, write_descriptor)
+        config.chmod(0o400)
+        actual_root = os.getuid() == 0
+        uid, gid = (10001, 10001) if actual_root else (os.getuid(), os.getgid())
+        if actual_root:
+            os.chown(directory, uid, gid)
+            os.chown(config, uid, gid)
+        # EC2 runs this case as the root operator with real UID10001 files.
+        # The local unprivileged run retains the real inode/mode refusal probes.
+        identity_context = nullcontext() if actual_root else patch.object(
+            faults, '_config_identity', return_value=(uid, gid, 0o400))
+        original_open = os.open
+
+        def operator_open(path, flags, *args, **kwargs):
+            if path == config and flags & os.O_ACCMODE == os.O_WRONLY:
+                # A retained descriptor supplies root's write authority locally;
+                # production inode/mode/owner checks still inspect the real file.
+                return os.dup(write_descriptor)
+            return original_open(path, flags, *args, **kwargs)
+
+        open_context = nullcontext() if actual_root else patch.object(os, 'open', operator_open)
+        with identity_context, open_context:
+            original, identity = faults._read_config(config, True)
+            faults.write_node_config(config, b'changed', identity, hosted_runtime=True)
+            info = config.stat()
+            self.assertEqual((info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)), (uid, gid, 0o400))
+            self.assertEqual((info.st_dev, info.st_ino), identity)
+            faults.write_node_config(config, original, identity, hosted_runtime=True)
+            self.assertEqual(config.read_bytes(), b'original')
+            config.chmod(0o600)
+            with self.assertRaises(ValueError):
+                faults.write_node_config(config, b'bad', identity, hosted_runtime=True)
+            config.chmod(0o400)
+            config.rename(directory / 'retained-original')
+            config.write_bytes(b'replacement must survive')
+            config.chmod(0o400)
+            if actual_root:
+                os.chown(config, uid, gid)
+            with self.assertRaisesRegex(ValueError, 'custody changed'):
+                faults.write_node_config(config, b'bad', identity, hosted_runtime=True)
+            self.assertEqual(config.read_bytes(), b'replacement must survive')
+            self.assertEqual((directory / 'retained-original').read_bytes(), b'original')
+
+    def test_hosted_runtime_identity_is_fixed_and_drops_supplementary_groups(self):
+        with patch.object(os, 'getuid', return_value=1000):
+            with self.assertRaises(ValueError):
+                faults._config_identity(True)
+        with patch.object(os, 'getuid', return_value=0):
+            self.assertEqual(faults._config_identity(True), (10001, 10001, 0o400))
+            with self.assertRaises(ValueError):
+                faults._runtime_user((10002, 10002))
+            with patch.object(subprocess, 'check_output', return_value='{}') as command:
+                faults.runtime({'smol': {'binary': '/pinned/smol', 'home': '/private/home'}},
+                               'machine', 'ls', '--json', identity=(10001, 10001))
+                self.assertEqual({key: command.call_args.kwargs[key]
+                                  for key in ('user', 'group', 'extra_groups')},
+                                 {'user': 10001, 'group': 10001, 'extra_groups': []})
+
+    def test_runtime_sibling_binding_has_distinct_operator_and_runtime_custody(self):
+        runtime = self.root.with_name(self.root.name + '-runtime')
+        runtime.mkdir(mode=0o700)
+        self.addCleanup(runtime.rmdir)
+        control = PrivateControlDirectory(self.root)
+        self.addCleanup(control.close)
+        control.write('runtime-controls.json', {'root': str(runtime), 'uid': 10001, 'gid': 10001})
+        original_getuid, original_getgid = os.getuid, os.getgid
+        # Validate the expected-owner call independently of local chown authority.
+        original_path = faults.private_path
+
+        def validate(path, mode, **kwargs):
+            if path == runtime:
+                self.assertEqual(kwargs, {'directory': True, 'uid': 10001, 'gid': 10001})
+                return
+            return original_path(path, mode, **kwargs)
+
+        with patch.object(faults, '_operator_controls', return_value=control), \
+                patch.object(control, 'close'), patch.object(os, 'getuid', return_value=0), \
+                patch.object(faults, 'private_path', validate):
+            # Control.read still checks the actual local operator identity.
+            self.assertEqual(faults.runtime_control_root(self.root), runtime)
+        self.assertEqual(os.getuid(), original_getuid())
+        self.assertEqual(os.getgid(), original_getgid())
 
     def test_launch_trace_rejects_extra_execution_and_reset_deadline(self):
         trace = self.root / 'runtime-trace.jsonl'

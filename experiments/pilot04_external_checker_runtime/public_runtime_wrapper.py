@@ -16,6 +16,9 @@ arguments = sys.argv[1:]
 if len(arguments) >= 2 and arguments[0] == 'machine':
     operation = arguments[1]
     name = arguments[arguments.index('--name') + 1] if '--name' in arguments else None
+    final_copy = operation == 'cp' and arguments[-1].endswith(':/.workstream-guest')
+    if final_copy:
+        name = arguments[-1].removesuffix(':/.workstream-guest')
     with Path(settings['trace']).open('a+') as output:
         fcntl.flock(output, fcntl.LOCK_EX)
         output.seek(0)
@@ -32,6 +35,23 @@ if len(arguments) >= 2 and arguments[0] == 'machine':
                                      if lease else None}) + '\n')
             output.flush()
             os.fsync(output.fileno())
+    if final_copy:
+        # Observe only actual successful native preparation. The service still
+        # emits and the real API client consumes its own prepare/ok protocol ACK.
+        result = subprocess.run([settings['binary'], *arguments], check=False)
+        if result.returncode == 0:
+            lease_path = Path(settings['socket']).parent / 'smol-leases' / (str(name) + '.json')
+            lease = json.loads(lease_path.read_text()) if lease_path.exists() else None
+            with Path(settings['trace']).open('a') as output:
+                fcntl.flock(output, fcntl.LOCK_EX)
+                output.write(json.dumps({'operation': 'prepare_completed', 'name': name,
+                                         'project': project, 'monotonic': time.monotonic(),
+                                         'wall_ms': time.time_ns() // 1_000_000,
+                                         'lease': {k: lease[k] for k in ('name', 'owner', 'epoch', 'expires_ms', 'lifetime_ms')}
+                                         if lease else None}) + '\n')
+                output.flush()
+                os.fsync(output.fileno())
+        sys.exit(result.returncode)
     if project and operation in {'start', 'exec'}:
         with Path(settings['mode']).open('r+') as state:
             fcntl.flock(state, fcntl.LOCK_EX)

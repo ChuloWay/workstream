@@ -452,24 +452,30 @@ def verify_backend_entrypoint(image: str, sdk_environment: str, owner: str) -> N
 
 
 def write_evidence(path: Path, evidence: dict) -> None:
+    scope = evidence.get("proof_scope")
+    require(scope in {"all-release-images", "native-hosted"}, "evidence scope differs")
+    keys = {
+        "proof_scope",
+        "source_sha",
+        "tree_sha",
+        "backend_agents_image_id",
+        "backend_omnicore_image_id",
+        "backend_source_sha256",
+        "backend_lock_sha256",
+        "loader_sha256",
+        "roles_anywhere_helper_sha256",
+    }
+    if scope == "all-release-images":
+        keys.update(
+            {"checker_image_id", "checker_lock_sha256", "checker_binary_sha256"}
+        )
     require(
-        set(evidence)
-        == {
-            "source_sha",
-            "tree_sha",
-            "backend_agents_image_id",
-            "backend_omnicore_image_id",
-            "checker_image_id",
-            "backend_source_sha256",
-            "backend_lock_sha256",
-            "checker_lock_sha256",
-            "loader_sha256",
-            "checker_binary_sha256",
-            "roles_anywhere_helper_sha256",
-        },
+        set(evidence) == keys,
         "evidence shape differs",
     )
     for key, value in evidence.items():
+        if key == "proof_scope":
+            continue
         pattern = (
             r"sha256:[a-f0-9]{64}"
             if key.endswith("_image_id")
@@ -499,6 +505,11 @@ def main() -> None:
     parser.add_argument("--backend-agents-image")
     parser.add_argument("--backend-omnicore-image")
     parser.add_argument("--checker-image")
+    parser.add_argument(
+        "--scope",
+        choices=("all-release-images", "native-hosted"),
+        default="all-release-images",
+    )
     parser.add_argument("--evidence", type=Path)
     args = parser.parse_args()
     if args.cleanup_owner:
@@ -511,6 +522,14 @@ def main() -> None:
             )
         )
         return
+    require(
+        bool(args.backend_agents_image) and bool(args.backend_omnicore_image),
+        "both backend SDK images are required",
+    )
+    require(
+        bool(args.checker_image) == (args.scope == "all-release-images"),
+        "checker image is required only for all-release-images scope",
+    )
     owner_label(args.container_owner or "")
     root = Path(__file__).resolve().parents[1]
     head = checked(["git", "rev-parse", "HEAD"]).decode().strip()
@@ -522,7 +541,6 @@ def main() -> None:
     loader = file_hash(root / "docker/backend/release-entrypoint.sh")
     backend_agents_id = image_metadata(args.backend_agents_image, "backend")
     backend_omnicore_id = image_metadata(args.backend_omnicore_image, "backend")
-    checker_id = image_metadata(args.checker_image, "checker")
     backend_agents = inspect_image(backend_agents_id, "backend", args.container_owner)
     verify_backend(backend_agents, inventory, agents_packages, loader, "agents")
     verify_backend_entrypoint(backend_agents_id, "agents", args.container_owner)
@@ -531,8 +549,28 @@ def main() -> None:
     )
     verify_backend(backend_omnicore, inventory, omnicore_packages, loader, "omnicore")
     verify_backend_entrypoint(backend_omnicore_id, "omnicore", args.container_owner)
-    checker = inspect_image(checker_id, "checker", args.container_owner)
-    verify_checker(checker)
+    evidence = {
+        "proof_scope": args.scope,
+        "source_sha": head,
+        "tree_sha": checked(["git", "rev-parse", "HEAD^{tree}"]).decode().strip(),
+        "backend_agents_image_id": backend_agents_id,
+        "backend_omnicore_image_id": backend_omnicore_id,
+        "backend_source_sha256": hashlib.sha256(
+            json.dumps(inventory, sort_keys=True).encode()
+        ).hexdigest(),
+        "backend_lock_sha256": inventory["uv.lock"],
+        "loader_sha256": loader,
+        "roles_anywhere_helper_sha256": backend_agents["roles_anywhere_helper"],
+    }
+    if args.scope == "all-release-images":
+        checker_id = image_metadata(args.checker_image, "checker")
+        checker = inspect_image(checker_id, "checker", args.container_owner)
+        verify_checker(checker)
+        evidence.update(
+            checker_image_id=checker_id,
+            checker_lock_sha256=file_hash(root / "external_checkers/Cargo.lock"),
+            checker_binary_sha256=checker["binary"],
+        )
     require(
         checked(["git", "rev-parse", "HEAD"]).decode().strip() == head,
         "proof checkout changed during inspection",
@@ -540,25 +578,10 @@ def main() -> None:
     require(
         not checked(["git", "status", "--porcelain"]), "proof checkout became dirty"
     )
-    write_evidence(
-        args.evidence,
-        {
-            "source_sha": head,
-            "tree_sha": checked(["git", "rev-parse", "HEAD^{tree}"]).decode().strip(),
-            "backend_agents_image_id": backend_agents_id,
-            "backend_omnicore_image_id": backend_omnicore_id,
-            "checker_image_id": checker_id,
-            "backend_source_sha256": hashlib.sha256(
-                json.dumps(inventory, sort_keys=True).encode()
-            ).hexdigest(),
-            "backend_lock_sha256": inventory["uv.lock"],
-            "checker_lock_sha256": file_hash(root / "external_checkers/Cargo.lock"),
-            "loader_sha256": loader,
-            "checker_binary_sha256": checker["binary"],
-            "roles_anywhere_helper_sha256": backend_agents["roles_anywhere_helper"],
-        },
+    write_evidence(args.evidence, evidence)
+    print(
+        f"{args.scope} image source, packages, metadata and bounded smoke checks passed."
     )
-    print("Release image source, packages, metadata and bounded smoke checks passed.")
 
 
 if __name__ == "__main__":

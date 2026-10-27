@@ -191,6 +191,12 @@ Hosted Smol composition and its scoped AWS proof are tracked separately in
 does not establish live-model grading or the full Terminal Systems
 guide-to-contribution journey.
 
+The [hosted composition](../deploy/hosted/README.md) uses that same native node
+for typed intake and project execution, with credentials confined to the trusted
+proxy. Its configuration/readiness checks do not establish a live model call or
+public lifecycle qualification. PRE model selectors remain unsupported; only
+existing approved POST model lineage can issue that grant.
+
 The opt-in
 [`model_relay_docker.py`](workstream-checker-service/tests/model_relay_docker.py)
 probe drives a real Docker-development checker from its invocation-local socket,
@@ -273,7 +279,7 @@ if that capability still exists.
 
 ## Smol microVM engine
 
-The node also accepts the deployment pair `smolvm` / `smol-microvm`. Python still
+The hosted node uses the deployment pair `smolvm` / `smol-microvm`. Python still
 uses the single `external_checker_execution/unix_socket` provider; neither a
 project policy nor a checker request can choose the engine. The trusted guest
 receives typed current and optional predecessor material roots and the authorized
@@ -286,10 +292,14 @@ Use Linux x86-64 with `/dev/kvm`, cgroup v2 and Smol 1.31.4. The
 places the controller in its own subgroup; `DelegateSubgroup` requires systemd
 254 or later ([systemd documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html#DelegateSubgroup=)).
 Set `smol.cgroup_root` to that unit's delegated root, not the controller subgroup.
-The service refuses startup outside its delegation. Use the ART grant issuer's
-Unix identity and a separate private socket directory, Smol HOME and image cache
-for each node. The sample unit's CPU, memory and task ceilings are deployment
-capacity; individual registered checker limits remain unchanged.
+The service refuses startup outside its delegation. Use the ART grant issuer's numeric UID/GID (`10001:10001` in the hosted unit)
+and a separate private socket directory, Smol HOME and image cache for each node. The sample unit's CPU, memory and task ceilings are deployment
+capacity; individual registered checker limits remain unchanged. Hosted releases
+may select one canonical private deployment root and a digest-pinned native
+binary path; the same derived absolute scratch/socket paths must appear in the
+node JSON and API/worker mounts. See the
+[hosted operator sequence](../deploy/hosted/README.md#start-and-inspect) for
+migration/activation/proxy prerequisites and native readiness.
 
 Keep the canonical Smol HOME path at most 59 filesystem bytes. Trial-enabled
 nodes also need a separately owned `trial_runtime.child_home_root` at most 18
@@ -407,10 +417,10 @@ Backend API and durable workers require all three settings:
 - `WORKSTREAM_ARTIFACT_INTAKE_CONFIG_DIGEST`: exact image config digest.
 
 The configured socket must serve Smol with the expected trusted image and default
-behavior. A Docker/runsc project node can remain separate, but cannot satisfy ART
-intake readiness. Missing or mismatched configuration fails closed; there is no
-host ZIP/default fallback. Existing Docker-only deployment compositions therefore
-need a separately provisioned Smol intake node before accepting uploads or POST.
+behavior. The hosted release uses the same native node socket for this typed capability
+and project execution; the protocols and privileged intake image remain separate.
+Missing or mismatched configuration fails closed. Local Docker-only mechanism
+configurations still cannot supply Smol intake readiness.
 
 The original artifact deadline bounds upload and intake preparation together.
 Only known pre-launch infrastructure failures permit at most three preparation

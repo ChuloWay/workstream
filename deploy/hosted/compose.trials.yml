@@ -1,0 +1,11 @@
+# Consumes the trial authority/handler supplied by the Smol runtime dependency.
+services:
+  model-proxy:
+    environment:
+      WORKSTREAM_CHECKER_TRIAL_AUTHORITY_MANIFEST_PATH: /etc/workstream/trial-authority.json
+      WORKSTREAM_CHECKER_TRIAL_AUTHORITY_MANIFEST_DIGEST: ${WORKSTREAM_CHECKER_TRIAL_AUTHORITY_MANIFEST_DIGEST:?set the pinned trial authority digest}
+    volumes:
+      - type: bind
+        source: ${WORKSTREAM_CHECKER_TRIAL_AUTHORITY_MANIFEST_PATH:?set the private trial authority manifest path}
+        target: /etc/workstream/trial-authority.json
+        read_only: true

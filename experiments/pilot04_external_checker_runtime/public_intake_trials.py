@@ -64,7 +64,7 @@ def _assert_ordered_pre_and_stop(row, *, failed):
 
 
 def _events(path):
-    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+    return [json.loads(line) for line in path.read_text().splitlines()] if path and path.exists() else []
 
 
 def _assert_project_invocations(row, trace, observer_start, node_root, runtime_start):
@@ -73,12 +73,12 @@ def _assert_project_invocations(row, trace, observer_start, node_root, runtime_s
     observed = _events(trace)[observer_start:]
     starts = [event for event in observed if event['event'] == 'project_started']
     ends = [event for event in observed if event['event'] == 'project_completed']
-    _require([event['session'] for event in starts] == expected
-             and [event['session'] for event in ends] == expected,
+    _require(trace is None or ([event['session'] for event in starts] == expected
+             and [event['session'] for event in ends] == expected),
              'project adapter invocations differ from retained ordered members')
     order = [(event['event'], event['session']) for event in observed
              if event['event'] in {'project_started', 'project_completed'}]
-    _require(order == [(kind, digest) for digest in expected
+    _require(trace is None or order == [(kind, digest) for digest in expected
                        for kind in ('project_started', 'project_completed')],
              'project checker invocations overlap or run outside canonical order')
     machines = assert_launches(node_root, runtime_start, creates=len(expected),
@@ -87,7 +87,7 @@ def _assert_project_invocations(row, trace, observer_start, node_root, runtime_s
                   if event['project'] and event['operation'] == 'exec']
     _require([event['name'] for event in executions] == machines,
              'project guest execution order differs from fresh allocation order')
-    for started, ended, executed in zip(starts, ends, executions, strict=True):
+    for started, ended, executed in zip(starts, ends, executions if trace else [], strict=True):
         _require(started['monotonic'] <= executed['monotonic'] <= ended['monotonic'],
                  'project VM execution is outside its exact adapter request')
     return machines
@@ -104,6 +104,35 @@ async def _wait_event(path, start, event, session=None):
     raise RuntimeError("real intake adapter did not acknowledge " + event)
 
 
+async def _native_event(root, start, operation, *, name=None, timeout=45):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        matches = [event for event in trace_events(root)[start:]
+                   if event['operation'] == operation and event['project'] is False
+                   and (name is None or event['name'] == name)]
+        if matches:
+            _require(len(matches) == 1 and matches[0].get('lease')
+                     and matches[0]['lease']['name'] == matches[0]['name'],
+                     'native preparation evidence is ambiguous or lacks a lease')
+            return matches[0]
+        await asyncio.sleep(.05)
+    raise RuntimeError('native intake did not reach ' + operation)
+
+
+async def _prepared(trace, start, node_root, runtime_start):
+    if trace is not None:
+        return await _wait_event(trace, start, 'prepare_ready')
+    event = await _native_event(node_root, runtime_start, 'prepare_completed')
+    return {'evidence': 'native_prepare_completed', 'session': event['name'], **event}
+
+
+async def _closed(trace, start, session, node_root, runtime_start):
+    if trace is not None:
+        await _wait_event(trace, start, 'close_confirmed', session)
+    else:
+        await _native_event(node_root, runtime_start, 'delete', name=session)
+
+
 async def _cancel_upload(client, factory, route, headers, token, archive, trace, task, node_root):
     start = len(_events(trace))
     key = str(uuid4())
@@ -114,7 +143,7 @@ async def _cancel_upload(client, factory, route, headers, token, archive, trace,
     async def incomplete():
         nonlocal session_id
         yield archive[:1]
-        session_id = (await _wait_event(trace, start, "prepare_ready"))["session"]
+        session_id = (await _prepared(trace, start, node_root, runtime_start))["session"]
         ready.set()
         await asyncio.Event().wait()
 
@@ -127,7 +156,7 @@ async def _cancel_upload(client, factory, route, headers, token, archive, trace,
     finally:
         pending.cancel()
         await asyncio.gather(pending, return_exceptions=True)
-    await _wait_event(trace, start, "close_confirmed", session_id)
+    await _closed(trace, start, session_id, node_root, runtime_start)
     cleanup = await node_command(node_root, "drained")
     _require(cleanup["foreign_preserved"] and not any(cleanup["resources"].values()),
              "cancelled upload retained owned resources or changed the foreign control")
@@ -140,6 +169,44 @@ async def _cancel_upload(client, factory, route, headers, token, archive, trace,
     await _assert_no_submission_after_intake_failure(factory, task)
     return {"case": "cancelled_upload", "session": session_id, "machines": machines,
             "cleanup": cleanup, "reserved_runs": 0}
+
+
+async def _expire_upload(client, factory, route, headers, token, archive, task, node_root):
+    """Hold a real HTTP body open through its original native lease deadline."""
+    key, start = str(uuid4()), len(trace_events(node_root))
+    observed = {}
+
+    async def stalled():
+        yield archive[:1]
+        prepared = await _native_event(node_root, start, 'prepare_completed')
+        remaining = (prepared['lease']['expires_ms'] - time.time_ns() // 1_000_000) / 1000
+        _require(0 < remaining <= 3600, 'native intake expiry exceeds bounded public proof window')
+        deleted = await _native_event(node_root, start, 'delete', name=prepared['name'], timeout=remaining + 45)
+        _require(deleted['wall_ms'] >= prepared['lease']['expires_ms']
+                 and deleted['lease']['epoch'] == prepared['lease']['epoch']
+                 and deleted['lease']['expires_ms'] == prepared['lease']['expires_ms'],
+                 'stalled upload did not reach its original lease expiry')
+        observed.update(prepared=prepared, deleted=deleted)
+        yield archive[1:]
+
+    response = await client.post(route, headers=headers | {'Authorization': 'Bearer ' + token,
+                                  'Idempotency-Key': key}, content=stalled())
+    _require(response.status_code == 503
+             and response.json()['error']['code'] == 'service_unavailable'
+             and response.json()['detail'] == 'pre_submission_attempt_outcome_unresolved',
+             'expired upload was not reported as unresolved infrastructure')
+    cleanup = await node_command(node_root, 'drained')
+    _require(cleanup['foreign_preserved'] and not any(cleanup['resources'].values()),
+             'expired upload cleanup changed foreign custody or retained resources')
+    machines = assert_launches(node_root, start, creates=1, executions=0, project=False)
+    assert_launches(node_root, start, creates=0, executions=0)
+    async with factory() as session:
+        _require(await session.scalar(select(func.count()).select_from(SelectedPreSubmitRun).where(
+            SelectedPreSubmitRun.idempotency_key == key)) == 0,
+            'expired incomplete upload reserved a selected checker run')
+    await _assert_no_submission_after_intake_failure(factory, task)
+    return {'case': 'stalled_upload_original_expiry', 'observed': observed, 'machines': machines,
+            'http_status': response.status_code, 'reserved_runs': 0, 'cleanup': cleanup}
 
 
 async def public_intake_trials(client, factory, env, trace: Path, node_root: Path):
@@ -159,25 +226,35 @@ async def public_intake_trials(client, factory, env, trace: Path, node_root: Pat
                    "X-Contributor-Attestation": "rights_confirmed; no confidential data or credentials."}
         if count == 0:
             start = len(_events(trace))
+            unauth_runtime_start = len(trace_events(node_root))
             response = await client.post(route, headers=headers | {"Idempotency-Key": str(uuid4())}, content=archive)
             _require(response.status_code == 401,
                      f"unauthenticated upload returned {response.status_code}; expected 401")
             _require(len(_events(trace)) == start, "unauthenticated upload allocated an intake session")
+            _require(len(trace_events(node_root)) == unauth_runtime_start,
+                     'unauthenticated upload allocated native resources')
             evidence.append(await _cancel_upload(
                 client, factory, route, headers, contributor, archive, trace, task, node_root,
             ))
+            if trace is None:
+                evidence.append(await _expire_upload(
+                    client, factory, route, headers, contributor, archive, task, node_root))
+                # The real configured upload deadline may outlive a fixture
+                # token. Mint a fresh token for the next independent request.
+                contributor = env.token_for_label('contributor')
             start = len(_events(trace))
             runtime_start = len(trace_events(node_root))
             key = str(uuid4())
             async def delayed_upload():
                 yield archive[:1]
-                ready = await _wait_event(trace, start, "prepare_ready")
+                ready = await _prepared(trace, start, node_root, runtime_start)
                 evidence.append({"case": "upload_overlap", "ready": ready,
                                  "upload_finished_at": time.monotonic()})
                 yield archive[1:]
             result = await _json(client, "POST", route, contributor, 202,
                                  headers=headers | {"Idempotency-Key": key}, content=delayed_upload())
-            await _wait_event(trace, start, "close_confirmed")
+            session = evidence[-1]['ready']['session']
+            await _closed(trace, start, session, node_root, runtime_start)
             row = await _selected(factory, key)
             _assert_default_only_pre(row)
             _assert_project_invocations(row, trace, start, node_root, runtime_start)

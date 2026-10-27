@@ -1,24 +1,11 @@
 services:
-  checker-service:
-    volumes:
-      - type: bind
-        source: /var/lib/workstream/model-runtime
-        target: /var/lib/workstream/model-runtime
-        read_only: true
-      - type: bind
-        source: /var/lib/workstream/model-relays
-        target: /var/lib/workstream/model-relays
-    depends_on:
-      model-proxy:
-        condition: service_healthy
-
   worker:
     environment:
-      WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET: /var/lib/workstream/model-runtime/model.sock
+      WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET: ${WORKSTREAM_DEPLOYMENT_ROOT:-/var/lib/workstream}/model-runtime/model.sock
     volumes:
       - type: bind
-        source: /var/lib/workstream/model-runtime
-        target: /var/lib/workstream/model-runtime
+        source: ${WORKSTREAM_DEPLOYMENT_ROOT:-/var/lib/workstream}/model-runtime
+        target: ${WORKSTREAM_DEPLOYMENT_ROOT:-/var/lib/workstream}/model-runtime
         read_only: true
     depends_on:
       model-proxy:

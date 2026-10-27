@@ -3,9 +3,8 @@
   "material_root": "/var/lib/workstream/scratch",
   "model_proxy_socket": "/var/lib/workstream/model-runtime/model.sock",
   "model_relay_root": "/var/lib/workstream/model-relays",
-  "docker_binary": "/usr/local/bin/docker",
-  "runtime": "runsc",
-  "isolation_mode": "gvisor",
+  "runtime": "smolvm",
+  "isolation_mode": "smol-microvm",
   "operating_system": "linux",
   "architecture": "amd64",
   "sandbox_uid": 10001,
@@ -18,7 +17,40 @@
       "platform_manifest_byte_count": 1,
       "operating_system": "linux",
       "architecture": "amd64",
-      "config_image_id": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      "config_image_id": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "smol": {
+        "archive": "/var/lib/workstream-checker/images/project-checker.tar",
+        "archive_sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "image_config": "/var/lib/workstream-checker/images/project-checker.config.json"
+      }
+    },
+    {
+      "repository": "registry.example/workstream/trusted-intake",
+      "platform_manifest_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "platform_manifest_media_type": "application/vnd.oci.image.manifest.v1+json",
+      "platform_manifest_byte_count": 1,
+      "operating_system": "linux",
+      "architecture": "amd64",
+      "config_image_id": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "smol": {
+        "archive": "/var/lib/workstream-checker/images/trusted-intake.tar",
+        "archive_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "image_config": "/var/lib/workstream-checker/images/trusted-intake.config.json"
+      }
     }
-  ]
+  ],
+  "smol": {
+    "binary": "/opt/workstream/smol/smol",
+    "binary_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "home": "/var/lib/workstream-checker/smol",
+    "guest_binary": "/opt/workstream/bin/workstream-checker-guest",
+    "guest_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "cgroup_root": "/sys/fs/cgroup/system.slice/workstream-checker.service",
+    "maximum_parallel": 2,
+    "maximum_storage_bytes": 8589934592
+  },
+  "trusted_intake": {
+    "platform_manifest_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "default_behavior_sha256": "sha256:af2c604f792c4456d3b222036c772161b1503eace65ff90c3d3a23d9d348c28f"
+  }
 }
