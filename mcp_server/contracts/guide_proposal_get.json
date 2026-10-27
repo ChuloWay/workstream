@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "866aefca9117acf90f24b19b09de77c6debe2c5efc73de6dce3920d8c25c53b4",
+  "canonical_sha256": "5eebc8ec72a85d86d768e1b88194a09d3376c4672f289f3e792cadc990133fae",
   "components": {
     "schemas": {
       "ApiError": {
@@ -297,6 +297,7 @@
               "current_runner",
               "checker_implementation",
               "model_proxy",
+              "trial_proxy",
               "runtime_gap"
             ],
             "type": "string"
@@ -1580,6 +1581,6 @@
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/proposal",
-    "repository_sha": "59c52cc81179611ea316935552cc177f83eec687"
+    "repository_sha": "9e38a8491f3497702c7395bb24260433ea8b4199"
   }
 }

@@ -80,6 +80,7 @@ def metadata(**changes) -> dict:
         "pricing": {
             "prompt": "0.000000011",
             "completion": "0.000000029",
+            "web_search": "0.01",
             "input_cache_read": "0.000000002",
             "input_cache_write": "0.000000011",
         },
@@ -248,8 +249,20 @@ async def test_request_bound_refuses_before_metadata_or_paid_dispatch() -> None:
         {"top_provider": {"context_length": 101, "max_completion_tokens": 50}},
         {"supported_parameters": ["max_tokens"]},
         {"pricing": {"prompt": "0.000000012", "completion": "0.000000029"}},
+        {"pricing": {**metadata()["data"]["pricing"], "request": "0.01"}},
+        {"pricing": {**metadata()["data"]["pricing"], "unknown_feature": "0.01"}},
+        {"pricing": {**metadata()["data"]["pricing"], "web_search": "NaN"}},
     ],
-    ids=["model", "context-ceiling", "context-disagreement", "parameters", "pricing"],
+    ids=[
+        "model",
+        "context-ceiling",
+        "context-disagreement",
+        "parameters",
+        "pricing",
+        "request-fee",
+        "unknown-fee",
+        "invalid-disabled-search-price",
+    ],
 )
 async def test_metadata_refusal_prevents_paid_dispatch(drift: dict) -> None:
     requests: list[httpx.Request] = []
@@ -272,12 +285,21 @@ async def test_metadata_refusal_prevents_paid_dispatch(drift: dict) -> None:
 @pytest.mark.parametrize(
     ("post_result", "failure", "known"),
     [
-        (httpx.Response(503, json={"id": "generation-known"}),
-         CheckerModelCreateFailure.DELIVERY_UNCERTAIN, True),
-        (httpx.Response(200, json=completion(choices=[])),
-         CheckerModelCreateFailure.RESPONSE_INVALID, True),
-        (httpx.Response(200, content=b"not-json"),
-         CheckerModelCreateFailure.RESPONSE_INVALID, False),
+        (
+            httpx.Response(503, json={"id": "generation-known"}),
+            CheckerModelCreateFailure.DELIVERY_UNCERTAIN,
+            True,
+        ),
+        (
+            httpx.Response(200, json=completion(choices=[])),
+            CheckerModelCreateFailure.RESPONSE_INVALID,
+            True,
+        ),
+        (
+            httpx.Response(200, content=b"not-json"),
+            CheckerModelCreateFailure.RESPONSE_INVALID,
+            False,
+        ),
     ],
     ids=["non-success", "invalid-output", "invalid-json"],
 )
@@ -415,7 +437,6 @@ async def test_identity_choice_and_usage_substitution_cannot_settle(body: dict) 
             "message": {"role": "assistant", "content": 0},
             "finish_reason": "error",
         },
-
         {
             "message": {"role": "assistant", "content": "bounded"},
             "finish_reason": "stop",
@@ -430,7 +451,6 @@ async def test_identity_choice_and_usage_substitution_cannot_settle(body: dict) 
             "message": {"role": "assistant", "content": "bounded", "tool_calls": {}},
             "finish_reason": "stop",
         },
-
         {
             "index": 0,
             "message": {
@@ -451,9 +471,15 @@ async def test_identity_choice_and_usage_substitution_cannot_settle(body: dict) 
         },
     ],
     ids=[
-        "boolean-index", "null-completed-content", "missing-completed-content",
-        "malformed-failed-content", "missing-index", "null-index",
-        "malformed-tool-calls", "tool-call", "function-call",
+        "boolean-index",
+        "null-completed-content",
+        "missing-completed-content",
+        "malformed-failed-content",
+        "missing-index",
+        "null-index",
+        "malformed-tool-calls",
+        "tool-call",
+        "function-call",
     ],
 )
 async def test_non_text_choice_payload_cannot_settle(choice: dict) -> None:
@@ -518,11 +544,15 @@ async def test_response_and_output_byte_bounds_remain_uncertain_after_post() -> 
 
     output_result = await exercise(
         profile(maximum_output_bytes=10, maximum_response_bytes=5_000),
-        completion(choices=[{
-            "index": 0,
-            "message": {"role": "assistant", "content": "x" * 11},
-            "finish_reason": "stop",
-        }]),
+        completion(
+            choices=[
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "x" * 11},
+                    "finish_reason": "stop",
+                }
+            ]
+        ),
     )
     response_result = await exercise(
         profile(maximum_output_bytes=10, maximum_response_bytes=4_156),

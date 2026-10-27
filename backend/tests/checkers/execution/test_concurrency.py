@@ -26,7 +26,6 @@ async def final_facts(h, lease, *, verdict="passed"):
     from app.modules.checkers.api.execution import ExecuteFacts
 
     if h.request.policy.entries:
-        from dataclasses import asdict
         from .support import ControlledSelectedExecution
 
         consumer = live_executor(
@@ -34,13 +33,13 @@ async def final_facts(h, lease, *, verdict="passed"):
         )._consumer(h.request, lease)
         materialized = await h.service.materialize(ExecuteFacts(request=h.request, lease=lease), consumer)
         material = VerifiedMaterialFacts(**{
-            key: value for key, value in asdict(materialized).items()
-            if key not in {"evaluation", "input_materialization_evidence_id"}
+            key: getattr(materialized, key) for key in VerifiedMaterialFacts.model_fields
         })
         return FinalizeFacts(
             request=h.request, lease=lease, result=materialized.evaluation,
             material=material,
             input_materialization_evidence_id=materialized.input_materialization_evidence_id,
+            input_context_custody=materialized.input_context_custody,
             output_binding_ids=(),
         )
     material = VerifiedMaterialFacts(

@@ -81,6 +81,10 @@
       "target": "backend/app/adapters/checkers/openrouter_model_provider.py"
     },
     {
+      "group": "artifacts",
+      "target": "backend/app/adapters/checkers/trial_proxy.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/adapters/github/app_facts.py"
     },
@@ -430,6 +434,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/interfaces/checker_trial_proxy.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/interfaces/external_checker_execution.py"
     },
     {
@@ -459,6 +467,10 @@
     {
       "group": "shared",
       "target": "backend/app/interfaces/setup_model_proxy.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/interfaces/trial_execution.py"
     },
     {
       "group": "lifecycle",
@@ -1258,6 +1270,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/evaluation_context.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/checkers/api/evaluation_contract.py"
     },
     {
@@ -1302,11 +1318,23 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/revision_feedback.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/checkers/api/selected_post_submit.py"
     },
     {
       "group": "artifacts",
       "target": "backend/app/modules/checkers/api/selected_pre_submit.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/trial_evidence.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/trial_profiles.py"
     },
     {
       "group": "artifacts",
@@ -1366,6 +1394,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/checkers/revision_feedback.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/checkers/router.py"
     },
     {
@@ -1383,6 +1415,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/checkers/selected_pre_submit_reads.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/trial_evidence.py"
     },
     {
       "group": "lifecycle",
@@ -2066,6 +2102,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/evaluation_revision.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/guide_documents.py"
     },
     {
@@ -2167,6 +2207,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/evaluation_delivery.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/evaluation_revision.py"
     },
     {
       "group": "lifecycle",
@@ -2537,7 +2581,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "6822cec6baeab801bdfdc9a21bb901d68e84d3e2de91736e6d2786591ed4a3e1",
+  "authority_digest": "26fee37a0185e847201fa80d6952664fe8c403e98648b82cab673bcd1d6399c4",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

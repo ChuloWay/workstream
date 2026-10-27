@@ -17,14 +17,21 @@ guardians. Both capabilities have owner/adapter proof and a combined public API/
 journey on an isolated one-slot Smol node. Hosted composition requires pinned
 intake configuration; the intended production Flow/AWS deployment remains separate.
 
-The Smol 1.31.4 qualification (PR #672) proves fresh VM overlap, real Python checker
-execution, cancellation/deadlines and request-process recovery, but not production
-resource parity, host/controller restart recovery, ART integration or deployment.
-The merged model-runtime capability owns gateway, budget and private-grant
-custody. Its host Unix-socket relay currently supports Docker/runsc project
-execution; Smol rejects model-entitled project execution until that transport is
-qualified inside the guest. Trusted Smol intake remains independently available.
-Do not replace that ownership with arbitrary network access or secrets in a VM.
+The initial Smol 1.31.4 qualification (PR #672) covered fresh VM overlap, Python
+checker execution, cancellation/deadlines and request-process recovery. Current
+native build `b2ce3fa45` additionally has controlled model/trial KVM composition,
+verified ART receipts, no-call replay and direct predecessor/resource evidence;
+its [recorded limits](../../changes/terminal-systems-project-checkers.md#repaired-confinement-and-resource-qualification-on-real-kvm)
+remain explicit. Active nested caller cancellation, child VMM death and controller
+death/restart also passed physical cases 026–028 at test proof source `8012f2792`,
+with no false completion/trial ART effects, full owned cleanup and both admission
+slots reused ([evidence](../../changes/terminal-systems-project-checkers.md#active-nested-interruption-qualification-on-real-kvm)).
+Smol now forwards
+authorized POST model/trial capabilities through the trusted guest stream to
+the existing private relays. The shared model owner retains gateway, budget and
+grant custody; no provider credential or host socket enters the guest. Trusted
+intake remains an independent typed capability. These proofs do not establish
+the real Terminal Systems revision or full contribution journey.
 
 ## Design
 
