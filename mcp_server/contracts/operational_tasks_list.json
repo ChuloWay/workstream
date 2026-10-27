@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "39a9dfc575375d182d16fe77e7b7740ffd1a94a17ea5be0f860481544407b502",
+  "canonical_sha256": "7519c0718da677484207d0049c95a8a9214574883a2a85b8c58b5ba604ba46c2",
   "components": {
     "schemas": {
       "ApiError": {
@@ -117,7 +117,6 @@
         "type": "object"
       },
       "OperationalTaskSummary": {
-        "additionalProperties": false,
         "description": "Status-only facts; no task content, actors, policies or artifacts.",
         "properties": {
           "created_at": {
@@ -467,6 +466,6 @@
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/operations/projects/{project_id}/tasks",
-    "repository_sha": "f0431385573eb53353c5ffc3c6cdb6a93d206b73"
+    "repository_sha": "517fe54c4ed69777c2a455f2fe9f237e4b4ec184"
   }
 }

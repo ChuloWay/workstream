@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "e1a711d6718ceb908d998ce06acf6eb688d6b7a2956ef4083e5b7a70560d22c1",
+  "canonical_sha256": "498aea6125dc4cfcec7eebe24eb6330861525b9293ea038b278723fa304659c8",
   "components": {
     "schemas": {
       "ApiError": {
@@ -117,7 +117,6 @@
         "type": "object"
       },
       "ManagementTaskSummary": {
-        "additionalProperties": false,
         "description": "Planning facts without work content, source metadata or contributor identity.",
         "properties": {
           "created_at": {
@@ -608,6 +607,6 @@
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/tasks",
-    "repository_sha": "f0431385573eb53353c5ffc3c6cdb6a93d206b73"
+    "repository_sha": "517fe54c4ed69777c2a455f2fe9f237e4b4ec184"
   }
 }
