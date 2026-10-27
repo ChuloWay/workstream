@@ -283,7 +283,7 @@ func (m *Model) key(key tea.KeyPressMsg) tea.Cmd {
 	}
 	if !m.picker && (k == "1" || k == "2" || k == "3") {
 		target := tab(int(k[0] - '1'))
-		if target != m.tab {
+		if target != m.tab || m.detail {
 			m.invalidate()
 			m.clearPage()
 			m.tab = target

@@ -200,6 +200,57 @@ func TestConfirmedWriteSurvivesFailedReadAndExplicitReplay(t *testing.T) {
 	}
 }
 
+func TestDelayedReadSessionDenialCannotDispatchReplay(t *testing.T) {
+	f := &fakeClient{}
+	m := readyDetail(t, f)
+	confirmClaim(t, m)
+	press(t, m, "s")
+	press(t, m, "y")
+	if m.write.outcome != outcomeConfirmed {
+		t.Fatal("fixture needs a validated receipt")
+	}
+	_, delayedRead := m.Update(keyMessage("r"))
+	if delayedRead == nil || !m.loading {
+		t.Fatal("fixture needs pending read")
+	}
+	press(t, m, "p")
+	f.task = func(context.Context, string) (api.Result[api.ContributorTaskDetail], error) {
+		return api.Result[api.ContributorTaskDetail]{}, &api.Failure{Code: "session_unavailable", Status: 401}
+	}
+	apply(t, m, delayedRead)
+	before := strings.Count(strings.Join(f.calls, ","), "claim")
+	press(t, m, "s")
+	press(t, m, "y")
+	if after := strings.Count(strings.Join(f.calls, ","), "claim"); after != before || !m.blocked || m.task != nil || m.write.outcome != outcomeConfirmed || m.write.mode == writeConfirm ||
+		!strings.Contains(m.View().Content, "Denied: session_unavailable") || !strings.Contains(m.View().Content, "Prior operation: Claim confirmed") {
+		t.Fatalf("delayed read denial dispatched stale replay: claims %d -> %d, blocked=%v, outcome=%v", before, after, m.blocked, m.write.outcome)
+	}
+	// Even a stale caller of the owner operation cannot bypass the session guard.
+	m.write.mode, m.write.acknowledged = writeConfirm, true
+	if cmd := m.beginWrite(); cmd != nil || strings.Count(strings.Join(f.calls, ","), "claim") != before {
+		t.Fatal("dispatch boundary ignored denied session")
+	}
+}
+
+func TestTransientReadFailureDoesNotDisableExplicitReplay(t *testing.T) {
+	f := &fakeClient{}
+	m := readyDetail(t, f)
+	confirmClaim(t, m)
+	press(t, m, "s")
+	press(t, m, "y")
+	f.task = func(context.Context, string) (api.Result[api.ContributorTaskDetail], error) {
+		return api.Result[api.ContributorTaskDetail]{}, errors.New("temporary transport failure")
+	}
+	press(t, m, "r")
+	if !m.canReplay() || m.write.outcome != outcomeConfirmed {
+		t.Fatal("transient read failure disabled exact replay")
+	}
+	press(t, m, "p")
+	if m.write.mode != writeConfirm || m.write.packet.key != replayKey {
+		t.Fatal("transient failure lost packet")
+	}
+}
+
 func TestPriorReceiptIsBoundWhileBrowsingDifferentProject(t *testing.T) {
 	otherProject := "20000000-0000-7000-8000-000000000002"
 	f := &fakeClient{projects: func(context.Context, api.PageQuery) (api.Result[api.ActorProjectPage], error) {
@@ -277,6 +328,36 @@ func TestDirectCollectionsReverseTabAndTextEntryIsolation(t *testing.T) {
 	press(t, m, "2")
 	if m.tab != ready {
 		t.Fatal("handoff intercepted direct navigation")
+	}
+}
+
+func TestDirectSameCollectionReturnsFromDetailToList(t *testing.T) {
+	for _, tc := range []struct {
+		key  string
+		tab  tab
+		read string
+	}{
+		{"1", ready, "ready"}, {"2", mine, "mine"}, {"3", submissions, "submissions"},
+	} {
+		t.Run(tc.read, func(t *testing.T) {
+			f := &fakeClient{}
+			m := boot(t, f)
+			press(t, m, "enter")
+			press(t, m, tc.key)
+			press(t, m, "enter")
+			if !m.detail || m.tab != tc.tab {
+				t.Fatal("fixture did not inspect target collection")
+			}
+			before := strings.Count(strings.Join(f.calls, ","), tc.read)
+			press(t, m, tc.key)
+			if m.detail || m.tab != tc.tab || strings.Count(strings.Join(f.calls, ","), tc.read) != before+1 {
+				t.Fatal("same collection shortcut did not return to fresh list", f.calls)
+			}
+			press(t, m, tc.key)
+			if strings.Count(strings.Join(f.calls, ","), tc.read) != before+1 {
+				t.Fatal("same collection list key re-read", f.calls)
+			}
+		})
 	}
 }
 

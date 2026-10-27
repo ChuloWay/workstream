@@ -64,8 +64,11 @@ WS-CLI-001-49 adds findings pages and confirmed verified guide downloads.
 [WS-CLI-001-50](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-50.md)
 redraws that same local capability with visible navigation, readable instructions
 and truthful loaded-page/evidence states, without new API or product operations.
-Contribution Evidence remains an explicit CLI handoff; TUI product mutations
-and management are separate. Neither this interface nor release automation
+[WS-CLI-001-51](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-51.md) adds direct
+collection navigation and separately confirmed Claim/Start through the existing
+public API, with caller-owned saved keys and explicit replay. Contribution
+Evidence remains an explicit CLI handoff; ZIP preparation/Submission, other
+TUI mutations and management remain separate. Neither this interface nor release automation
 establishes hosted operation or a published binary.
 
 ## Product Goal

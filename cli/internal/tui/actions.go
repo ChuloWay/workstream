@@ -99,7 +99,7 @@ func (m *Model) openAction() {
 }
 
 func (m *Model) canReplay() bool {
-	return !m.blocked && !m.write.replayDisabled && m.write.packet.key != "" &&
+	return !m.closed && !m.blocked && !m.loading && !m.write.replayDisabled && m.write.packet.key != "" &&
 		(m.write.outcome == outcomeUnknown || m.write.outcome == outcomeConfirmed)
 }
 
@@ -173,6 +173,16 @@ func (m *Model) writeKey(key tea.KeyPressMsg) tea.Cmd {
 
 func (m *Model) beginWrite() tea.Cmd {
 	packet := m.write.packet
+	if m.closed || m.ctx.Err() != nil || m.blocked || m.write.replayDisabled || m.loading || m.tooSmall() ||
+		m.write.mode != writeConfirm || !m.write.acknowledged ||
+		(packet.action != "claim" && packet.action != "start") ||
+		!replayUUID.MatchString(packet.key) || !sameID(packet.actor, m.actor) {
+		if m.write.mode == writeConfirm {
+			m.write.mode, m.write.acknowledged, m.write.replay = writeOutcome, false, false
+			m.write.notice = "Not sent: confirmation expired after read or session state changed. No POST was dispatched."
+		}
+		return nil
+	}
 	m.invalidate()
 	m.write.mode, m.write.sequence = writePending, m.write.sequence+1
 	m.write.notice = ""
@@ -181,6 +191,10 @@ func (m *Model) beginWrite() tea.Cmd {
 	m.cancel = cancel
 	client := m.client
 	return func() (message tea.Msg) {
+		if ctx.Err() != nil {
+			return writeResponse{packet: packet, generation: generation, sequence: sequence,
+				err: &api.Failure{Code: "request_failed", OutcomeUnknown: true}}
+		}
 		defer func() {
 			if recover() != nil {
 				message = writeResponse{packet: packet, generation: generation, sequence: sequence,
@@ -350,6 +364,8 @@ func (m *Model) writeText() string {
 
 func (m *Model) writeSummary() string {
 	switch m.write.outcome {
+	case outcomeNone:
+		return "Not sent"
 	case outcomeConfirmed:
 		if m.write.packet.action == "claim" {
 			return "Claim confirmed"

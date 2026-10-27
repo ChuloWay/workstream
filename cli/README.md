@@ -54,7 +54,7 @@ terms remain available separately. Workstream rechecks each public read.
 | `/` | Filter loaded names/titles locally; Enter finishes and Esc cancels |
 | `c` / `?` | Show inert CLI arguments / keyboard help |
 | `d` in Guide | Enter an existing download directory; Enter reviews the scrollable exact target, `y` confirms |
-| `q` / Ctrl+C | Quit and cancel outstanding client reads; `q` is text during text entry, Ctrl+C always quits |
+| `q` / Ctrl+C | Quit and cancel outstanding client requests, not committed server effects; `q` is text during text entry, Ctrl+C always quits |
 
 Claim and Start are separate deliberate actions through the existing public
 API. Inspect an exact Ready task to claim it; inspect a claimed Mine task to

@@ -378,8 +378,18 @@ func (m *Model) failed(err error, actorRead bool) {
 	m.invalidate()
 	m.clearPage()
 	m.projectName = ""
+	if m.write.mode == writeConfirm || m.write.mode == writeKeyEntry {
+		if m.write.outcome == outcomeNone {
+			m.write = writeState{}
+		} else {
+			m.write.mode, m.write.acknowledged, m.write.replay = writeIdle, false, false
+		}
+	}
 	var failure *api.Failure
 	if errors.As(err, &failure) {
+		if failure.Status == 401 || failure.Status == 403 || failure.Status == 404 {
+			m.write.replayDisabled = true
+		}
 		if failure.Status == 401 || (actorRead && failure.Status == 403) {
 			m.blocked = true
 			m.actor = ""
