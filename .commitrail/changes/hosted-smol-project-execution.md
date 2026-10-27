@@ -12,7 +12,7 @@ Give the hosted release one explicit Smol execution boundary without a fallback 
 
 `deploy/hosted/compose.yml` starts a networkless controller container with the host Docker socket. `preflight.py` requires runsc and Docker image-cache inspection. Trusted intake already uses a native Smol service through a separate typed capability. API and worker mount absolute scratch/socket paths; project execution uses the existing typed `ExternalCheckerExecutionAdapter` and factory.
 
-Current main `fcd32057b` rejects Smol model grants. The pending runtime change in PR #677 owns guest-native model/trial transport, predecessor material, child VM custody and resource enforcement. This hosted change consumes that implementation and cannot establish its qualification independently.
+At the initial baseline `fcd32057b`, main rejected Smol model grants. Main `6b55fd450` now includes PR #677 and its guest-native model/trial transport, predecessor material, child VM custody and resource enforcement. This hosted change consumes that implementation and retains its independently scoped qualification evidence.
 
 PR #690 at `f3f818265`, incorporated in main `fcd32057b`, owns provider selection and replacement credential overlays. This change preserves that existing dependency rather than creating another provider-selection path. Provider source behavior remains outside this change.
 
@@ -404,3 +404,23 @@ inventories, and no outstanding reservation. The fixed claim retained inode
 `92ae55c5ec91940b64ff934f2b143c24b95796e48d6b613a966150442761a116`.
 Database, object-store evidence, original failure history and shared services
 were preserved. No global cleanup or additional model call occurred.
+
+### Asset diagnostic review correction
+
+CodeRabbit identified that `_verify_smol_asset` caught its own `PreflightError`
+through the generic `RuntimeError` handler, replacing specific refusal reasons
+with an unavailable-file message. Preserve explicit path, custody, deadline and
+digest/identity diagnostics; continue normalizing underlying filesystem/runtime
+errors and refusing launch. Scope is the existing preflight, its hosted-config
+tests and this record. No asset acceptance, authorization, runtime or provider
+behavior changes. Verify real temporary files for each diagnostic, ordinary
+missing-file normalization, the existing readiness tests and a pre-fix control.
+The merge from main `6b55fd450` has no source delta beyond the already consumed
+PR #677. Roadmap capabilities and remaining gates are unchanged by this
+diagnostic-only correction.
+
+Validation: the new diagnostic regression failed against the original handler
+for all four explicit refusals, while its missing-file control passed. After
+the correction, all 71 hosted configuration/image tests passed. Ruff check,
+formatting and diff whitespace checks passed. No paid call or deployment was
+needed: the only executable change preserves already-raised error messages.

@@ -1751,6 +1751,8 @@ def _verify_smol_asset(path: Path, expected: str, uid: int, deadline: float) -> 
                 or "sha256:" + digest.hexdigest() != expected
             ):
                 raise PreflightError("native Smol asset digest or identity differs")
+    except PreflightError:
+        raise
     except (OSError, RuntimeError) as exc:
         raise PreflightError("native Smol asset is unavailable") from exc
 

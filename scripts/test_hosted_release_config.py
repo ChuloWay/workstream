@@ -1630,6 +1630,37 @@ class HostedReleaseConfigTests(unittest.TestCase):
         }
         return config, values, service, health
 
+    def test_native_asset_refusals_preserve_operator_diagnostics(self) -> None:
+        for failure, reason in (
+            ("path", "path is not canonical"),
+            ("custody", "custody is unsafe"),
+            ("deadline", "verification deadline exceeded"),
+            ("digest", "digest or identity differs"),
+            ("missing", "is unavailable"),
+        ):
+            with self.subTest(failure=failure):
+                asset = self.root / f"asset-{failure}"
+                asset.write_bytes(b"pinned asset")
+                asset.chmod(0o400)
+                expected = "sha256:" + hashlib.sha256(asset.read_bytes()).hexdigest()
+                deadline = float("inf")
+                if failure == "path":
+                    alias = self.root / "asset-alias"
+                    alias.symlink_to(asset)
+                    asset = alias
+                elif failure == "custody":
+                    asset.chmod(0o620)
+                elif failure == "deadline":
+                    deadline = 0
+                elif failure == "digest":
+                    expected = "sha256:" + "0" * 64
+                else:
+                    asset.unlink()
+                with self.assertRaisesRegex(
+                    preflight.PreflightError, f"^native Smol asset {reason}$"
+                ):
+                    preflight._verify_smol_asset(asset, expected, os.getuid(), deadline)
+
     def test_native_readiness_binds_static_assets_delegation_and_typed_health(
         self,
     ) -> None:
