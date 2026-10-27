@@ -57,11 +57,20 @@ class Terminal:
     behind a screen parser that ignores them.
     """
 
-    def __init__(self, origin, token, *args, columns=120, rows=40, extra_env=None):
+    def __init__(
+        self,
+        origin,
+        token,
+        *args,
+        columns=120,
+        rows=40,
+        extra_env=None,
+        light_background=False,
+    ):
         assert os.name == "posix", "unsupported native terminal host"
         self.master, self.slave = pty.openpty()
         self.original = termios.tcgetattr(self.slave)
-        self._screen_setup(columns, rows)
+        self._screen_setup(columns, rows, light_background)
         self.resize(columns, rows, notify=False)
         self.process = subprocess.Popen(  # noqa: S603 - built binary, fixed test argv
             [executable(), "tui", *args],
@@ -72,14 +81,17 @@ class Terminal:
             start_new_session=True,
         )
 
-    def _screen_setup(self, columns, rows):
+    def _screen_setup(self, columns, rows, light_background=False):
         self.columns, self.rows = columns, rows
+        self.light_background = light_background
+        self.background_queries = 0
         self.raw = bytearray()
         self.decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         self.pending = ""
         self.sent_after = None
         self.x = self.y = 0
         self.cells = [[" "] * columns for _ in range(rows)]
+        self.scroll_top, self.scroll_bottom = 0, rows - 1
 
     def _write(self, data):
         os.write(self.master, data)
@@ -92,6 +104,7 @@ class Terminal:
         if notify:
             self.cells = [[" "] * columns for _ in range(rows)]
             self.x = self.y = 0
+            self.scroll_top, self.scroll_bottom = 0, rows - 1
             self.process.send_signal(signal.SIGWINCH)
 
     @property
@@ -136,6 +149,23 @@ class Terminal:
                         self.x = max(0, self.x - n)
                     elif command == "G":
                         self.x = min(self.columns - 1, n - 1)
+                    elif command == "r" and not params.startswith(("?", "<", ">", "=")):
+                        top = (values[0] or 1) - 1
+                        bottom = (
+                            (values[1] or self.rows) if len(values) > 1 else self.rows
+                        ) - 1
+                        if 0 <= top < bottom < self.rows:
+                            self.scroll_top, self.scroll_bottom = top, bottom
+                            self.x = self.y = 0
+                    elif command == "T":
+                        # Bubble Tea emits SD inside DECSTBM to shift only the
+                        # detail viewport; header/status rows must stay put.
+                        top, bottom = self.scroll_top, self.scroll_bottom
+                        amount = min(n, bottom - top + 1)
+                        retained = self.cells[top : bottom + 1 - amount]
+                        self.cells[top : bottom + 1] = [
+                            [" "] * self.columns for _ in range(amount)
+                        ] + retained
                     elif command == "P":
                         deleted = min(n, self.columns - self.x)
                         row = self.cells[self.y]
@@ -169,7 +199,14 @@ class Terminal:
                     sequence = match.group()
                     self.pending = self.pending[match.end() :]
                     if sequence.startswith("\x1b]11;?"):
-                        self._write(b"\x1b]11;rgb:0000/0000/0000\x1b\\")
+                        self.background_queries += 1
+                        if self.light_background is not None:
+                            background = (
+                                "ffff/ffff/ffff"
+                                if self.light_background
+                                else "0000/0000/0000"
+                            )
+                            self._write(f"\x1b]11;rgb:{background}\x1b\\".encode())
                     elif sequence.startswith("\x1b]10;?"):
                         self._write(b"\x1b]10;rgb:ffff/ffff/ffff\x1b\\")
                     continue
@@ -183,11 +220,11 @@ class Terminal:
             elif character == "\t":
                 self.x = min(self.columns - 1, (self.x // 8 + 1) * 8)
             elif character == "\n":
-                self.y += 1
-                if self.y == self.rows:
-                    self.cells.pop(0)
-                    self.cells.append([" "] * self.columns)
-                    self.y -= 1
+                if self.y == self.scroll_bottom:
+                    self.cells.pop(self.scroll_top)
+                    self.cells.insert(self.scroll_bottom, [" "] * self.columns)
+                else:
+                    self.y = min(self.rows - 1, self.y + 1)
             elif character == "\b":
                 self.x = max(0, self.x - 1)
             elif character >= " " and not unicodedata.combining(character):
@@ -514,6 +551,7 @@ if os.name == "nt":
             rows=40,
             extra_env=None,
             redirect=None,
+            light_background=False,
         ):
             self.api = api = _WindowsAPI()
             self._handles = []
@@ -527,7 +565,7 @@ if os.name == "nt":
             self._temporary = tempfile.TemporaryDirectory(prefix="workstream-conpty-")
             self._receipt = Path(self._temporary.name) / "modes.json"
             self.process = None
-            self._screen_setup(columns, rows)
+            self._screen_setup(columns, rows, light_background)
             try:
                 input_read, self._input = self._pipe()
                 self._output, output_write = self._pipe()
@@ -730,6 +768,7 @@ if os.name == "nt":
             self.columns, self.rows = columns, rows
             self.cells = [[" "] * columns for _ in range(rows)]
             self.x = self.y = 0
+            self.scroll_top, self.scroll_bottom = 0, rows - 1
 
         def _assert_restored(self):
             assert self._receipt.stat().st_size < 4096, "unbounded mode receipt"

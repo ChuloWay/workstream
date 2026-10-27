@@ -42,6 +42,7 @@ type Model struct {
 	cancel                                            context.CancelFunc
 	token                                             string
 	plain, noColor                                    bool
+	backgroundKnown, darkBackground                   bool
 	width, height                                     int
 	started, closed, blocked, picker, detail, loading bool
 	help, handoff, filtering                          bool
@@ -78,7 +79,12 @@ func New(ctx context.Context, client ReadClient, token string, plain, noColor bo
 		noColor: noColor || plain, picker: true, page: 1, viewport: viewport.New()}
 }
 
-func (m *Model) Init() tea.Cmd { return nil }
+func (m *Model) Init() tea.Cmd {
+	if m.noColor {
+		return nil
+	}
+	return tea.RequestBackgroundColor
+}
 
 // Close cancels outstanding reads after the program has stopped, including errors.
 func (m *Model) Close() { m.closed = true; m.invalidate(); m.stop() }
@@ -95,6 +101,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.started = true
 			return m, m.begin(profileRead)
 		}
+	case tea.BackgroundColorMsg:
+		m.backgroundKnown, m.darkBackground = true, msg.IsDark()
 	case response:
 		return m, m.receive(msg)
 	case tea.KeyPressMsg:
@@ -190,6 +198,7 @@ func (m *Model) key(key tea.KeyPressMsg) tea.Cmd {
 		case "enter":
 			if m.guideDirectory != "" {
 				m.guideMode = guideConfirm
+				m.viewport.GotoTop()
 			}
 		case "esc":
 			m.guideMode, m.guideDirectory = guideBrowse, ""
@@ -211,9 +220,12 @@ func (m *Model) key(key tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		if k == "y" {
+			if m.tooSmall() {
+				return nil
+			}
 			return m.beginGuideDownload()
 		}
-		return nil
+		return m.scroll(k)
 	}
 	if k == "?" {
 		m.help, m.handoff = !m.help, false
@@ -314,8 +326,10 @@ func (m *Model) key(key tea.KeyPressMsg) tea.Cmd {
 			switch k {
 			case "up":
 				m.guideSelected = max(0, m.guideSelected-1)
+				m.viewport.GotoTop()
 			case "down":
 				m.guideSelected = min(max(0, len(m.context.GuideDocuments)-1), m.guideSelected+1)
+				m.viewport.GotoTop()
 			case "d":
 				if len(m.context.GuideDocuments) > 0 {
 					m.guideMode, m.guideDirectory, m.guideNotice = guideDestination, "", ""

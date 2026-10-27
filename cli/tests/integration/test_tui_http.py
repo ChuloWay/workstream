@@ -5,6 +5,7 @@ import hashlib
 import os
 import re
 import subprocess
+import time
 from threading import Event
 from urllib.parse import parse_qs, urlsplit
 
@@ -138,13 +139,13 @@ def open_guide(terminal):
     terminal.send("\r")
     terminal.wait(SECRET)
     terminal.send("\t")
-    terminal.wait("CONTEXT")
+    terminal.wait("[Context]")
     terminal.wait("Locked guide version: guide-1")
     terminal.send("\t")
-    terminal.wait("INTAKE")
+    terminal.wait("[Intake]")
     terminal.wait("answer.md")
     terminal.send("\t")
-    terminal.wait("GUIDE")
+    terminal.wait("[Guide]")
     terminal.wait("Locked instructions")
 
 
@@ -178,6 +179,108 @@ def open_findings(terminal):
     terminal.send("\r")
     terminal.wait("Exact owned submission summary")
     terminal.send("\t")
+
+
+def reveal_detail(terminal, text):
+    """Inspect a long detail through real keyboard scrolling, not raw history."""
+    for _ in range(100):
+        terminal.pump(0.03)
+        if text in terminal.screen:
+            return
+        terminal.send("\x1b[B")
+    assert text in terminal.screen, (
+        f"missing {text!r} after scrolling:\n{terminal.screen}"
+    )
+
+
+@pytest.mark.parametrize("light", [None, False, True])
+@pytest.mark.parametrize("rows", [10, 24])
+def test_minimum_terminal_navigation_and_light_background(light, rows):
+    reads = Reads()
+    with (
+        socket_peer(reads) as (origin, requests),
+        Terminal(
+            origin,
+            TOKEN,
+            columns=40,
+            rows=rows,
+            extra_env={"COLORTERM": "truecolor"},
+            light_background=light,
+        ) as terminal,
+    ):
+        open_ready(terminal)
+        terminal.send("\r")
+        terminal.wait("[Overview]")
+        reveal_detail(terminal, SECRET)
+        assert "[Ready]" in terminal.screen
+        assert "quit" in terminal.screen
+        calls = len(requests)
+        terminal.resize(120, 40)
+        terminal.pump(0.2)
+        terminal.resize(40, rows)
+        terminal.pump(0.2)
+        assert len(requests) == calls, "resize dispatched a read"
+        terminal.send("\x1b")
+        terminal.wait("Ready terminal task")
+        if os.name == "nt":
+            # This bare ConPTY host did not expose the OSC 11 query or route a
+            # supplied report. It must remain neutral without a known color.
+            assert terminal.background_queries == 0
+        else:
+            assert terminal.background_queries > 0, "PTY did not request OSC 11"
+        if os.name == "nt" or light is None:
+            # The None fixture withholds the report even though a PTY query
+            # was observed. Unknown background must never assume a palette.
+            assert set(re.findall(rb"\x1b\[[0-9;:]*m", terminal.raw)) <= {
+                b"\x1b[m",
+                b"\x1b[0m",
+            }
+        else:
+            expected_focus = b"38;2;8;126;140" if light else b"38;2;105;215;227"
+            deadline = time.monotonic() + 10
+            while expected_focus not in terminal.raw and time.monotonic() < deadline:
+                terminal.pump(0.05)
+            assert expected_focus in terminal.raw, (
+                "PTY background report did not select its readable palette",
+                {
+                    "background_queries": terminal.background_queries,
+                    "sgr": sorted(set(re.findall(rb"\x1b\[[0-9;:]*m", terminal.raw)))[
+                        :40
+                    ],
+                },
+            )
+        terminal.quit()
+        assert TOKEN.encode() not in terminal.raw
+
+
+def test_hidden_native_confirmation_does_not_download(tmp_path):
+    reads = guide_reads()
+    with (
+        socket_peer(reads) as (origin, requests),
+        Terminal(origin, TOKEN, "--plain") as terminal,
+    ):
+        open_guide(terminal)
+        terminal.send("d")
+        terminal.wait("Download directory")
+        terminal.send(str(tmp_path))
+        terminal.send("\r")
+        terminal.wait("Confirm download")
+        terminal.resize(30, 8)
+        terminal.wait("Resize")
+        terminal.send("y")
+        terminal.pump(0.2)
+        assert not list(tmp_path.iterdir())
+        assert not any(
+            target == GUIDE_DOCUMENT["read_reference"] for _, target, _ in requests
+        )
+        terminal.resize(80, 24)
+        terminal.wait("Confirm download")
+        reveal_detail(terminal, "Expected SHA-256")
+        assert not list(tmp_path.iterdir())
+        terminal.send("y")
+        terminal.wait("Downloaded")
+        assert (tmp_path / f"{ACTOR}.md").read_bytes() == GUIDE_BYTES
+        terminal.quit()
 
 
 def test_guide_download_requires_confirmation_and_verifies_bytes(tmp_path):
@@ -410,7 +513,7 @@ def test_guide_and_findings_remain_navigable_in_narrow_terminal(surface):
             terminal.wait("Locked instructions")
         else:
             open_findings(terminal)
-            terminal.wait("FINDINGS")
+            terminal.wait("[Findings]")
             terminal.wait(RUN)
             terminal.send("c")
             terminal.wait("argument: findings")
@@ -499,10 +602,10 @@ def test_keyboard_journey_uses_only_nine_fresh_public_reads():
         terminal.send("\r")
         terminal.wait(SECRET)
         terminal.send("\t")
-        terminal.wait("CONTEXT")
+        terminal.wait("[Context]")
         terminal.wait("guide-1")
         terminal.send("\t")
-        terminal.wait("INTAKE")
+        terminal.wait("[Intake]")
         terminal.wait("answer.md")
         terminal.send("\x1b")
         terminal.wait("Assigned terminal task")
@@ -569,6 +672,52 @@ def test_terminal_observer_applies_character_deletion_and_reports_actual_cursor(
     terminal._render("\x1b[1;79Hxy\x1b[6n\r\x1b[79G\x1b[999P")
     assert replies[-1] == b"\x1b[1;80R"
     assert terminal.screen.splitlines()[0] == "local filter: nothing-matches"
+
+
+def test_terminal_observer_applies_native_scroll_region_down_sequence():
+    terminal = object.__new__(Terminal)
+    terminal._screen_setup(80, 24)
+    terminal._write = lambda _: None
+    terminal._render(
+        "\x1b[1;1HHEADER\x1b[4;1HSECTION\x1b[5;1HTop detail"
+        + "\x1b[15;1H"
+        + TASK
+        + "\x1b[21;1HOld bottom\x1b[22;1HSTATUS"
+    )
+    # Captured native renderer sequence when a 24-row detail viewport scrolls.
+    terminal._render("\x1b[5;21r\x1b[5;1H\x1b[6")
+    terminal._render("T\x1b[1;24r\x1b[5;1H")
+    lines = terminal.screen.splitlines()
+    assert lines[0] == "HEADER"
+    assert lines[3] == "SECTION"
+    assert lines[4] == ""
+    assert lines[10] == "Top detail"
+    assert lines[20] == TASK
+    assert lines[21] == "STATUS"
+
+
+def test_terminal_observer_scrolls_on_line_feed_at_region_bottom():
+    terminal = object.__new__(Terminal)
+    terminal._screen_setup(80, 24)
+    terminal._write = lambda _: None
+    terminal._render(
+        "\x1b[1;1HHEADER\x1b[4;1HSECTION\x1b[5;1HOld top"
+        + "\x1b[6;1HNext detail\x1b[20;1H"
+        + TASK
+        + "\x1b[21;1HOld bottom\x1b[22;1HSTATUS"
+    )
+    # Captured native renderer sequence for one upward viewport scroll.
+    terminal._render("\x1b[5;21r\x1b[21;1H\n\x1b[1;24r\x1b[21;1H")
+    lines = terminal.screen.splitlines()
+    assert lines[0] == "HEADER"
+    assert lines[3] == "SECTION"
+    assert lines[4] == "Next detail"
+    assert lines[18] == TASK
+    assert lines[20] == ""
+    assert lines[21] == "STATUS"
+    terminal._render("\x1b[5;21r\x1b[24;1H\n")
+    assert terminal.screen.splitlines()[0] == "HEADER"
+    assert terminal.screen.splitlines()[21] == "STATUS"
 
 
 def test_explicit_pagination_refresh_and_local_filter_do_not_walk_pages():
@@ -784,9 +933,11 @@ def test_hostile_text_resizing_plain_and_ctrl_c_restore_terminal(
         terminal.wait(SECRET)
         before = len(requests)
         terminal.resize(80, 24)
-        terminal.wait(TASK)
         terminal.wait(SECRET)
+        reveal_detail(terminal, TASK)
         assert TASK in terminal.screen
+        terminal.send("\x1b[5~")
+        terminal.wait(SECRET)
         assert len(requests) == before
         for forbidden in (
             b"\x1b]52;c;",
