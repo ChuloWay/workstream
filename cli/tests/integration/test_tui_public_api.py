@@ -308,6 +308,7 @@ async def test_tui_real_signed_claim_replay_start_replay_then_fresh_revocation(
                 # Claim does not implicitly start. A fresh Mine read and exact
                 # task detail are required before opening the second action.
                 terminal.send("\x1b")
+                await wait(ready.json()["description"])
                 terminal.send("2")
                 await wait("Evaluate proof")
                 terminal.send("/Evaluate proof\r")
