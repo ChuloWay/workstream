@@ -1,4 +1,7 @@
-"""GitHub App adapter that reads pull-request proof facts with bounded retries.
+"""GitHub provider of the forge facts capability, read as a GitHub App.
+
+It reads one pull request's proof facts with bounded retries and maps them
+into the forge-neutral ``workstream.forge_change_facts.v1`` value.
 
 Credential custody: the RSA private key is held only as a parsed key object,
 and installation tokens only inside ``_InstallationToken``. Neither is placed in
@@ -30,24 +33,24 @@ from app.interfaces.external_services import (
     ExternalServiceAdapterIdentity,
     ExternalServiceConfigurationError,
 )
-from app.interfaces.github_facts import (
-    GITHUB_APP_PROVIDER_KEY,
-    GITHUB_FACTS_CAPABILITY_KEY,
-    GitHubFactsAccessDeniedError,
-    GitHubFactsProtocolError,
-    GitHubFactsUnavailableError,
-    GITHUB_MAXIMUM_LISTED_FILES,
-    GitHubActorFact,
-    GitHubChangedFileFact,
-    GitHubFactsIncompleteError,
-    GitHubFactsInconsistentError,
-    GitHubPullRequestFacts,
-    GitHubPullRequestNotFoundError,
-    GitHubRequiredCheckFact,
-    GitHubReviewFact,
-    GitHubRequiredChecksNotConfiguredError,
-    GitHubResponseDigest,
-    is_github_repository,
+from app.interfaces.forge_facts import (
+    FORGE_FACTS_CAPABILITY_KEY,
+    GITHUB_FORGE,
+    ForgeActorFact,
+    ForgeChangeFacts,
+    ForgeChangeNotFoundError,
+    ForgeChangedFileFact,
+    ForgeFactsAccessDeniedError,
+    ForgeFactsIncompleteError,
+    ForgeFactsInconsistentError,
+    ForgeFactsProtocolError,
+    ForgeFactsUnavailableError,
+    ForgeJudgedResultFact,
+    ForgeRequiredCheckFact,
+    ForgeRequiredChecksNotConfiguredError,
+    ForgeResponseDigest,
+    ForgeReviewFact,
+    is_forge_repository,
 )
 
 logger = logging.getLogger(__name__)
@@ -90,7 +93,9 @@ _CHECK_RUN_CONCLUSIONS = frozenset(
     }
 )
 _STATUS_STATES = frozenset({"success", "failure", "error", "pending"})
-_IDENTITY = ExternalServiceAdapterIdentity(GITHUB_FACTS_CAPABILITY_KEY, GITHUB_APP_PROVIDER_KEY)
+_IDENTITY = ExternalServiceAdapterIdentity(FORGE_FACTS_CAPABILITY_KEY, GITHUB_FORGE)
+# GitHub change listings return at most this many files per pull request.
+GITHUB_MAXIMUM_LISTED_FILES = 3000
 
 
 class _InstallationToken:
@@ -199,48 +204,57 @@ class GitHubAppFactsAdapter:
         """Return the fixed GitHub App facts provider identity."""
         return _IDENTITY
 
-    async def fetch_pull_request_facts(
+    async def fetch_change_facts(
         self,
         *,
         repository: str,
-        pull_request_number: int,
-    ) -> GitHubPullRequestFacts:
+        change_number: int,
+    ) -> ForgeChangeFacts:
         """Read the pull request, base-branch required checks and head-SHA results."""
         if (
-            not is_github_repository(repository)
-            or type(pull_request_number) is not int
-            or pull_request_number < 1
+            not is_forge_repository(GITHUB_FORGE, repository)
+            or type(change_number) is not int
+            or change_number < 1
         ):
             raise ExternalServiceConfigurationError(_IDENTITY)
-        deadline = _Deadline(self._configuration.total_deadline_seconds, self._monotonic)
-        async with httpx.AsyncClient(
-            transport=self._transport,
-            follow_redirects=False,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": GITHUB_API_VERSION,
-                "User-Agent": "workstream-github-facts",
-            },
-        ) as client:
-            for _attempt in range(FACTS_CONSISTENCY_ATTEMPTS):
-                digests: list[GitHubResponseDigest] = []
-                session = _FactsSession(self, client, repository, deadline, digests)
-                facts = await self._read_consistent_facts(
-                    session, repository, pull_request_number, digests
-                )
-                if facts is not None:
-                    return facts
-        # An exhausted deadline already raised GitHubFactsUnavailableError from
+        seconds = self._configuration.total_deadline_seconds
+        deadline = _Deadline(seconds, self._monotonic)
+        # Per-request timeouts do not bound the whole read: a slow response body
+        # can outlast them. The outer timeout is the absolute limit, and facts
+        # completed after the deadline are discarded rather than returned.
+        try:
+            async with asyncio.timeout(seconds), httpx.AsyncClient(
+                transport=self._transport,
+                follow_redirects=False,
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": GITHUB_API_VERSION,
+                    "User-Agent": "workstream-github-facts",
+                },
+            ) as client:
+                for _attempt in range(FACTS_CONSISTENCY_ATTEMPTS):
+                    digests: list[ForgeResponseDigest] = []
+                    session = _FactsSession(self, client, repository, deadline, digests)
+                    facts = await self._read_consistent_facts(
+                        session, repository, change_number, digests
+                    )
+                    if facts is not None:
+                        if deadline.remaining() <= 0:
+                            raise ForgeFactsUnavailableError(_IDENTITY)
+                        return facts
+        except TimeoutError:
+            raise ForgeFactsUnavailableError(_IDENTITY) from None
+        # An exhausted deadline already raised ForgeFactsUnavailableError from
         # the next request, so reaching here means the state kept moving.
-        raise GitHubFactsInconsistentError(_IDENTITY)
+        raise ForgeFactsInconsistentError(_IDENTITY)
 
     async def _read_consistent_facts(
         self,
         session: _FactsSession,
         repository: str,
         pull_request_number: int,
-        digests: list[GitHubResponseDigest],
-    ) -> GitHubPullRequestFacts | None:
+        digests: list[ForgeResponseDigest],
+    ) -> ForgeChangeFacts | None:
         """Read every fact once, bracketed by two pull-request reads.
 
         Reviews and files are listed by pull request number, not by commit, and
@@ -251,7 +265,7 @@ class GitHubAppFactsAdapter:
         """
         pull_path = f"/repos/{repository}/pulls/{pull_request_number}"
         pull = await session.read_json(
-            "pull_request", pull_path, not_found=GitHubPullRequestNotFoundError
+            "pull_request", pull_path, not_found=ForgeChangeNotFoundError
         )
         pull_facts = _pull_request_facts(pull, repository, pull_request_number)
         required = _required_checks(
@@ -260,13 +274,13 @@ class GitHubAppFactsAdapter:
                 f"/repos/{repository}/branches/"
                 f"{quote(pull_facts['base_ref'], safe='')}"
                 "/protection/required_status_checks",
-                not_found=GitHubRequiredChecksNotConfiguredError,
+                not_found=ForgeRequiredChecksNotConfiguredError,
             )
         )
         head_sha = pull_facts["head_sha"]
         changed_files_count = pull_facts["changed_files_count"]
         if changed_files_count > GITHUB_MAXIMUM_LISTED_FILES:
-            raise GitHubFactsIncompleteError(_IDENTITY)
+            raise ForgeFactsIncompleteError(_IDENTITY)
         reviews = await session.read_pages(
             "reviews", f"{pull_path}/reviews", item_key=None
         )
@@ -289,7 +303,7 @@ class GitHubAppFactsAdapter:
         )
         final = _pull_request_facts(
             await session.read_json(
-                "pull_request_final", pull_path, not_found=GitHubPullRequestNotFoundError
+                "pull_request_final", pull_path, not_found=ForgeChangeNotFoundError
             ),
             repository,
             pull_request_number,
@@ -297,14 +311,15 @@ class GitHubAppFactsAdapter:
         if any(final[key] != pull_facts[key] for key in _BOUND_PULL_FIELDS):
             return None
         if len(files) != changed_files_count:
-            raise GitHubFactsIncompleteError(_IDENTITY)
+            raise ForgeFactsIncompleteError(_IDENTITY)
         if any(run.get("head_sha") != head_sha for run in check_runs):
-            raise GitHubFactsProtocolError(_IDENTITY)
+            raise ForgeFactsProtocolError(_IDENTITY)
         try:
-            return GitHubPullRequestFacts(
+            return ForgeChangeFacts(
+                forge=GITHUB_FORGE,
                 repository=pull_facts["repository"],
-                pull_request_number=pull_request_number,
-                html_url=pull_facts["html_url"],
+                change_number=pull_request_number,
+                change_url=pull_facts["change_url"],
                 state=pull_facts["state"],
                 merged=pull_facts["merged"],
                 merge_commit_sha=pull_facts["merge_commit_sha"],
@@ -314,9 +329,9 @@ class GitHubAppFactsAdapter:
                 reviews=tuple(_review(item) for item in reviews),
                 changed_files_count=changed_files_count,
                 changed_files=tuple(
-                    GitHubChangedFileFact(
-                        filename=item["filename"],
-                        previous_filename=item.get("previous_filename"),
+                    ForgeChangedFileFact(
+                        path=item["filename"],
+                        previous_path=item.get("previous_filename"),
                         status=item["status"],
                     )
                     for item in files
@@ -331,7 +346,7 @@ class GitHubAppFactsAdapter:
                 responses=tuple(digests),
             )
         except (ValidationError, KeyError, TypeError):
-            raise GitHubFactsProtocolError(_IDENTITY) from None
+            raise ForgeFactsProtocolError(_IDENTITY) from None
 
     # -- credentials -------------------------------------------------------
 
@@ -375,7 +390,7 @@ class GitHubAppFactsAdapter:
                 )
                 installation_id = body.get("id") if isinstance(body, dict) else None
                 if type(installation_id) is not int or installation_id < 1:
-                    raise GitHubFactsProtocolError(_IDENTITY)
+                    raise ForgeFactsProtocolError(_IDENTITY)
                 self._installations[repository.casefold()] = installation_id
             body = await session.app_json(
                 "POST",
@@ -396,7 +411,7 @@ class GitHubAppFactsAdapter:
                 or expiry is None
                 or expiry.tzinfo is None
             ):
-                raise GitHubFactsProtocolError(_IDENTITY)
+                raise ForgeFactsProtocolError(_IDENTITY)
             token = _InstallationToken(
                 value, expiry.timestamp() - TOKEN_REFRESH_MARGIN_SECONDS
             )
@@ -413,7 +428,7 @@ class _FactsSession:
         client: httpx.AsyncClient,
         repository: str,
         deadline: _Deadline,
-        digests: list[GitHubResponseDigest],
+        digests: list[ForgeResponseDigest],
     ) -> None:
         self._adapter = adapter
         self._client = client
@@ -439,7 +454,7 @@ class _FactsSession:
             self._url(path),
             authorization=lambda: f"Bearer {app_jwt}",
             json_body=json_body,
-            not_found=GitHubFactsAccessDeniedError,
+            not_found=ForgeFactsAccessDeniedError,
             installation=False,
         )
         return _json(response)
@@ -474,13 +489,13 @@ class _FactsSession:
         url = self._url(path) + f"?per_page={PAGE_SIZE}"
         items: list[dict] = []
         for page in range(1, maximum_pages + 1):
-            response = await self._installation_get(url, not_found=GitHubFactsProtocolError)
+            response = await self._installation_get(url, not_found=ForgeFactsProtocolError)
             self._record(f"{label}.page.{page}", response)
             body = _json(response)
             if require_sha is not None and (
                 not isinstance(body, dict) or body.get("sha") != require_sha
             ):
-                raise GitHubFactsProtocolError(_IDENTITY)
+                raise ForgeFactsProtocolError(_IDENTITY)
             if item_key is None:
                 page_items = body
             else:
@@ -488,21 +503,21 @@ class _FactsSession:
             if not isinstance(page_items, list) or not all(
                 isinstance(item, dict) for item in page_items
             ):
-                raise GitHubFactsProtocolError(_IDENTITY)
+                raise ForgeFactsProtocolError(_IDENTITY)
             items.extend(page_items)
             next_url = response.links.get("next", {}).get("url")
             if next_url is None:
                 return items
             parsed = urlsplit(next_url)
             if (parsed.scheme, parsed.netloc) != self._adapter._api_origin:
-                raise GitHubFactsProtocolError(_IDENTITY)
+                raise ForgeFactsProtocolError(_IDENTITY)
             url = next_url
-        raise GitHubFactsProtocolError(_IDENTITY)
+        raise ForgeFactsProtocolError(_IDENTITY)
 
     def _record(self, label: str, response: httpx.Response) -> None:
         """Keep the SHA-256 of one raw facts response body."""
         digest = hashlib.sha256(response.content).hexdigest()
-        self._digests.append(GitHubResponseDigest(request=label, sha256=f"sha256:{digest}"))
+        self._digests.append(ForgeResponseDigest(request=label, sha256=f"sha256:{digest}"))
 
     async def _installation_get(
         self, url: str, *, not_found: type[Exception]
@@ -532,7 +547,7 @@ class _FactsSession:
                 installation=True,
             )
         except _TokenRejected:
-            raise GitHubFactsAccessDeniedError(_IDENTITY) from None
+            raise ForgeFactsAccessDeniedError(_IDENTITY) from None
 
     async def _send(
         self,
@@ -574,14 +589,14 @@ class _FactsSession:
                 if status == 401:
                     if installation:
                         raise _TokenRejected()
-                    raise GitHubFactsAccessDeniedError(_IDENTITY) from None
+                    raise ForgeFactsAccessDeniedError(_IDENTITY) from None
                 rate_limit_delay = _rate_limit_delay(response, self._adapter._wall_clock())
                 if status in {403, 429} and rate_limit_delay is not None:
                     delay = max(delay, rate_limit_delay)
                 elif status == 403:
-                    raise GitHubFactsAccessDeniedError(_IDENTITY) from None
+                    raise ForgeFactsAccessDeniedError(_IDENTITY) from None
                 elif status != 408 and status < 500:
-                    raise GitHubFactsProtocolError(_IDENTITY) from None
+                    raise ForgeFactsProtocolError(_IDENTITY) from None
             logger.warning(
                 "github_facts_request_retryable status=%s attempt=%s",
                 None if response is None else response.status_code,
@@ -593,7 +608,7 @@ class _FactsSession:
             ):
                 break
             await self._adapter._sleep(delay)
-        raise GitHubFactsUnavailableError(_IDENTITY) from None
+        raise ForgeFactsUnavailableError(_IDENTITY) from None
 
 
 class _TokenRejected(Exception):
@@ -605,7 +620,7 @@ def _json(response: httpx.Response) -> object:
     try:
         return response.json()
     except ValueError:
-        raise GitHubFactsProtocolError(_IDENTITY) from None
+        raise ForgeFactsProtocolError(_IDENTITY) from None
 
 
 def _rate_limit_delay(response: httpx.Response, now: float) -> float | None:
@@ -640,13 +655,14 @@ def _pull_request_facts(body: object, repository: str, number: int) -> dict[str,
             "merge_commit_sha": body["merge_commit_sha"] if merged is True else None,
             "base_ref": base["ref"],
             "head_sha": head["sha"],
-            "html_url": body["html_url"],
+            "change_url": f"https://github.com/{full_name}/pull/{number}",
             "author": body["user"],
             "changed_files_count": body["changed_files"],
         }
         valid = (
             body["number"] == number
             and isinstance(full_name, str)
+            and body["html_url"] == values["change_url"]
             and full_name.casefold() == repository.casefold()
             and isinstance(values["base_ref"], str)
             and isinstance(values["head_sha"], str)
@@ -656,7 +672,7 @@ def _pull_request_facts(body: object, repository: str, number: int) -> dict[str,
     except (KeyError, TypeError):
         valid = False
     if not valid:
-        raise GitHubFactsProtocolError(_IDENTITY) from None
+        raise ForgeFactsProtocolError(_IDENTITY) from None
     return values
 
 
@@ -667,34 +683,34 @@ def _required_checks(body: object) -> tuple[tuple[str, int | None], ...]:
     ``contexts`` accepts any source. No required check fails closed.
     """
     if not isinstance(body, dict):
-        raise GitHubFactsProtocolError(_IDENTITY)
+        raise ForgeFactsProtocolError(_IDENTITY)
     checks = body.get("checks", [])
     contexts = body.get("contexts", [])
     if not isinstance(checks, list) or not isinstance(contexts, list):
-        raise GitHubFactsProtocolError(_IDENTITY)
+        raise ForgeFactsProtocolError(_IDENTITY)
     required: dict[str, int | None] = {}
     for item in checks:
         context = item.get("context") if isinstance(item, dict) else None
         app_id = item.get("app_id") if isinstance(item, dict) else None
         if not isinstance(context, str) or not context:
-            raise GitHubFactsProtocolError(_IDENTITY)
+            raise ForgeFactsProtocolError(_IDENTITY)
         if app_id is not None and (type(app_id) is not int or app_id < 1):
             # GitHub reports -1 or null for "any source".
             app_id = None
         required[context] = app_id
     for context in contexts:
         if not isinstance(context, str) or not context:
-            raise GitHubFactsProtocolError(_IDENTITY)
+            raise ForgeFactsProtocolError(_IDENTITY)
         required.setdefault(context, None)
     if not required:
-        raise GitHubRequiredChecksNotConfiguredError(_IDENTITY)
+        raise ForgeRequiredChecksNotConfiguredError(_IDENTITY)
     return tuple(sorted(required.items()))
 
 
 def _latest(items: list[dict]) -> dict | None:
     """Return the most recent item by GitHub id; re-runs get higher ids."""
     if any(type(item.get("id")) is not int for item in items):
-        raise GitHubFactsProtocolError(_IDENTITY)
+        raise ForgeFactsProtocolError(_IDENTITY)
     return max(items, key=lambda item: item["id"], default=None)
 
 
@@ -717,20 +733,34 @@ def _workflow_run_id(run: dict, repository: str) -> int | None:
     return int(match.group(2))
 
 
-def _actor(body: object) -> GitHubActorFact:
-    """Translate one GitHub user object."""
-    if not isinstance(body, dict):
-        raise GitHubFactsProtocolError(_IDENTITY)
-    return GitHubActorFact(login=body["login"], id=body["id"], type=body["type"])
+_ACTOR_KINDS = {"User": "user", "Bot": "bot"}
+_REVIEW_STATES = {
+    "APPROVED": "approved",
+    "CHANGES_REQUESTED": "changes_requested",
+    "DISMISSED": "dismissed",
+    "COMMENTED": "commented",
+    "PENDING": "pending",
+}
 
 
-def _review(body: dict) -> GitHubReviewFact:
+def _actor(body: object) -> ForgeActorFact:
+    """Translate one GitHub user object; types other than User and Bot are ``other``."""
+    if not isinstance(body, dict) or not isinstance(body["type"], str):
+        raise ForgeFactsProtocolError(_IDENTITY)
+    return ForgeActorFact(
+        login=body["login"], id=body["id"], kind=_ACTOR_KINDS.get(body["type"], "other")
+    )
+
+
+def _review(body: dict) -> ForgeReviewFact:
     """Translate one review; GitHub reports a deleted reviewer as null."""
     user = body.get("user")
-    return GitHubReviewFact(
+    if not isinstance(body.get("state"), str):
+        raise ForgeFactsProtocolError(_IDENTITY)
+    return ForgeReviewFact(
         id=body["id"],
         reviewer=None if user is None else _actor(user),
-        state=body["state"],
+        state=_REVIEW_STATES.get(body["state"], "other"),
         commit_id=body.get("commit_id"),
         submitted_at=body.get("submitted_at"),
     )
@@ -743,12 +773,13 @@ def _required_check_fact(
     statuses: list[dict],
     head_sha: str,
     repository: str,
-) -> GitHubRequiredCheckFact:
+) -> ForgeRequiredCheckFact:
     """Judge only the latest check run and latest status for one required check.
 
     A re-run supersedes an earlier attempt with the same name. When both a check
     run and a commit status exist for the name, both latest results must succeed.
-    The fact records which App produced the judged run.
+    Each judged result records its producer (``github_app:<id>``); commit
+    statuses have none.
     """
     observed: list[str] = []
     runs = []
@@ -760,22 +791,20 @@ def _required_check_fact(
     run = _latest(runs)
     check_run_app_id = None
     check_run_head_sha = None
-    html_url = details_url = workflow_run_id = None
+    workflow_run_id = None
     if run is not None:
         check_run_head_sha = run.get("head_sha")
-        html_url = run.get("html_url")
-        details_url = run.get("details_url")
         workflow_run_id = _workflow_run_id(run, repository)
         app = run.get("app")
         check_run_app_id = app.get("id") if isinstance(app, dict) else None
         if check_run_app_id is not None and type(check_run_app_id) is not int:
-            raise GitHubFactsProtocolError(_IDENTITY)
+            raise ForgeFactsProtocolError(_IDENTITY)
         if run.get("status") != "completed":
             observed.append("pending")
         else:
             conclusion = run.get("conclusion")
             if conclusion not in _CHECK_RUN_CONCLUSIONS:
-                raise GitHubFactsProtocolError(_IDENTITY)
+                raise ForgeFactsProtocolError(_IDENTITY)
             observed.append(conclusion)
     status_judged = False
     if app_id is None:
@@ -785,7 +814,7 @@ def _required_check_fact(
         if status is not None:
             state = status.get("state")
             if state not in _STATUS_STATES:
-                raise GitHubFactsProtocolError(_IDENTITY)
+                raise ForgeFactsProtocolError(_IDENTITY)
             observed.append(state)
             status_judged = True
     conclusion = (
@@ -793,16 +822,25 @@ def _required_check_fact(
         if not observed
         else next((value for value in observed if value != "success"), "success")
     )
-    return GitHubRequiredCheckFact(
+    judged = []
+    if run is not None:
+        judged.append(
+            ForgeJudgedResultFact(
+                producer=None if check_run_app_id is None else f"github_app:{check_run_app_id}",
+                sha=check_run_head_sha,
+            )
+        )
+    if status_judged:
+        # Commit statuses carry no producer identity.
+        judged.append(ForgeJudgedResultFact(producer=None, sha=head_sha))
+    return ForgeRequiredCheckFact(
         name=name,
-        app_id=app_id,
-        app_bound=app_id is not None,
         conclusion=conclusion,
-        check_run_app_id=check_run_app_id,
-        check_run_head_sha=check_run_head_sha,
-        check_run_html_url=html_url,
-        check_run_details_url=details_url,
-        workflow_run_id=workflow_run_id,
-        commit_status_judged=status_judged,
-        commit_status_sha=head_sha if status_judged else None,
+        required_producer=None if app_id is None else f"github_app:{app_id}",
+        judged=tuple(judged),
+        run_url=(
+            None
+            if workflow_run_id is None
+            else f"https://github.com/{repository}/actions/runs/{workflow_run_id}"
+        ),
     )

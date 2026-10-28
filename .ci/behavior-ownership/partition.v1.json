@@ -446,7 +446,7 @@
     },
     {
       "group": "shared",
-      "target": "backend/app/interfaces/github_facts.py"
+      "target": "backend/app/interfaces/forge_facts.py"
     },
     {
       "group": "shared",

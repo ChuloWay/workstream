@@ -338,10 +338,17 @@ non-blocking `warning` finding with code `harnessy.operator_approved`: the work
 may earn points but may not be paid in money until an independent reviewer
 confirms it. The verdict does not change.
 
-**Until facts are wired.** WorkStream's POST evaluation does not yet supply
-facts (initiative chunk 04). Until it does, every evaluation with this checker
-fails with `facts_missing`, so this stack cannot reach automatic
-FinalAcceptance through it. There is deliberately no shape-only mode.
+**Where the facts come from.** For a POST binding that selects forge facts,
+WorkStream's evaluation worker reads the claimed `pr_url` from `proof.json`,
+and, when it names a change in the configured repository, reads that change's
+facts from the forge before running the checker (initiative chunk 04). GitHub
+is read as the read-only GitHub App configured by the `WORKSTREAM_GITHUB_APP_*`
+settings in `backend/.env.example`. A claim that is missing, malformed or names
+another repository, or a change the forge does not have, yields no facts, and
+the checker fails with `facts_missing`. If the forge is unreachable, refuses
+the credential or answers outside its protocol, or the App is not configured,
+the evaluation ends as an infrastructure failure that an Operator can retry;
+it never passes. There is deliberately no shape-only mode.
 
 ## Create the manager project and the agent submitter
 
