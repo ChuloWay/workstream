@@ -228,21 +228,26 @@ Every failed rule is one `error` finding on `proof.json`, and the verdict is
 claims.
 
 The POST binding configuration must select the forge facts version and name the
-forge, repository and base branch. It may set integrity options whose defaults
-are the safe ones:
+forge, the forge instance's web origin, the repository and the base branch. It
+may set integrity options whose defaults are the safe ones:
 
 ```json
 {"workstream_forge_facts_version": "v1", "forge": "github",
+ "forge_origin": "https://github.com",
  "repository": "Flow-Research/harnessy-v2", "base_branch": "main"}
 ```
 
-`forge` accepts only `github` today, and `repository` is a GitHub
-`owner/name`.
+`forge` accepts only `github` today. `forge_origin` is `https://`, a host and an
+optional port, with no path or trailing slash; it tells GitHub Enterprise or a
+self-hosted GitLab or Forgejo instance apart from `https://github.com`.
+`repository` uses a forge-neutral path grammar: two or more `/`-joined segments
+of `A-Z a-z 0-9 . _ -`, none `.` or `..`, at most 255 characters, so GitLab
+subgroups fit. Each forge provider enforces its own stricter grammar.
 
 | Option | Default | Effect |
 |---|---|---|
 | `allow_unbound_required_checks` | `false` | When false, a required check that accepts any producer is an error |
-| `protected_paths` | `[]` | Globs added to `.github/**`, `**/CODEOWNERS`, `.gitlab-ci.yml`, `.circleci/**` |
+| `protected_paths` | `[]` | Globs added to `.github/**`, `**/CODEOWNERS`, `.gitlab-ci.yml`, `.gitlab/**`, `.circleci/**`, `.forgejo/**`, `.gitea/**`, `.woodpecker/**`, `.woodpecker.yml`, `.woodpecker.yaml` |
 | `required_independent_approvals` | `1` | Independent approvals needed on the head commit (1 to 10) |
 | `operator_logins` | `[]` | Logins whose approval alone adds the `harnessy.operator_approved` warning |
 
@@ -250,7 +255,7 @@ WorkStream places the facts in the request `input` under `forge_facts`, so the
 request digest binds them. Each forge provider maps its host into the same
 `workstream.forge_change_facts.v1` facts; anything a provider cannot prove is
 null or absent, and the checker then fails closed. The facts are bound to one
-change state (`head_sha`, `merge_commit_sha`). A commit id is 40 (SHA-1) or 64
+change state (`head_sha`, `landed_commit_sha`). A commit id is 40 (SHA-1) or 64
 (SHA-256) lowercase hexadecimal characters:
 
 ```json
@@ -258,16 +263,18 @@ change state (`head_sha`, `merge_commit_sha`). A commit id is 40 (SHA-1) or 64
   "forge_facts": {
     "schema_version": "workstream.forge_change_facts.v1",
     "forge": "github",
+    "forge_origin": "https://github.com",
     "repository": "Flow-Research/harnessy-v2",
     "change_number": 12,
     "change_url": "https://github.com/Flow-Research/harnessy-v2/pull/12",
     "state": "closed",
     "merged": true,
-    "merge_commit_sha": "<commit id; null unless merged>",
+    "landed_commit_sha": "<commit id; null unless merged>",
     "base_ref": "main",
     "head_sha": "<commit id>",
     "author": {"login": "agent-bot", "id": 501, "kind": "bot"},
-    "reviews": [{"id": 61, "reviewer": {"login": "reviewer", "id": 7, "kind": "user"},
+    "reviews": [{"id": "61", "reviewer": {"login": "reviewer", "id": 7, "kind": "user"},
+                 "reviewer_write_access": true,
                  "state": "approved", "commit_id": "<head sha, or null>",
                  "submitted_at": "2026-10-24T11:00:00Z"}],
     "changed_files_count": 1,
@@ -282,8 +289,15 @@ change state (`head_sha`, `merge_commit_sha`). A commit id is 40 (SHA-1) or 64
 }
 ```
 
-Every object has exactly these keys. An actor `kind` is `user`, `bot` or
-`other`. A review `state` is `approved`, `changes_requested`, `dismissed`,
+Every object has exactly these keys. `change_number` is the per-repository
+number (a GitLab merge request's `iid`). `landed_commit_sha` is the commit the
+change landed as on the base branch, whether by merge, squash or rebase; it is
+present exactly when `merged` is true, and a merged change must be `closed`.
+`reviews` are in chronological order, oldest first. A review `id` is an opaque
+string of 1 to 100 characters, and the checker never orders review ids.
+`reviewer_write_access` says whether the reviewer currently has write (merge)
+access to the repository; it is null when the forge cannot prove it. An actor
+`kind` is `user`, `bot` or `other`. A review `state` is `approved`, `changes_requested`, `dismissed`,
 `commented`, `pending` or `other`. `judged` lists every result the provider
 judged for the check; its `producer` is null when the forge gives no producer
 identity, such as a GitHub commit status.
@@ -296,25 +310,28 @@ against the facts (`harnessy.proof.forge.*`):
 | Code | Fails when |
 |---|---|
 | `configuration` | the configuration is missing, lacks a required key, names an unsupported facts version or forge, or has an invalid option |
-| `facts_missing` | the input has no facts |
-| `facts_invalid` | the facts do not have the exact `workstream.forge_change_facts.v1` shape |
+| `facts_missing` | the input has no facts; the message names the configured repository and `forge_origin` that `pr_url` must point to |
+| `facts_invalid` | the facts do not have the exact `workstream.forge_change_facts.v1` shape, including `merged` if and only if `landed_commit_sha` is set, and `merged` only when `closed` |
 | `facts_binding` | a judged result names a commit other than `head_sha` |
-| `repository` | the facts' forge is not `forge`, or their repository is not `repository` (case-insensitive) |
+| `repository` | the facts' forge is not `forge`, their `forge_origin` is not exactly `forge_origin`, or their repository is not `repository` (case-insensitive) |
 | `base_branch` | the change's base branch is not `base_branch` |
 | `change_url` | `pr_url` is not exactly the facts' `change_url` |
 | `ci_run` | `ci_run_url` is not exactly the `run_url` of a required check |
 | `merged` | the forge reports the change as not merged |
-| `merge_commit_sha` | `commit_sha` is not the merge commit (case-insensitive) |
+| `landed_commit_sha` | `commit_sha` is not the commit the change landed as (case-insensitive) |
 | `required_check` | one finding per required check whose result is not `success` |
 | `unbound_required_check` | a required check has no `required_producer` and `allow_unbound_required_checks` is false |
 | `producer_mismatch` | a required check is bound to a producer and one of its judged results comes from another producer or from an unknown one |
 | `protected_path_changed` | a changed file, or a rename's previous path, matches a protected glob; the work needs explicit human acceptance and cannot be auto-accepted |
-| `independent_approval_missing` | fewer than `required_independent_approvals` reviewers approve the head commit, counting each reviewer's latest `approved`, `changes_requested` or `dismissed` review, and excluding the author and every account whose kind is not `user` |
+| `independent_approval_missing` | fewer than `required_independent_approvals` reviewers approve the head commit. Each reviewer's last `approved`, `changes_requested` or `dismissed` review by list position decides. It counts only from a `user` account that is not the author (id, or login ignoring case) and whose `reviewer_write_access` is `true` |
 
 The checker parses no URL and builds no forge URL. URL comparison is exact and
 case-sensitive against the URLs the facts report, so a trailing slash, query,
 fragment, port, user information, percent encoding, backslash, different case or
 non-ASCII character fails. A review whose `commit_id` is null never approves.
+Nor does a review whose `reviewer_write_access` is null or false, so a
+contributor's second account without write access cannot supply the
+independent approval.
 
 When every qualifying approval comes from `operator_logins`, the checker adds a
 non-blocking `warning` finding with code `harnessy.operator_approved`: the work

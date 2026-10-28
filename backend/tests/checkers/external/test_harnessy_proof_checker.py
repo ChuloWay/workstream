@@ -47,6 +47,7 @@ OTHER_RUN_URL = f"https://github.com/{REPOSITORY}/actions/runs/346"
 CONFIGURATION = {
     "workstream_forge_facts_version": "v1",
     "forge": "github",
+    "forge_origin": "https://github.com",
     "repository": "acme/widgets",
     "base_branch": "main",
 }
@@ -73,10 +74,18 @@ def _check(name: str = "backend", *, sha: str | None = HEAD, **changes: object) 
     return check
 
 
-def _review(review_id: int, state: str, *, commit: str | None = HEAD, **reviewer: object) -> dict:
+def _review(
+    review_id: str,
+    state: str,
+    *,
+    commit: str | None = HEAD,
+    write_access: bool | None = True,
+    **reviewer: object,
+) -> dict:
     return {
         "id": review_id,
         "reviewer": {"login": "reviewer", "id": 7, "kind": "user", **reviewer},
+        "reviewer_write_access": write_access,
         "state": state,
         "commit_id": commit,
         "submitted_at": "2026-10-24T11:00:00Z",
@@ -90,16 +99,17 @@ def _file(path: str, previous_path: str | None = None, status: str = "modified")
 FACTS = {
     "schema_version": "workstream.forge_change_facts.v1",
     "forge": "github",
+    "forge_origin": "https://github.com",
     "repository": REPOSITORY,
     "change_number": 12,
     "change_url": PR_URL,
     "state": "closed",
     "merged": True,
-    "merge_commit_sha": MERGE,
+    "landed_commit_sha": MERGE,
     "base_ref": "main",
     "head_sha": HEAD,
     "author": {"login": "agent-bot", "id": 501, "kind": "bot"},
-    "reviews": [_review(61, "approved")],
+    "reviews": [_review("61", "approved")],
     "changed_files_count": 1,
     "changed_files": [_file("src/app.py")],
     "required_checks": [_check("backend"), _check("lint", run_url=OTHER_RUN_URL)],
@@ -179,8 +189,8 @@ def test_sha256_repository_commit_ids_pass() -> None:
         _codes(
             _encoded(commit_sha=merge.upper()),
             head_sha=head,
-            merge_commit_sha=merge,
-            reviews=[_review(61, "approved", commit=head)],
+            landed_commit_sha=merge,
+            reviews=[_review("61", "approved", commit=head)],
             required_checks=[_check(sha=head)],
         )
         == []
@@ -195,7 +205,7 @@ def test_pr_url_is_compared_with_the_reported_change_url_without_building_one() 
 
 
 def test_failed_verdict_exactly_when_an_error_finding_exists() -> None:
-    findings = _findings(merged=False, merge_commit_sha=None)
+    findings = _findings(merged=False, landed_commit_sha=None)
     parsed = ExternalCheckerExecutionResult.model_validate_json(
         json.dumps(checker.build_result(_request(), findings))
     )
@@ -230,10 +240,24 @@ def _without(key: str) -> dict:
         {},
         _without("workstream_forge_facts_version"),
         _without("forge"),
+        _without("forge_origin"),
         _without("repository"),
         _without("base_branch"),
         {**CONFIGURATION, "workstream_forge_facts_version": "v2"},
         {**CONFIGURATION, "workstream_forge_facts_version": 1},
+        {**CONFIGURATION, "forge_origin": "https://github.com/"},
+        {**CONFIGURATION, "forge_origin": "https://github.com/acme"},
+        {**CONFIGURATION, "forge_origin": "http://github.com"},
+        {**CONFIGURATION, "forge_origin": "github.com"},
+        {**CONFIGURATION, "forge_origin": "https://user@github.com"},
+        {**CONFIGURATION, "repository": "acme"},
+        {**CONFIGURATION, "repository": "acme/../widgets"},
+        {**CONFIGURATION, "repository": "acme/./widgets"},
+        {**CONFIGURATION, "repository": "/acme/widgets"},
+        {**CONFIGURATION, "repository": "acme/widgets/"},
+        {**CONFIGURATION, "repository": "acme//widgets"},
+        {**CONFIGURATION, "repository": "acme/wid gets"},
+        {**CONFIGURATION, "repository": "a/" + "b" * 254},
         {**CONFIGURATION, "forge": "gitlab"},
         {**CONFIGURATION, "forge": "GitHub"},
         {**CONFIGURATION, "extra": True},
@@ -262,7 +286,12 @@ def test_missing_or_invalid_configuration_never_passes(configuration: object) ->
     ],
 )
 def test_missing_facts_never_pass(input_value: object) -> None:
-    assert _codes(input_value=input_value) == _forge("facts_missing")
+    findings = _findings(input_value=input_value)
+    assert [item["code"] for item in findings] == _forge("facts_missing")
+    assert findings[0]["message"] == (
+        "proof.json pr_url must name a change in acme/widgets on https://github.com; "
+        "WorkStream could not read facts for this proof."
+    )
 
 
 @pytest.mark.parametrize(
@@ -273,6 +302,14 @@ def test_missing_facts_never_pass(input_value: object) -> None:
         {"extra": 1},
         {"forge": ...},
         {"forge": None},
+        {"forge_origin": ...},
+        {"forge_origin": None},
+        {"forge_origin": "https://github.com/"},
+        {"forge_origin": "https://github.com/Acme"},
+        {"repository": "Acme"},
+        {"repository": "Acme/../widgets"},
+        {"repository": "Acme/widgets/"},
+        {"repository": None},
         {"change_url": ...},
         {"change_url": None},
         {"change_number": "12"},
@@ -281,9 +318,12 @@ def test_missing_facts_never_pass(input_value: object) -> None:
         {"state": "merged"},
         {"merged": "true"},
         {"merged": False},
-        {"merge_commit_sha": None},
-        {"merge_commit_sha": "ABC"},
-        {"merge_commit_sha": MERGE.upper()},
+        {"landed_commit_sha": None},
+        {"merge_commit_sha": MERGE, "landed_commit_sha": ...},
+        {"state": "open"},
+        {"merged": False, "state": "open"},
+        {"landed_commit_sha": "ABC"},
+        {"landed_commit_sha": MERGE.upper()},
         {"head_sha": ...},
         {"head_sha": HEAD.upper()},
         {"head_sha": "e" * 41},
@@ -293,11 +333,21 @@ def test_missing_facts_never_pass(input_value: object) -> None:
         {"author": {"login": "agent-bot", "id": 0, "kind": "bot"}},
         {"author": {"login": "agent-bot", "id": 501, "kind": "bot", "extra": 1}},
         {"reviews": ...},
-        {"reviews": [_review(61, "APPROVED")]},
-        {"reviews": [_review(61, "approved", commit="not-a-sha")]},
-        {"reviews": [{**_review(61, "approved"), "extra": 1}]},
-        {"reviews": [{**_review(61, "approved"), "submitted_at": "yesterday"}]},
-        {"reviews": [_review(61, "approved", kind="User")]},
+        {"reviews": [_review("61", "APPROVED")]},
+        {"reviews": [_review("61", "approved", commit="not-a-sha")]},
+        {"reviews": [{**_review("61", "approved"), "extra": 1}]},
+        {"reviews": [{**_review("61", "approved"), "submitted_at": "yesterday"}]},
+        {"reviews": [_review("61", "approved", kind="User")]},
+        {"reviews": [_review(61, "approved")]},
+        {"reviews": [_review("", "approved")]},
+        {"reviews": [_review("x" * 101, "approved")]},
+        {"reviews": [_review("61", "approved", write_access=1)]},
+        {"reviews": [_review("61", "approved", write_access="true")]},
+        {
+            "reviews": [
+                {k: v for k, v in _review("61", "approved").items() if k != "reviewer_write_access"}
+            ]
+        },
         {"changed_files": ...},
         {"changed_files": [{"filename": "src/app.py", "previous_filename": None, "status": "x"}]},
         {"changed_files": [{"path": "src/app.py", "previous_path": None}]},
@@ -398,10 +448,10 @@ def test_each_invalid_claim_reports_exactly_its_error(changes: dict, code: str) 
         1234,
     ],
 )
-def test_malformed_commit_sha_fails_shape_and_merge_comparison(commit_sha: object) -> None:
+def test_malformed_commit_sha_fails_shape_and_landed_commit_comparison(commit_sha: object) -> None:
     assert _codes(_encoded(commit_sha=commit_sha)) == [
         "harnessy.proof.commit_sha",
-        "harnessy.proof.forge.merge_commit_sha",
+        "harnessy.proof.forge.landed_commit_sha",
     ]
 
 
@@ -410,14 +460,16 @@ def test_malformed_commit_sha_fails_shape_and_merge_comparison(commit_sha: objec
     [
         ({}, {"repository": "acme/other"}, ["repository"]),
         ({}, {"forge": "gitlab"}, ["repository"]),
+        ({}, {"forge_origin": "https://github.example.com"}, ["repository"]),
+        ({}, {"forge_origin": "https://github.com:8443"}, ["repository"]),
         ({}, {"base_ref": "release"}, ["base_branch"]),
-        ({}, {"merged": False, "merge_commit_sha": None}, ["merged", "merge_commit_sha"]),
+        ({}, {"merged": False, "landed_commit_sha": None}, ["merged", "landed_commit_sha"]),
         (
             {},
-            {"merged": False, "state": "open", "merge_commit_sha": None},
-            ["merged", "merge_commit_sha"],
+            {"merged": False, "state": "open", "landed_commit_sha": None},
+            ["merged", "landed_commit_sha"],
         ),
-        ({"commit_sha": OTHER}, {}, ["merge_commit_sha"]),
+        ({"commit_sha": OTHER}, {}, ["landed_commit_sha"]),
     ],
 )
 def test_each_forge_mismatch_reports_its_finding(
@@ -534,6 +586,12 @@ def test_result_from_another_producer_is_a_producer_mismatch(judged: list) -> No
         _file("CODEOWNERS"),
         _file(".gitlab-ci.yml", status="added"),
         _file(".circleci/config.yml", status="removed"),
+        _file(".gitlab/ci/build.yml", status="added"),
+        _file(".forgejo/workflows/ci.yml"),
+        _file(".gitea/workflows/ci.yml"),
+        _file(".woodpecker/build.yml"),
+        _file(".woodpecker.yml"),
+        _file(".woodpecker.yaml", status="added"),
         _file(".github/workflows/x.yml", "x.yml", "renamed"),
         _file("moved.yml", ".github/workflows/x.yml", "renamed"),
     ],
@@ -543,6 +601,12 @@ def test_result_from_another_producer_is_a_producer_mismatch(judged: list) -> No
         "root-codeowners",
         "gitlab",
         "circleci",
+        "gitlab-directory",
+        "forgejo",
+        "gitea",
+        "woodpecker-directory",
+        "woodpecker-yml",
+        "woodpecker-yaml",
         "rename-into-github",
         "rename-out-of-github",
     ),
@@ -574,18 +638,20 @@ def test_protected_path_finding_lists_a_bounded_number_of_paths() -> None:
     "reviews",
     [
         [],
-        [_review(61, "approved", commit=OTHER)],
-        [_review(61, "approved", commit=None)],
-        [_review(61, "approved"), _review(62, "changes_requested")],
-        [_review(61, "approved"), _review(62, "dismissed")],
-        [_review(61, "approved", kind="bot", login="ci-bot[bot]")],
-        [_review(61, "approved", kind="other", login="some-app")],
-        [_review(61, "approved", login="agent-bot", id=501)],
-        [_review(61, "approved", login="Agent-Bot", id=999)],
-        [_review(61, "commented")],
-        [_review(61, "pending")],
-        [_review(61, "other")],
-        [{**_review(61, "approved"), "reviewer": None}],
+        [_review("61", "approved", commit=OTHER)],
+        [_review("61", "approved", commit=None)],
+        [_review("61", "approved"), _review("62", "changes_requested")],
+        [_review("61", "approved"), _review("62", "dismissed")],
+        [_review("61", "approved", kind="bot", login="ci-bot[bot]")],
+        [_review("61", "approved", kind="other", login="some-app")],
+        [_review("61", "approved", login="agent-bot", id=501)],
+        [_review("61", "approved", login="Agent-Bot", id=999)],
+        [_review("61", "commented")],
+        [_review("61", "pending")],
+        [_review("61", "other")],
+        [{**_review("61", "approved"), "reviewer": None}],
+        [_review("61", "approved", write_access=None)],
+        [_review("61", "approved", write_access=False)],
     ],
     ids=(
         "no-review",
@@ -601,29 +667,61 @@ def test_protected_path_finding_lists_a_bounded_number_of_paths() -> None:
         "pending-only",
         "other-state-only",
         "deleted-reviewer",
+        "write-access-unknown",
+        "no-write-access",
     ),
 )
 def test_missing_independent_approval_on_head_commit_is_an_error(reviews: list) -> None:
     assert _codes(reviews=reviews) == _forge("independent_approval_missing")
 
 
-def test_latest_decisive_review_wins_and_comments_do_not_cancel() -> None:
+def test_latest_decisive_review_by_list_position_wins_and_comments_do_not_cancel() -> None:
     reviews = [
-        _review(61, "changes_requested"),
-        _review(62, "approved"),
-        _review(63, "commented"),
+        _review("61", "changes_requested"),
+        _review("62", "approved"),
+        _review("63", "commented"),
     ]
     assert _codes(reviews=reviews) == []
-    out_of_order = [_review(70, "approved"), _review(65, "changes_requested")]
-    assert _codes(reviews=out_of_order) == []
-    old_then_new = [_review(60, "approved", commit=OTHER), _review(61, "approved")]
+    old_then_new = [_review("60", "approved", commit=OTHER), _review("61", "approved")]
     assert _codes(reviews=old_then_new) == []
+    # Ids are opaque: a later approval counts although its id sorts lower.
+    assert _codes(reviews=[_review("9", "changes_requested"), _review("10", "approved")]) == []
+
+
+def test_later_changes_requested_supersedes_approval_even_when_its_id_sorts_lower() -> None:
+    """Position, not id order, decides: numeric and string orderings both disagree here."""
+    reviews = [_review("70", "approved"), _review("100", "changes_requested")]
+    assert _codes(reviews=reviews) == _forge("independent_approval_missing")
+    reviews = [_review("b", "approved"), _review("a", "changes_requested")]
+    assert _codes(reviews=reviews) == _forge("independent_approval_missing")
+
+
+def test_contributor_second_account_without_write_access_is_not_independent() -> None:
+    """A second account the forge does not show with write access never counts."""
+    second = {"login": "contributor-alt", "id": 900}
+    for write_access in (None, False):
+        reviews = [_review("61", "approved", write_access=write_access, **second)]
+        findings = _findings(reviews=reviews)
+        assert [item["code"] for item in findings] == _forge("independent_approval_missing")
+        message = findings[0]["message"]
+        assert "reviewers with write access who are neither the author nor a bot" in message
+    maintainer = [
+        _review("61", "approved", write_access=False, **second),
+        _review("62", "approved", login="maintainer", id=8),
+    ]
+    assert _codes(reviews=maintainer) == []
+
+
+def test_gitlab_style_subgroup_repository_is_accepted() -> None:
+    repository = "acme/platform/widgets"
+    configuration = {**CONFIGURATION, "repository": "Acme/Platform/widgets"}
+    assert _codes(configuration=configuration, repository=repository) == []
 
 
 def test_required_independent_approvals_is_configurable() -> None:
     two = {**CONFIGURATION, "required_independent_approvals": 2}
     assert _codes(configuration=two) == _forge("independent_approval_missing")
-    reviews = [_review(61, "approved"), _review(62, "approved", login="second", id=8)]
+    reviews = [_review("61", "approved"), _review("62", "approved", login="second", id=8)]
     assert _codes(configuration=two, reviews=reviews) == []
 
 
@@ -637,7 +735,7 @@ def test_operator_only_approval_is_a_non_blocking_warning() -> None:
         json.dumps(checker.build_result(_request(), findings))
     )
     assert result.verdict == "passed"
-    reviews = [_review(61, "approved"), _review(62, "approved", login="independent", id=8)]
+    reviews = [_review("61", "approved"), _review("62", "approved", login="independent", id=8)]
     assert _codes(configuration=operators, reviews=reviews) == []
 
 
@@ -662,16 +760,29 @@ def test_published_registry_body_is_post_only_and_backend_valid() -> None:
     }
     spec.configuration_schema.validate_instance(CONFIGURATION)
     spec.configuration_schema.validate_instance(full)
+    for accepted in (
+        {**CONFIGURATION, "repository": "acme/platform/widgets"},
+        {**CONFIGURATION, "repository": "acme/.github"},
+        {**CONFIGURATION, "forge_origin": "https://git.example.org:8443"},
+    ):
+        spec.configuration_schema.validate_instance(accepted)
     spec.input_schema.validate_instance(_input())
     for schema, value in (
         (spec.configuration_schema, {}),
         (spec.configuration_schema, _without("workstream_forge_facts_version")),
         (spec.configuration_schema, _without("forge")),
+        (spec.configuration_schema, _without("forge_origin")),
+        (spec.configuration_schema, {**CONFIGURATION, "forge_origin": "https://github.com/"}),
+        (spec.configuration_schema, {**CONFIGURATION, "forge_origin": "http://github.com"}),
         (spec.configuration_schema, _without("repository")),
         (spec.configuration_schema, _without("base_branch")),
         (spec.configuration_schema, {**CONFIGURATION, "workstream_forge_facts_version": "v2"}),
         (spec.configuration_schema, {**CONFIGURATION, "forge": "gitlab"}),
         (spec.configuration_schema, {**CONFIGURATION, "repository": "acme"}),
+        (spec.configuration_schema, {**CONFIGURATION, "repository": "acme/../widgets"}),
+        (spec.configuration_schema, {**CONFIGURATION, "repository": "../acme/widgets"}),
+        (spec.configuration_schema, {**CONFIGURATION, "repository": "acme/widgets/"}),
+        (spec.configuration_schema, {**CONFIGURATION, "repository": "a/" + "b" * 254}),
         (spec.configuration_schema, {**CONFIGURATION, "github_repository": "acme/widgets"}),
         (spec.configuration_schema, {**CONFIGURATION, "extra": 1}),
         (spec.configuration_schema, {**CONFIGURATION, "required_independent_approvals": 0}),

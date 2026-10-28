@@ -54,19 +54,32 @@ def _hash(value: object) -> str:
     return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-# One fail-closed mode: the forge facts version, forge, repository and base
-# branch are required. Integrity options are optional and default to the safe
-# values. GitHub is the only supported forge today.
+# One fail-closed mode: the forge facts version, forge, forge instance origin,
+# repository and base branch are required. Integrity options are optional and
+# default to the safe values. GitHub is the only supported forge today. The
+# repository uses the forge-neutral path grammar: two or more "/"-joined
+# segments, none "." or ".." (GitLab subgroups allowed).
 CONFIGURATION_SCHEMA: dict[str, object] = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["workstream_forge_facts_version", "forge", "repository", "base_branch"],
+    "required": [
+        "workstream_forge_facts_version",
+        "forge",
+        "forge_origin",
+        "repository",
+        "base_branch",
+    ],
     "properties": {
         "workstream_forge_facts_version": {"const": "v1"},
         "forge": {"enum": ["github"]},
+        "forge_origin": {
+            "type": "string",
+            "pattern": "^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?$",
+        },
         "repository": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$",
+            "maxLength": 255,
+            "pattern": r"^(?!(?:.*/)?\.{1,2}(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+$",
         },
         "base_branch": {"type": "string", "minLength": 1, "maxLength": 255},
         "allow_unbound_required_checks": {"type": "boolean"},

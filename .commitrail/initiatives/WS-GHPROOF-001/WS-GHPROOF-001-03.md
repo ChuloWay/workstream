@@ -44,7 +44,8 @@ GitHub provider is built.
 
 - **One fail-closed mode (security review, fail-open finding).** The binding
   configuration must set `workstream_forge_facts_version` to `v1` and name
-  `forge` (`github` only today), `repository` and `base_branch`; anything
+  `forge` (`github` only today), `forge_origin`, `repository` and
+  `base_branch`; anything
   missing, unknown or invalid is `forge.configuration`. Facts must be present
   (`forge.facts_missing`) and have the exact v1 shape (`forge.facts_invalid`).
   There is no shape-only pass: until chunk 04 supplies facts every evaluation
@@ -54,10 +55,14 @@ GitHub provider is built.
 - **Forge-neutral input (owner decision 21).** WorkStream places
   `workstream.forge_change_facts.v1` in the request `input` under
   `forge_facts`, so the request digest binds it. Every object has exactly its
-  specified keys: `forge`, `repository`, `change_number`, `change_url`,
-  `state`, `merged`, `merge_commit_sha` (null unless merged), `base_ref`,
-  `head_sha`, `author` and reviewers as `{login, id, kind}`, lowercase review
-  states, `changed_files` as `{path, previous_path, status}`, and
+  specified keys: `forge`, `forge_origin` (the instance's https web origin),
+  `repository` (neutral path grammar: two or more segments, GitLab subgroups
+  allowed), `change_number` (per-repository number), `change_url`, `state`,
+  `merged`, `landed_commit_sha` (the merge, squash or rebase result; present
+  exactly when merged, and merged implies closed), `base_ref`, `head_sha`,
+  `author` and reviewers as `{login, id, kind}`, reviews in chronological order
+  with an opaque string `id` and `reviewer_write_access` (bool or null),
+  lowercase review states, `changed_files` as `{path, previous_path, status}`, and
   `required_checks` as `{name, conclusion, required_producer, judged[{producer,
   sha}], run_url}`. Commit ids are 40 or 64 lowercase hexadecimal characters,
   and the proof's `commit_sha` claim accepts both lengths. What a provider
@@ -73,9 +78,10 @@ GitHub provider is built.
   Reviews keep their own `commit_id`: a review of an earlier commit is normal
   history, but only reviews of `head_sha` can approve, and a null `commit_id`
   never approves.
-- **Comparisons.** `forge` (exact) and `repository` (case-insensitive) against
-  configuration as `forge.repository`, `base_branch`, `merged`,
-  `merge_commit_sha` (lower-cased proof SHA) and one `required_check` per
+- **Comparisons.** `forge` and `forge_origin` (exact) and `repository`
+  (case-insensitive) against configuration as `forge.repository`,
+  `base_branch`, `merged`, `landed_commit_sha` (lower-cased proof SHA) and one
+  `required_check` per
   non-success check. The proof's own `schema`, `commit_sha`, `ci_conclusion`
   and `merged` claims keep their rules.
 - **Integrity rules (owner decision 20).** `unbound_required_check` (null
@@ -83,19 +89,23 @@ GitHub provider is built.
   `producer_mismatch` (a bound check with any judged result from a different or
   unknown producer; not suppressed by the unbound option);
   `protected_path_changed` (one finding listing up to five paths that match
-  `.github/**`, `**/CODEOWNERS`, `.gitlab-ci.yml`, `.circleci/**` or configured
+  `.github/**`, `**/CODEOWNERS`, `.gitlab-ci.yml`, `.gitlab/**`,
+  `.circleci/**`, `.forgejo/**`, `.gitea/**`, `.woodpecker/**`,
+  `.woodpecker.yml`, `.woodpecker.yaml` or configured
   `protected_paths`, checking `path` and `previous_path`; it states that the
   work requires explicit human acceptance and cannot be auto-accepted);
   `independent_approval_missing` (fewer than `required_independent_approvals`,
-  default 1, reviewers whose latest `approved`/`changes_requested`/`dismissed`
-  review by id approves the head SHA, excluding the author by id or login and
-  every reviewer whose kind is not `user`). When all qualifying approvals come
+  default 1, reviewers whose last `approved`/`changes_requested`/`dismissed`
+  review by list position approves the head SHA, from a `user` account that is
+  not the author by id or login and whose `reviewer_write_access` is `true`;
+  review ids are never ordered). When all qualifying approvals come
   from `operator_logins`, the checker adds code `harnessy.operator_approved`
   at level `warning`, which does not fail the verdict; `info` would be
   invisible to contributor and history reads.
-- **Registry schemas.** The POST `configuration_schema` requires the four
+- **Registry schemas.** The POST `configuration_schema` requires the five
   binding keys (`workstream_forge_facts_version` const `v1`, `forge` enum
-  `github`, a GitHub `owner/name` repository, `base_branch`), allows only the
+  `github`, `forge_origin` matching `^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?$`,
+  a repository in the neutral path grammar, `base_branch`), allows only the
   integrity options and bounds them. The POST `input_schema` constrains
   `forge_facts.schema_version`; a missing facts object reaches the checker as
   `facts_missing`. `publish_local.py` defaults to capability version `v2`,
@@ -112,16 +122,20 @@ GitHub provider is built.
   missing or invalid configuration (including a missing facts version or an
   unsupported forge) and missing or malformed facts never pass.
 - [x] Each mismatch reports its finding: forge or repository, base branch,
-  merged, merge commit SHA, each non-success required check, and commit
-  binding.
+  forge origin, merged, landed commit SHA, each non-success required check,
+  and commit binding. Merged without a landed SHA, a landed SHA without merge,
+  and merged but open are malformed facts.
 - [x] Every `pr_url` not exactly equal to `change_url` and every `ci_run_url`
   that is not a required check's `run_url` fail; a non-GitHub change URL that
   the facts report passes, proving no URL is built.
 - [x] Each integrity rule has its own finding and edge-case tests: stale
   approval, approval with null `commit_id`, approval then changes requested or
-  dismissed, `bot` and `other` reviewer kinds, author self-approval, rename into
-  or out of `.github`, unbound check, producer mismatch, and operator-only
-  approval.
+  dismissed, `bot` and `other` reviewer kinds, author self-approval, reviewer
+  write access null or false, a later `changes_requested` whose id sorts lower,
+  a non-string review id, each default protected path, rename into or out of
+  `.github`, unbound check, producer mismatch, and operator-only approval.
+- [x] A GitLab-style subgroup repository path is accepted by the checker and
+  the published configuration schema.
 - [x] The published v2 body is post-submission only and validates through
   `ExternalCheckerRegistrySpec`, accepting and rejecting configuration and
   input as documented.
@@ -139,7 +153,7 @@ GitHub provider is built.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Rules and result contract | `pytest tests/checkers/external/test_harnessy_proof_checker.py` | 174 passed | Agreement with the GitHub provider's neutral facts is proved when chunk 04 adds a cross-module test |
+| Rules and result contract | `pytest tests/checkers/external/test_harnessy_proof_checker.py` | 219 passed | Agreement with the GitHub provider's neutral facts is proved when chunk 04 adds a cross-module test |
 | Lint | `ruff check` on the test module and `external_checkers/harnessy_proof/` | Pass | — |
 | Docs | Markdown link and stale wording checks | Pass | — |
 
@@ -158,6 +172,15 @@ The image was not rebuilt or run: Docker was out of scope for this change.
   equality; after owner decision 21 the checker builds no URL either and
   compares with the URLs the facts report.
 - Security review, time-of-check binding: added the commit-binding finding.
+- Security review of the forge-neutral contract (28 October): a contributor's
+  second account without write access could count as the independent
+  approval. Facts now carry `reviewer_write_access`, and only `true` counts.
+- Architecture review of the forge-neutral contract (28 October): the format
+  was still GitHub-shaped. Added `forge_origin`, renamed `merge_commit_sha` to
+  `landed_commit_sha` with its invariants, made review ids opaque and ordered
+  reviews by list position, replaced the GitHub `owner/name` repository grammar,
+  and added Forgejo, Gitea, GitLab and Woodpecker CI paths to the protected
+  defaults.
 
 ## Reconciliation
 

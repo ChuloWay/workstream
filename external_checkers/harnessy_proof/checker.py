@@ -8,16 +8,17 @@ request input under ``forge_facts``, and writes one
 ``external_checker_result.v1`` envelope.
 
 There is one mode and it fails closed (owner decisions 20 and 21): the binding
-configuration must select the facts version and name the forge, repository and
-base branch, and the facts must be present and well formed. Otherwise the
-verdict is ``failed``. A proof is never passed on its own claims. The checker
-never uses the network or a credential, parses no URL and builds no forge URL:
-claimed URLs must equal URLs the facts report.
+configuration must select the facts version and name the forge, the forge
+instance origin, repository and base branch, and the facts must be present and
+well formed. Otherwise the verdict is ``failed``. A proof is never passed on
+its own claims. The checker never uses the network or a credential, parses no
+URL and builds no forge URL: claimed URLs must equal URLs the facts report.
 
 Integrity rules: every required check must be bound to a producer and every
 judged result must come from it; a change to CI or repository configuration
 paths needs explicit human acceptance; the head commit needs an independent
-approval (latest decisive review, not the author, a ``user`` account); every
+approval (each reviewer's latest decisive review by list position, from a
+``user`` account with write access that is not the author); every
 judged result that names a commit must name the head commit; and approval only
 by configured operators adds a non-blocking ``harnessy.operator_approved``
 warning.
@@ -42,12 +43,27 @@ FORGE_FACTS_INPUT_KEY = "forge_facts"
 FORGE_FACTS_SCHEMA = "workstream.forge_change_facts.v1"
 FORGE_FACTS_VERSION = "v1"
 SUPPORTED_FORGES = frozenset({"github"})
-DEFAULT_PROTECTED_PATHS = (".github/**", "**/CODEOWNERS", ".gitlab-ci.yml", ".circleci/**")
+DEFAULT_PROTECTED_PATHS = (
+    ".github/**",
+    "**/CODEOWNERS",
+    ".gitlab-ci.yml",
+    ".gitlab/**",
+    ".circleci/**",
+    ".forgejo/**",
+    ".gitea/**",
+    ".woodpecker/**",
+    ".woodpecker.yml",
+    ".woodpecker.yaml",
+)
 DEFAULT_REQUIRED_INDEPENDENT_APPROVALS = 1
 OPERATOR_APPROVED_CODE = "harnessy.operator_approved"
 _COMMIT_SHA = re.compile(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}")
 _LOWER_SHA = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 _RESPONSE_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+_FORGE_ORIGIN = re.compile(r"https://[A-Za-z0-9.-]+(?::[0-9]{1,5})?")
+_REPOSITORY_SEGMENT = re.compile(r"[A-Za-z0-9._-]+")
+_MAX_REPOSITORY_CHARACTERS = 255
+_MAX_REVIEW_ID_CHARACTERS = 100
 _RFC3339 = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?"
     r"(?:[Zz]|[+-][0-9]{2}:[0-9]{2})"
@@ -76,6 +92,7 @@ _CONFIGURATION_KEYS = frozenset(
     {
         "workstream_forge_facts_version",
         "forge",
+        "forge_origin",
         "repository",
         "base_branch",
         "allow_unbound_required_checks",
@@ -88,12 +105,13 @@ _FACTS_KEYS = frozenset(
     {
         "schema_version",
         "forge",
+        "forge_origin",
         "repository",
         "change_number",
         "change_url",
         "state",
         "merged",
-        "merge_commit_sha",
+        "landed_commit_sha",
         "base_ref",
         "head_sha",
         "author",
@@ -106,7 +124,9 @@ _FACTS_KEYS = frozenset(
     }
 )
 _ACTOR_KEYS = frozenset({"login", "id", "kind"})
-_REVIEW_KEYS = frozenset({"id", "reviewer", "state", "commit_id", "submitted_at"})
+_REVIEW_KEYS = frozenset(
+    {"id", "reviewer", "reviewer_write_access", "state", "commit_id", "submitted_at"}
+)
 _CHANGED_FILE_KEYS = frozenset({"path", "previous_path", "status"})
 _CHECK_KEYS = frozenset({"name", "conclusion", "required_producer", "judged", "run_url"})
 _JUDGED_KEYS = frozenset({"producer", "sha"})
@@ -166,6 +186,27 @@ def _strings(value: object) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) and item for item in value)
 
 
+def _forge_origin(value: object) -> bool:
+    """Return whether a value is an https web origin: scheme, host and optional port."""
+    return isinstance(value, str) and _FORGE_ORIGIN.fullmatch(value) is not None
+
+
+def _repository(value: object) -> bool:
+    """Return whether a value is a forge-neutral repository path.
+
+    At least two ``/``-joined segments of ``[A-Za-z0-9._-]``, none ``.`` or
+    ``..``, at most 255 characters. GitLab subgroups are allowed; a provider
+    enforces its own stricter grammar.
+    """
+    if not isinstance(value, str) or len(value) > _MAX_REPOSITORY_CHARACTERS:
+        return False
+    segments = value.split("/")
+    return len(segments) >= 2 and all(
+        _REPOSITORY_SEGMENT.fullmatch(segment) is not None and segment not in (".", "..")
+        for segment in segments
+    )
+
+
 def forge_configuration(configuration: object) -> dict | None:
     """Return the normalized configuration, or None when it is absent or invalid.
 
@@ -175,6 +216,7 @@ def forge_configuration(configuration: object) -> dict | None:
     if not isinstance(configuration, dict):
         return None
     forge = configuration.get("forge")
+    forge_origin = configuration.get("forge_origin")
     repository = configuration.get("repository")
     base_branch = configuration.get("base_branch")
     allow_unbound = configuration.get("allow_unbound_required_checks", False)
@@ -187,9 +229,9 @@ def forge_configuration(configuration: object) -> dict | None:
         not set(configuration) <= _CONFIGURATION_KEYS
         or configuration.get("workstream_forge_facts_version") != FORGE_FACTS_VERSION
         or forge not in SUPPORTED_FORGES
-        or not isinstance(repository, str)
+        or not _forge_origin(forge_origin)
+        or not _repository(repository)
         or not isinstance(base_branch, str)
-        or not repository
         or not base_branch
         or not isinstance(allow_unbound, bool)
         or not _strings(protected)
@@ -200,6 +242,7 @@ def forge_configuration(configuration: object) -> dict | None:
         return None
     return {
         "forge": forge,
+        "forge_origin": forge_origin,
         "repository": repository,
         "base_branch": base_branch,
         "allow_unbound": allow_unbound,
@@ -246,8 +289,14 @@ def _actor(value: object) -> bool:
 def _review(value: object) -> bool:
     return (
         _record(value, _REVIEW_KEYS)
-        and type(value["id"]) is int
+        # Review ids are opaque: compared for equality only, never ordered.
+        and isinstance(value["id"], str)
+        and 1 <= len(value["id"]) <= _MAX_REVIEW_ID_CHARACTERS
         and (value["reviewer"] is None or _actor(value["reviewer"]))
+        and (
+            value["reviewer_write_access"] is None
+            or isinstance(value["reviewer_write_access"], bool)
+        )
         and value["state"] in _REVIEW_STATES
         and (value["commit_id"] is None or _sha(value["commit_id"]))
         and (value["submitted_at"] is None or _datetime(value["submitted_at"]))
@@ -296,18 +345,21 @@ def valid_facts(facts: object) -> bool:
     if not _record(facts, _FACTS_KEYS) or facts["schema_version"] != FORGE_FACTS_SCHEMA:
         return False
     merged = facts["merged"]
-    merge_commit_sha = facts["merge_commit_sha"]
+    landed_commit_sha = facts["landed_commit_sha"]
     files = facts["changed_files"]
     checks = facts["required_checks"]
     responses = facts["responses"]
     return (
         isinstance(facts["forge"], str)
-        and isinstance(facts["repository"], str)
+        and _forge_origin(facts["forge_origin"])
+        and _repository(facts["repository"])
         and _positive_int(facts["change_number"])
         and isinstance(facts["change_url"], str)
         and facts["state"] in ("open", "closed")
         and isinstance(merged, bool)
-        and (_sha(merge_commit_sha) if merged else merge_commit_sha is None)
+        # merged <=> a landed commit is reported; merged => closed.
+        and (_sha(landed_commit_sha) if merged else landed_commit_sha is None)
+        and (not merged or facts["state"] == "closed")
         and isinstance(facts["base_ref"], str)
         and _sha(facts["head_sha"])
         and _actor(facts["author"])
@@ -375,19 +427,19 @@ def protected_changes(files: list[dict], patterns: tuple[str, ...]) -> list[str]
 def qualifying_approvals(facts: dict) -> list[str]:
     """Return logins whose latest decisive review approves the head commit.
 
-    Each reviewer's latest ``approved``, ``changes_requested`` or ``dismissed``
-    review (by review id) decides; other states do not. The approval must name
-    the head SHA and come from a ``user`` account that is not the change author.
-    A review the forge cannot bind to a commit (``commit_id`` null) never approves.
+    Reviews are listed oldest first. Each reviewer's last ``approved``,
+    ``changes_requested`` or ``dismissed`` review by list position decides;
+    other states do not, and review ids are never ordered. The approval must
+    name the head SHA and come from a ``user`` account that is not the change
+    author and that the forge proves has write access. A review the forge cannot
+    bind to a commit (``commit_id`` null) or whose reviewer's write access it
+    cannot prove (``reviewer_write_access`` null) never approves.
     """
     author = facts["author"]
     latest: dict[int, dict] = {}
     for review in facts["reviews"]:
         reviewer = review["reviewer"]
-        if reviewer is None or review["state"] not in _DECISIVE_STATES:
-            continue
-        current = latest.get(reviewer["id"])
-        if current is None or review["id"] > current["id"]:
+        if reviewer is not None and review["state"] in _DECISIVE_STATES:
             latest[reviewer["id"]] = review
     logins = []
     for review in latest.values():
@@ -396,6 +448,7 @@ def qualifying_approvals(facts: dict) -> list[str]:
             review["state"] == "approved"
             and review["commit_id"] == facts["head_sha"]
             and reviewer["kind"] == "user"
+            and review["reviewer_write_access"] is True
             and reviewer["id"] != author["id"]
             and reviewer["login"].casefold() != author["login"].casefold()
         ):
@@ -494,7 +547,7 @@ def _integrity_findings(facts: dict, settings: dict) -> list[dict[str, object]]:
             _finding(
                 "forge.independent_approval_missing",
                 f"The head commit needs {settings['required_approvals']} approval(s) from "
-                "user accounts other than the author; "
+                "reviewers with write access who are neither the author nor a bot; "
                 f"the forge shows {len(approvals)}.",
             )
         )
@@ -523,8 +576,8 @@ def compare_forge_facts(
             _finding(
                 "forge.configuration",
                 "The checker configuration must set workstream_forge_facts_version to "
-                f"{FORGE_FACTS_VERSION!r} and name a supported forge, the repository and "
-                "base_branch, with only supported integrity options.",
+                f"{FORGE_FACTS_VERSION!r} and name a supported forge, its forge_origin, "
+                "the repository and base_branch, with only supported integrity options.",
             )
         ]
     facts = input_value.get(FORGE_FACTS_INPUT_KEY) if isinstance(input_value, dict) else None
@@ -532,7 +585,9 @@ def compare_forge_facts(
         return [
             _finding(
                 "forge.facts_missing",
-                "Forge facts are required for this check but were not provided.",
+                f"proof.json pr_url must name a change in {_display(settings['repository'])} "
+                f"on {_display(settings['forge_origin'])}; WorkStream could not read facts "
+                "for this proof.",
             )
         ]
     if not valid_facts(facts):
@@ -544,13 +599,16 @@ def compare_forge_facts(
     repository = facts["repository"]
     if (
         facts["forge"] != settings["forge"]
+        or facts["forge_origin"] != settings["forge_origin"]
         or repository.casefold() != settings["repository"].casefold()
     ):
         findings.append(
             _finding(
                 "forge.repository",
-                f"The change belongs to {_display(facts['forge'])}:{_display(repository)}, "
-                f"not {settings['forge']}:{_display(settings['repository'])}.",
+                f"The change belongs to {_display(repository)} on "
+                f"{_display(facts['forge'])} {_display(facts['forge_origin'])}, not "
+                f"{_display(settings['repository'])} on {settings['forge']} "
+                f"{_display(settings['forge_origin'])}.",
             )
         )
     if facts["base_ref"] != settings["base_branch"]:
@@ -567,11 +625,12 @@ def compare_forge_facts(
             _finding("forge.merged", "The forge reports that the change is not merged.")
         )
     commit_sha = proof.get("commit_sha")
-    if not isinstance(commit_sha, str) or facts["merge_commit_sha"] != commit_sha.lower():
+    if not isinstance(commit_sha, str) or facts["landed_commit_sha"] != commit_sha.lower():
         findings.append(
             _finding(
-                "forge.merge_commit_sha",
-                "commit_sha does not equal the change's merge commit on the forge.",
+                "forge.landed_commit_sha",
+                "commit_sha does not equal the commit the change landed as on the base "
+                "branch, as the forge reports it.",
             )
         )
     for check in facts["required_checks"]:
