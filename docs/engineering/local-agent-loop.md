@@ -339,7 +339,7 @@ may earn points but may not be paid in money until an independent reviewer
 confirms it. The verdict does not change.
 
 **Where the facts come from.** For a POST binding that selects forge facts,
-WorkStream's evaluation worker reads the claimed `pr_url` from `proof.json`,
+WorkStream's POST evaluation reads the claimed `pr_url` from `proof.json`,
 and, when it names a change in the configured repository on the configured
 `forge_origin`, reads that change's facts from the forge before running the
 checker (initiative chunk 04). GitHub is read as the read-only GitHub App
