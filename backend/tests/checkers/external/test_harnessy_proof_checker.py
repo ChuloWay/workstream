@@ -311,6 +311,7 @@ def test_missing_facts_never_pass(input_value: object) -> None:
         {"required_checks": [_check(judged=[{"producer": PRODUCER}])]},
         {"required_checks": [_check(sha=HEAD.upper())]},
         {"required_checks": [_check(run_url=345)]},
+        {"required_checks": [_check(judged=[])]},
         {"fetched_at": ...},
         {"fetched_at": "2026-10-24 12:00"},
         {"fetched_at": "2026-13-40T12:00:00Z"},

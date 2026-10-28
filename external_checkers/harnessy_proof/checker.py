@@ -277,6 +277,8 @@ def _required_check(value: object) -> bool:
             for judged in value["judged"]
         )
         and (value["run_url"] is None or isinstance(value["run_url"], str))
+        # A success must rest on at least one judged result; none is malformed.
+        and (value["conclusion"] != "success" or len(value["judged"]) > 0)
     )
 
 
