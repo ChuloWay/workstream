@@ -8,7 +8,7 @@ platform manifest, pulls that digest so the daemon records it, and writes:
 - ``checker-service.json``: the Rust checker-service configuration;
 - ``registry-post.json``: the ``ExternalCheckerRegistrySpec`` body for
   ``POST /api/v1/operations/external-checker-registry``. The checker is
-  post-submission only: it needs GitHub facts, which PRE never has.
+  post-submission only: it needs forge facts, which PRE never has.
 
 It uses only the Python standard library and the Docker CLI.
 """
@@ -54,14 +54,17 @@ def _hash(value: object) -> str:
     return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-# One fail-closed mode: the repository and base branch are required. Integrity
-# options are optional and default to the safe values.
+# One fail-closed mode: the forge facts version, forge, repository and base
+# branch are required. Integrity options are optional and default to the safe
+# values. GitHub is the only supported forge today.
 CONFIGURATION_SCHEMA: dict[str, object] = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["github_repository", "base_branch"],
+    "required": ["workstream_forge_facts_version", "forge", "repository", "base_branch"],
     "properties": {
-        "github_repository": {
+        "workstream_forge_facts_version": {"const": "v1"},
+        "forge": {"enum": ["github"]},
+        "repository": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$",
         },
@@ -80,15 +83,15 @@ CONFIGURATION_SCHEMA: dict[str, object] = {
         },
     },
 }
-# WorkStream adds GitHub facts to the normalized POST input. A missing facts
-# object reaches the checker, which reports github.facts_missing.
+# WorkStream adds forge facts to the normalized POST input. A missing facts
+# object reaches the checker, which reports forge.facts_missing.
 INPUT_SCHEMA: dict[str, object] = {
     "type": "object",
     "properties": {
-        "github_facts": {
+        "forge_facts": {
             "type": "object",
             "required": ["schema_version"],
-            "properties": {"schema_version": {"const": "workstream.github_facts.v1"}},
+            "properties": {"schema_version": {"const": "workstream.forge_change_facts.v1"}},
         }
     },
 }
@@ -219,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     # The registry holds one immutable entry per phase, capability and version,
     # so a rebuilt image (new digest) needs a new version. v2 compares the
-    # proof with GitHub facts and is post-submission only.
+    # proof with forge facts and is post-submission only.
     parser.add_argument("--capability-version", default="v2")
     args = parser.parse_args(argv)
     image = publish(args.registry, args.repository)

@@ -197,7 +197,7 @@ docker compose exec -T backend python scripts/provision_local_service_actors.py 
 
 Registration needs a current system `operator` grant. The body is an
 `ExternalCheckerRegistrySpec` for the post-submission phase with the exact
-platform-manifest digest. The checker needs GitHub facts, which pre-submission
+platform-manifest digest. The checker needs forge facts, which pre-submission
 checking never has, so it is not registered for PRE. Keep the key with its file;
 replaying the same key and body returns the same immutable entry:
 
@@ -219,86 +219,102 @@ run the checker for any project.
 `external_checkers/harnessy_proof/checker.py` (capability version `v2`,
 [WS-GHPROOF-001](../../.commitrail/initiatives/WS-GHPROOF-001/OVERVIEW.md)) is a
 post-submission checker with one mode, and it fails closed. It reads
-`proof.json` at the root of the submitted ZIP, compares it with GitHub facts
-that WorkStream read with its read-only GitHub App, and returns
-`external_checker_result.v1`. The checker has no network access and no
-credential. Every failed rule is one `error` finding on `proof.json`, and the
-verdict is `failed` exactly when an error finding exists. A proof never passes
-on its own claims.
+`proof.json` at the root of the submitted ZIP, compares it with forge facts
+(GitHub today) that WorkStream read from the git host, and returns
+`external_checker_result.v1`. A "forge" is the git host and a "change" is its
+pull or merge request. The checker has no network access and no credential.
+Every failed rule is one `error` finding on `proof.json`, and the verdict is
+`failed` exactly when an error finding exists. A proof never passes on its own
+claims.
 
-The POST binding configuration must name the repository and base branch, and
-may set integrity options whose defaults are the safe ones:
+The POST binding configuration must select the forge facts version and name the
+forge, repository and base branch. It may set integrity options whose defaults
+are the safe ones:
 
 ```json
-{"github_repository": "Flow-Research/harnessy-v2", "base_branch": "main"}
+{"workstream_forge_facts_version": "v1", "forge": "github",
+ "repository": "Flow-Research/harnessy-v2", "base_branch": "main"}
 ```
+
+`forge` accepts only `github` today, and `repository` is a GitHub
+`owner/name`.
 
 | Option | Default | Effect |
 |---|---|---|
-| `allow_unbound_required_checks` | `false` | When false, a required check that accepts any source is an error |
+| `allow_unbound_required_checks` | `false` | When false, a required check that accepts any producer is an error |
 | `protected_paths` | `[]` | Globs added to `.github/**`, `**/CODEOWNERS`, `.gitlab-ci.yml`, `.circleci/**` |
 | `required_independent_approvals` | `1` | Independent approvals needed on the head commit (1 to 10) |
 | `operator_logins` | `[]` | Logins whose approval alone adds the `harnessy.operator_approved` warning |
 
-WorkStream places the facts in the request `input` under `github_facts`, so the
-request digest binds them. The facts are bound to one pull-request state
-(`head_sha`, `merge_commit_sha`):
+WorkStream places the facts in the request `input` under `forge_facts`, so the
+request digest binds them. Each forge provider maps its host into the same
+`workstream.forge_change_facts.v1` facts; anything a provider cannot prove is
+null or absent, and the checker then fails closed. The facts are bound to one
+change state (`head_sha`, `merge_commit_sha`). A commit id is 40 (SHA-1) or 64
+(SHA-256) lowercase hexadecimal characters:
 
 ```json
 {
-  "github_facts": {
-    "schema_version": "workstream.github_facts.v1",
+  "forge_facts": {
+    "schema_version": "workstream.forge_change_facts.v1",
+    "forge": "github",
     "repository": "Flow-Research/harnessy-v2",
-    "pull_request_number": 12,
-    "html_url": "https://github.com/Flow-Research/harnessy-v2/pull/12",
+    "change_number": 12,
+    "change_url": "https://github.com/Flow-Research/harnessy-v2/pull/12",
     "state": "closed",
     "merged": true,
-    "merge_commit_sha": "<40 lowercase hex, or null unless merged>",
+    "merge_commit_sha": "<commit id; null unless merged>",
     "base_ref": "main",
-    "head_sha": "<40 lowercase hex>",
-    "author": {"login": "agent-bot", "id": 501, "type": "Bot"},
-    "reviews": [{"id": 61, "reviewer": {"login": "reviewer", "id": 7, "type": "User"},
-                 "state": "APPROVED", "commit_id": "<head sha>", "submitted_at": "..."}],
+    "head_sha": "<commit id>",
+    "author": {"login": "agent-bot", "id": 501, "kind": "bot"},
+    "reviews": [{"id": 61, "reviewer": {"login": "reviewer", "id": 7, "kind": "user"},
+                 "state": "approved", "commit_id": "<head sha, or null>",
+                 "submitted_at": "2026-10-24T11:00:00Z"}],
     "changed_files_count": 1,
-    "changed_files": [{"filename": "src/app.py", "previous_filename": null, "status": "modified"}],
-    "required_checks": [{"name": "backend", "app_id": 15368, "app_bound": true,
-                         "conclusion": "success", "check_run_app_id": 15368,
-                         "check_run_head_sha": "<head sha>",
-                         "check_run_html_url": "...", "check_run_details_url": "...",
-                         "workflow_run_id": 345, "commit_status_judged": false,
-                         "commit_status_sha": null}],
+    "changed_files": [{"path": "src/app.py", "previous_path": null, "status": "modified"}],
+    "required_checks": [{"name": "backend", "conclusion": "success",
+                         "required_producer": "github_app:15368",
+                         "judged": [{"producer": "github_app:15368", "sha": "<head sha>"}],
+                         "run_url": "https://github.com/Flow-Research/harnessy-v2/actions/runs/345"}],
     "fetched_at": "2026-10-24T12:00:00Z",
     "responses": [{"request": "pull_request", "sha256": "sha256:<64 hex>"}]
   }
 }
 ```
 
+Every object has exactly these keys. An actor `kind` is `user`, `bot` or
+`other`. A review `state` is `approved`, `changes_requested`, `dismissed`,
+`commented`, `pending` or `other`. `judged` lists every result the provider
+judged for the check; its `producer` is null when the forge gives no producer
+identity, such as a GitHub commit status.
+
 Rules on the claims themselves (`harnessy.proof.*`): `schema` equals
-`harnessy.work.proof.v1`; `commit_sha` is 40 hexadecimal characters;
+`harnessy.work.proof.v1`; `commit_sha` is 40 or 64 hexadecimal characters;
 `ci_conclusion` equals `success`; `merged` is the JSON value `true`. Rules
-against the facts (`harnessy.proof.github.*`):
+against the facts (`harnessy.proof.forge.*`):
 
 | Code | Fails when |
 |---|---|
-| `configuration` | the configuration is missing, lacks either required key, or has an invalid option |
+| `configuration` | the configuration is missing, lacks a required key, names an unsupported facts version or forge, or has an invalid option |
 | `facts_missing` | the input has no facts |
-| `facts_invalid` | the facts do not have the exact `workstream.github_facts.v1` shape |
-| `facts_binding` | a required-check entry names a commit other than `head_sha` |
-| `repository` | the facts' repository is not `github_repository` (case-insensitive) |
-| `base_branch` | the pull request's base branch is not `base_branch` |
-| `pr_url` | `pr_url` is not exactly `https://github.com/{repository}/pull/{number}` built from the facts, or GitHub's `html_url` differs from it |
-| `ci_run` | `ci_run_url` is not exactly `https://github.com/{repository}/actions/runs/{id}` for the workflow run of a judged required check |
-| `merged` | GitHub reports the pull request as not merged |
+| `facts_invalid` | the facts do not have the exact `workstream.forge_change_facts.v1` shape |
+| `facts_binding` | a judged result names a commit other than `head_sha` |
+| `repository` | the facts' forge is not `forge`, or their repository is not `repository` (case-insensitive) |
+| `base_branch` | the change's base branch is not `base_branch` |
+| `change_url` | `pr_url` is not exactly the facts' `change_url` |
+| `ci_run` | `ci_run_url` is not exactly the `run_url` of a required check |
+| `merged` | the forge reports the change as not merged |
 | `merge_commit_sha` | `commit_sha` is not the merge commit (case-insensitive) |
 | `required_check` | one finding per required check whose result is not `success` |
-| `unbound_required_check` | a required check accepts any source and `allow_unbound_required_checks` is false |
-| `protected_path_changed` | a changed file, or a rename's previous name, matches a protected glob; the work needs explicit human acceptance and cannot be auto-accepted |
-| `independent_approval_missing` | fewer than `required_independent_approvals` reviewers approve the head commit, counting each reviewer's latest approve, request-changes or dismissed review, and excluding the author and non-`User` accounts |
+| `unbound_required_check` | a required check has no `required_producer` and `allow_unbound_required_checks` is false |
+| `producer_mismatch` | a required check is bound to a producer and one of its judged results comes from another producer or from an unknown one |
+| `protected_path_changed` | a changed file, or a rename's previous path, matches a protected glob; the work needs explicit human acceptance and cannot be auto-accepted |
+| `independent_approval_missing` | fewer than `required_independent_approvals` reviewers approve the head commit, counting each reviewer's latest `approved`, `changes_requested` or `dismissed` review, and excluding the author and every account whose kind is not `user` |
 
-URL comparison is exact and case-sensitive against the repository name GitHub
-returns. A trailing slash, query, fragment, port, user information, percent
-encoding, backslash or non-ASCII character fails. The canonical CI run form is
-the workflow run URL without `/job/{id}`.
+The checker parses no URL and builds no forge URL. URL comparison is exact and
+case-sensitive against the URLs the facts report, so a trailing slash, query,
+fragment, port, user information, percent encoding, backslash, different case or
+non-ASCII character fails. A review whose `commit_id` is null never approves.
 
 When every qualifying approval comes from `operator_logins`, the checker adds a
 non-blocking `warning` finding with code `harnessy.operator_approved`: the work
