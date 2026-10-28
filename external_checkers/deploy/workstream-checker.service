@@ -7,13 +7,13 @@ StartLimitBurst=5
 [Service]
 Type=simple
 # Use the same Unix identity as the ART scratch/grant issuer.
-User=workstream
-Group=workstream
+User=10001
+Group=10001
 SupplementaryGroups=kvm
 StateDirectory=workstream-checker
 StateDirectoryMode=0700
 UMask=0077
-ExecStart=/opt/workstream/bin/workstream-checker-service /var/lib/workstream-checker/service.json
+ExecStart=/opt/workstream/bin/workstream-checker-service /etc/workstream/checker-service.json
 Delegate=cpu memory pids
 DelegateSubgroup=controller
 MemoryMax=4G

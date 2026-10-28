@@ -30,6 +30,7 @@ SPEC = importlib.util.spec_from_file_location(
 )
 assert SPEC is not None and SPEC.loader is not None
 preflight = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = preflight
 SPEC.loader.exec_module(preflight)
 
 COMPOSE_SPEC = importlib.util.spec_from_file_location(
@@ -125,7 +126,8 @@ class HostedReleaseConfigTests(unittest.TestCase):
 
     def test_valid_configuration_and_rendered_topology(self) -> None:
         self.assertEqual(
-            str(preflight.SOCKET_ROOT), "/var/lib/workstream/checker-runtime"
+            str(preflight.deployment_paths(self.environment).socket_root),
+            "/var/lib/workstream/checker-runtime",
         )
         preflight.validate_environment(self.environment)
         preflight.validate_checker_config(self.checker, self.environment)
@@ -139,7 +141,6 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 "beat",
                 "model-proxy",
                 "guide-document-parser",
-                "checker-service",
                 *preflight.PROOF_SERVICES,
             },
         )
@@ -154,7 +155,6 @@ class HostedReleaseConfigTests(unittest.TestCase):
             "beat",
             "model-proxy",
             "guide-document-parser",
-            "checker-service",
         ):
             service = services[name]
             self.assertEqual(service["pull_policy"], "always")
@@ -204,7 +204,6 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 "worker",
                 "beat",
                 "model-proxy",
-                "checker-service",
             )
         }
         self.assertIn("/api/v1/health", health_commands["api"])
@@ -214,7 +213,9 @@ class HostedReleaseConfigTests(unittest.TestCase):
             "/var/lib/workstream/model-runtime/model.sock",
             health_commands["model-proxy"],
         )
-        self.assertIn(".Runtimes.runsc", health_commands["checker-service"])
+        self.assertNotIn("checker-service", services)
+        for service in services.values():
+            self.assertNotIn("/var/run/docker.sock", preflight._service_mounts(service))
         self.assertEqual(services["api"]["stop_grace_period"], "30s")
         self.assertIn(services["worker"]["stop_grace_period"], {"7320s", "2h2m0s"})
         self.assertIn(services["model-proxy"]["stop_grace_period"], {"7320s", "2h2m0s"})
@@ -222,10 +223,12 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertEqual(services["guide-document-parser"]["stop_grace_period"], "30s")
         self.assertEqual(services["api"]["ports"][0]["host_ip"], "127.0.0.1")
         expected_secrets = {
-            target[0] for target in preflight.SECRET_FILE_TARGETS.values()
+            preflight.SECRET_FILE_TARGETS[key][0]
+            for key in preflight._secret_file_keys(self.environment)
         }
         self.assertEqual(set(rendered["secrets"]), expected_secrets)
-        for key, (secret_name, _target) in preflight.SECRET_FILE_TARGETS.items():
+        for key in preflight._secret_file_keys(self.environment):
+            secret_name, _target = preflight.SECRET_FILE_TARGETS[key]
             self.assertEqual(
                 rendered["secrets"][secret_name]["file"],
                 self.environment[key],
@@ -254,7 +257,6 @@ class HostedReleaseConfigTests(unittest.TestCase):
                     )
                 else:
                     self.assertNotIn(key, services[name]["environment"])
-        self.assertNotIn("secrets", services["checker-service"])
         parser = services["guide-document-parser"]
         self.assertEqual(parser["image"], services["api"]["image"])
         self.assertEqual(parser["user"], "0:0")
@@ -267,7 +269,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
             {
                 "WORKSTREAM_RELEASE_ROLE": "parser",
                 "WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET": str(
-                    preflight.GUIDE_SOCKET_PATH
+                    preflight.deployment_paths(self.environment).guide_socket
                 ),
             },
         )
@@ -276,20 +278,23 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertEqual(parser["cpus"], 1)
         self.assertEqual(parser["pids_limit"], 64)
         self.assertFalse(
-            preflight._service_mounts(parser)[str(preflight.GUIDE_SOCKET_ROOT)].get(
-                "read_only", False
-            )
+            preflight._service_mounts(parser)[
+                str(preflight.deployment_paths(self.environment).guide_root)
+            ].get("read_only", False)
         )
         worker_mounts = preflight._service_mounts(services["worker"])
-        self.assertTrue(worker_mounts[str(preflight.GUIDE_SOCKET_ROOT)]["read_only"])
+        self.assertTrue(
+            worker_mounts[str(preflight.deployment_paths(self.environment).guide_root)][
+                "read_only"
+            ]
+        )
         for name in (
             "api",
             "beat",
-            "checker-service",
             *preflight.PROOF_SERVICES,
         ):
             self.assertNotIn(
-                str(preflight.GUIDE_SOCKET_ROOT),
+                str(preflight.deployment_paths(self.environment).guide_root),
                 preflight._service_mounts(services[name]),
             )
         for name in ("api", "worker", "model-proxy"):
@@ -303,7 +308,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
             )
         beat_mounts = preflight._service_mounts(services["beat"])
         self.assertEqual(beat_mounts, {})
-        model_socket_root = str(preflight.MODEL_SOCKET_ROOT)
+        model_socket_root = str(preflight.deployment_paths(self.environment).model_root)
         self.assertTrue(worker_mounts[model_socket_root]["read_only"])
         self.assertFalse(
             preflight._service_mounts(services["model-proxy"])[model_socket_root].get(
@@ -315,16 +320,22 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 model_socket_root,
                 preflight._service_mounts(services[name]),
             )
-        checker_mounts = preflight._service_mounts(services["checker-service"])
-        self.assertTrue(checker_mounts[model_socket_root]["read_only"])
-        relay_root = str(preflight.MODEL_RELAY_ROOT)
-        self.assertEqual(checker_mounts[relay_root]["source"], relay_root)
-        self.assertFalse(checker_mounts[relay_root].get("read_only", False))
-        for name in ("api", "worker", "beat", "model-proxy", *preflight.PROOF_SERVICES):
-            self.assertNotIn(relay_root, preflight._service_mounts(services[name]))
-        self.assertNotIn(
-            str(preflight.ROLES_ANYWHERE_CERTIFICATE_TARGET), checker_mounts
-        )
+        relay_root = str(preflight.deployment_paths(self.environment).model_relays)
+        for name, service in services.items():
+            self.assertNotIn(relay_root, preflight._service_mounts(service))
+        for role in ("api", "worker"):
+            self.assertEqual(
+                services[role]["environment"][
+                    "WORKSTREAM_ARTIFACT_INTAKE_SERVICE_SOCKET"
+                ],
+                str(preflight.deployment_paths(self.environment).socket),
+            )
+            self.assertEqual(
+                services[role]["environment"][
+                    "WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET"
+                ],
+                str(preflight.deployment_paths(self.environment).socket),
+            )
 
     def test_actual_render_rejects_beat_inheriting_api_volumes(self) -> None:
         compose_text = preflight.COMPOSE_PATH.read_text(encoding="utf-8").replace(
@@ -371,13 +382,13 @@ class HostedReleaseConfigTests(unittest.TestCase):
         cases = (
             (
                 "API readiness key",
-                "    depends_on:\n      checker-service:\n",
+                "    restart: on-failure:5\n    stop_grace_period: 30s\n    healthcheck:\n      test: [CMD, python, -c,",
                 "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_READINESS_PRIVATE_KEY_HOST_FILE",
                 "/run/unrelated/readiness-key.pem",
             ),
             (
                 "API negative key",
-                "    depends_on:\n      checker-service:\n",
+                "    restart: on-failure:5\n    stop_grace_period: 30s\n    healthcheck:\n      test: [CMD, python, -c,",
                 "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_NEGATIVE_PRIVATE_KEY_HOST_FILE",
                 "/run/unrelated/negative-key.pem",
             ),
@@ -413,34 +424,28 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 ):
                     preflight.validate_compose(rendered, self.environment)
 
-    def test_actual_render_rejects_checker_hardlink_identity_bind(self) -> None:
-        private_key_alias = self.root / "runtime-key-checker-alias.pem"
+    def test_actual_render_rejects_parser_hardlink_identity_bind(self) -> None:
+        private_key_alias = self.root / "runtime-key-parser-alias.pem"
         os.link(self.runtime_private_key, private_key_alias)
-        marker = (
-            "    healthcheck:\n"
-            '      test: [CMD-SHELL, "test -S /var/lib/workstream/checker-runtime/checker.sock'
-        )
+        marker = "    healthcheck:\n      test: [CMD, python, -m, app.adapters.guide_document_tools.service"
         extra_bind = (
             "      - type: bind\n"
             f"        source: {private_key_alias}\n"
-            "        target: /run/unrelated/key.pem\n"
-            "        read_only: true\n"
+            "        target: /run/unrelated/key.pem\n        read_only: true\n"
         )
         compose_text = preflight.COMPOSE_PATH.read_text(encoding="utf-8").replace(
-            marker,
-            extra_bind + marker,
-            1,
+            marker, extra_bind + marker, 1
         )
         rendered = self._render_modified_compose(compose_text)
-
-        checker_mounts = preflight._service_mounts(
-            rendered["services"]["checker-service"]
+        parser_mounts = preflight._service_mounts(
+            rendered["services"]["guide-document-parser"]
         )
         self.assertEqual(
-            checker_mounts["/run/unrelated/key.pem"]["source"],
-            str(private_key_alias),
+            parser_mounts["/run/unrelated/key.pem"]["source"], str(private_key_alias)
         )
-        with self.assertRaisesRegex(preflight.PreflightError, "checker-service bind"):
+        with self.assertRaisesRegex(
+            preflight.PreflightError, "guide-document-parser bind"
+        ):
             preflight.validate_compose(rendered, self.environment)
 
     def test_actual_render_rejects_secret_file_substitution(self) -> None:
@@ -529,13 +534,13 @@ class HostedReleaseConfigTests(unittest.TestCase):
             "deploy/hosted/compose.py", (ROOT / "deploy/hosted/README.md").read_text()
         )
 
-    def _compose_main(self, operation: str) -> tuple[int, str]:
+    def _compose_main(self, *arguments: str) -> tuple[int, str]:
         errors = io.StringIO()
         with (
             patch.object(
                 sys,
                 "argv",
-                ["compose.py", "--env-file", str(self.environment_path), operation],
+                ["compose.py", "--env-file", str(self.environment_path), *arguments],
             ),
             redirect_stderr(errors),
         ):
@@ -548,7 +553,8 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 sys, "argv", ["preflight.py", "--env-file", str(self.environment_path)]
             ),
             patch.object(preflight, "validate_private_host_inputs"),
-            patch.object(preflight, "validate_docker_runtime"),
+            patch.object(preflight, "validate_smol_runtime"),
+            patch.object(preflight, "validate_trusted_intake"),
             redirect_stdout(io.StringIO()),
         ):
             self.assertEqual(preflight.main(), 0)
@@ -559,7 +565,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 )
                 with (
                     patch.object(compose, "validate_private_host_inputs") as private,
-                    patch.object(compose, "validate_docker_runtime") as runtime,
+                    patch.object(compose, "validate_smol_runtime") as runtime,
                     patch.object(compose, "run_compose") as run,
                 ):
                     result, error = self._compose_main("up")
@@ -570,7 +576,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 run.assert_not_called()
 
     def test_launch_checks_host_and_runtime_before_starting(self) -> None:
-        for failure in (None, "private", "runtime"):
+        for failure in (None, "private", "runtime", "intake"):
             with self.subTest(failure=failure):
                 order = []
 
@@ -587,6 +593,12 @@ class HostedReleaseConfigTests(unittest.TestCase):
                     if failure == "runtime":
                         raise preflight.PreflightError("Docker runtime rejected")
 
+                def intake_check(values):
+                    self.assertEqual(values, self.environment)
+                    order.append("intake")
+                    if failure == "intake":
+                        raise preflight.PreflightError("trusted intake rejected")
+
                 def launch(path, values, arguments):
                     self.assertEqual(path, self.environment_path)
                     self.assertEqual(values, self.environment)
@@ -601,21 +613,28 @@ class HostedReleaseConfigTests(unittest.TestCase):
                         side_effect=private_check,
                     ),
                     patch.object(
-                        compose, "validate_docker_runtime", side_effect=runtime_check
+                        compose, "validate_smol_runtime", side_effect=runtime_check
+                    ),
+                    patch.object(
+                        compose, "validate_trusted_intake", side_effect=intake_check
                     ),
                     patch.object(compose, "run_compose", side_effect=launch) as run,
                 ):
                     result, error = self._compose_main("up")
                 if failure is None:
                     self.assertEqual((result, error), (0, ""))
-                    self.assertEqual(order, ["private", "runtime", "launch"])
+                    self.assertEqual(order, ["private", "runtime", "intake", "launch"])
                     run.assert_called_once()
                 else:
                     self.assertEqual(result, 1)
                     self.assertIn("rejected", error)
                     self.assertEqual(
                         order,
-                        ["private"] if failure == "private" else ["private", "runtime"],
+                        {
+                            "private": ["private"],
+                            "runtime": ["private", "runtime"],
+                            "intake": ["private", "runtime", "intake"],
+                        }[failure],
                     )
                     run.assert_not_called()
 
@@ -624,7 +643,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
         with (
             patch.object(compose, "load_checker_config") as load,
             patch.object(compose, "validate_private_host_inputs") as private,
-            patch.object(compose, "validate_docker_runtime") as runtime,
+            patch.object(compose, "validate_smol_runtime") as runtime,
             patch.object(compose, "run_shutdown", return_value=0) as shutdown,
         ):
             self.assertEqual(self._compose_main("stop"), (0, ""))
@@ -633,7 +652,9 @@ class HostedReleaseConfigTests(unittest.TestCase):
         runtime.assert_not_called()
         shutdown.assert_called_once_with(self.environment_path, self.environment)
 
-    def test_shutdown_stops_producers_then_worker_then_parser_and_checker(self) -> None:
+    def test_shutdown_drains_producers_worker_and_proxy_without_stopping_native_node(
+        self,
+    ) -> None:
         completed = subprocess.CompletedProcess([], 0)
         with patch.object(preflight.subprocess, "run", return_value=completed) as run:
             self.assertEqual(
@@ -647,8 +668,8 @@ class HostedReleaseConfigTests(unittest.TestCase):
             ["stop", "--timeout", "7320", "model-proxy"],
         )
         self.assertEqual(
-            commands[3][-3:],
-            ["stop", "guide-document-parser", "checker-service"],
+            commands[3][-2:],
+            ["stop", "guide-document-parser"],
         )
 
     def test_shutdown_failure_keeps_later_dependencies_running(self) -> None:
@@ -682,6 +703,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                     str(self.environment_path),
                     "stop",
                     "worker",
+                    "api",
                 ],
             ),
             patch.object(compose, "run_shutdown") as shutdown,
@@ -690,8 +712,123 @@ class HostedReleaseConfigTests(unittest.TestCase):
             self.assertEqual(compose.main(), 1)
         shutdown.assert_not_called()
         self.assertIn(
-            "fixed producer, worker, parser/checker sequence", errors.getvalue()
+            "fixed shutdown sequence or exactly one worker", errors.getvalue()
         )
+
+    def test_exact_worker_stop_preserves_dependencies_and_start_rechecks_native(self):
+        self.checker_path.write_text("invalid json", encoding="utf-8")
+        with (
+            patch.object(compose, "load_checker_config") as load,
+            patch.object(compose, "run_compose", return_value=0) as run,
+        ):
+            self.assertEqual(self._compose_main("stop", "worker"), (0, ""))
+        load.assert_not_called()
+        run.assert_called_once_with(
+            self.environment_path, self.environment, ["stop", "worker"]
+        )
+        self.checker_path.write_text(json.dumps(self.checker), encoding="utf-8")
+        for failure in (None, "private", "native", "intake"):
+            with (
+                self.subTest(failure=failure),
+                patch.object(
+                    compose,
+                    "validate_private_host_inputs",
+                    side_effect=preflight.PreflightError("private")
+                    if failure == "private"
+                    else None,
+                ) as private,
+                patch.object(
+                    compose,
+                    "validate_smol_runtime",
+                    side_effect=preflight.PreflightError("native")
+                    if failure == "native"
+                    else None,
+                ) as native,
+                patch.object(
+                    compose,
+                    "validate_trusted_intake",
+                    side_effect=preflight.PreflightError("intake")
+                    if failure == "intake"
+                    else None,
+                ) as intake,
+                patch.object(compose, "run_compose", return_value=0) as run,
+            ):
+                result, _ = self._compose_main("start", "worker")
+                self.assertEqual(result, 0 if failure is None else 1)
+                if failure is None:
+                    private.assert_called_once_with(self.environment)
+                    native.assert_called_once_with(self.checker, self.environment)
+                    intake.assert_called_once_with(self.environment)
+                    run.assert_called_once_with(
+                        self.environment_path, self.environment, ["start", "worker"]
+                    )
+                else:
+                    run.assert_not_called()
+
+    def test_worker_operations_have_fixed_grace_readiness_and_management_bounds(self):
+        cases = (
+            (["stop", "worker"], ["stop", "--timeout", "7320", "worker"], 7380),
+            (
+                ["start", "worker"],
+                [
+                    "up",
+                    "--detach",
+                    "--no-deps",
+                    "--wait",
+                    "--wait-timeout",
+                    "60",
+                    "worker",
+                ],
+                120,
+            ),
+        )
+        for arguments, expected, timeout in cases:
+            with (
+                self.subTest(arguments=arguments),
+                patch.object(
+                    preflight.subprocess,
+                    "run",
+                    return_value=subprocess.CompletedProcess([], 0),
+                ) as run,
+            ):
+                self.assertEqual(
+                    preflight.run_compose(
+                        self.environment_path, self.environment, arguments
+                    ),
+                    0,
+                )
+                self.assertEqual(run.call_args.args[0][-len(expected) :], expected)
+                self.assertEqual(run.call_args.kwargs["timeout"], timeout)
+                self.assertEqual(
+                    run.call_args.kwargs["env"]["DOCKER_HOST"],
+                    "unix:///var/run/docker.sock",
+                )
+            with patch.object(
+                preflight.subprocess,
+                "run",
+                side_effect=subprocess.TimeoutExpired("docker", timeout),
+            ):
+                with self.assertRaisesRegex(
+                    preflight.PreflightError, "management deadline"
+                ):
+                    preflight.run_compose(
+                        self.environment_path, self.environment, arguments
+                    )
+        for arguments in (
+            ["start", "api"],
+            ["restart", "worker"],
+            ["stop", "--timeout", "0", "worker"],
+            ["start", "worker", "api"],
+        ):
+            with (
+                self.subTest(arguments=arguments),
+                patch.object(preflight.subprocess, "run") as run,
+            ):
+                with self.assertRaises(preflight.PreflightError):
+                    preflight.run_compose(
+                        self.environment_path, self.environment, arguments
+                    )
+                run.assert_not_called()
 
     def test_proof_wrapper_runs_only_the_fixed_identity_sequence(self) -> None:
         nonce = "0199f68b-5dc2-7000-8000-000000000001"
@@ -709,11 +846,15 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 ],
             ),
             patch.object(compose, "load_checker_config", return_value=self.checker),
-            patch.object(compose, "validate_private_host_inputs"),
-            patch.object(compose, "validate_docker_runtime"),
+            patch.object(compose, "validate_private_host_inputs") as private,
+            patch.object(compose, "validate_smol_runtime") as native,
+            patch.object(compose, "validate_trusted_intake") as intake,
             patch.object(compose, "run_proof_group", return_value=0) as proof_group,
         ):
             self.assertEqual(compose.main(), 0)
+        private.assert_called_once_with(self.environment, require_node=False)
+        native.assert_not_called()
+        intake.assert_not_called()
         self.assertEqual(str(proof_group.call_args.args[2]), nonce)
         for invalid in (["proof"], ["proof", "--group-nonce", "not-a-uuid"]):
             with (
@@ -858,6 +999,64 @@ class HostedReleaseConfigTests(unittest.TestCase):
         )
         self.assertEqual(calls[1], ["docker", "rm", "--force", name])
         self.assertFalse(any("aws-proof-coordinate" in command for command in calls))
+
+    def test_artifact_preparation_deadline_is_required_bounded_and_shared(self):
+        key = "WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS"
+        for deadline in ("360", "3400"):
+            values = self.environment | {key: deadline}
+            with self.subTest(deadline=deadline):
+                preflight.validate_environment(values)
+                rendered = preflight.render_compose(self.environment_path, values)
+                preflight.validate_compose(rendered, values)
+                for role in (
+                    *preflight.ROLE_SECRET_FILE_KEYS,
+                    *preflight.PROOF_SERVICES,
+                ):
+                    self.assertEqual(
+                        rendered["services"][role]["environment"][key], deadline
+                    )
+                for mutation in ("missing", "different"):
+                    changed = copy.deepcopy(rendered)
+                    if mutation == "missing":
+                        del changed["services"]["worker"]["environment"][key]
+                    else:
+                        changed["services"]["worker"]["environment"][key] = "600"
+                    with (
+                        self.subTest(mutation=mutation),
+                        self.assertRaises(preflight.PreflightError),
+                    ):
+                        preflight.validate_compose(changed, values)
+                changed = copy.deepcopy(rendered)
+                del changed["services"]["aws-proof-runtime"]["environment"][key]
+                with self.assertRaisesRegex(
+                    preflight.PreflightError, "preparation deadline"
+                ):
+                    preflight.validate_compose(changed, values)
+                changed = copy.deepcopy(rendered)
+                for role in preflight.ROLE_SECRET_FILE_KEYS:
+                    changed["services"][role]["environment"][key] = "600"
+                with self.assertRaisesRegex(preflight.PreflightError, key):
+                    preflight.validate_compose(changed, values)
+        for deadline in (
+            "",
+            "NaN",
+            "Infinity",
+            "-Infinity",
+            "300",
+            "3600",
+            "0",
+            "-1",
+            "true",
+        ):
+            with (
+                self.subTest(deadline=deadline),
+                self.assertRaises(preflight.PreflightError),
+            ):
+                preflight.validate_environment(self.environment | {key: deadline})
+        missing = dict(self.environment)
+        del missing[key]
+        with self.assertRaises(preflight.PreflightError):
+            preflight.validate_environment(missing)
 
     def test_environment_rejects_mutable_or_development_settings(self) -> None:
         cases = {
@@ -1042,6 +1241,11 @@ class HostedReleaseConfigTests(unittest.TestCase):
             ),
         }.items():
             manager_text = manager_text.replace(old, new)
+        manager_text = manager_text.replace(
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE=\n",
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE="
+            "/etc/workstream/secrets/model_proxy_openai_api_key\n",
+        )
         manager_path = self.root / "manager-with-post-proxy.env"
         manager_path.write_text(manager_text, encoding="utf-8")
         manager = preflight.parse_environment(manager_path)
@@ -1063,7 +1267,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
         for key in preflight.MODEL_PROXY_SECRET_FILE_KEYS:
             self.assertNotIn(key, worker_environment)
 
-    def test_openrouter_setup_keeps_independent_openai_post_credential(self) -> None:
+    def test_openrouter_only_render_omits_openai_credential(self) -> None:
         self.assertEqual(
             self.environment["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"], "openrouter"
         )
@@ -1077,13 +1281,67 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 for item in proxy["secrets"]
                 if item["source"] != "database_url"
             },
-            {
-                "model_proxy_openai_api_key",
-                "model_proxy_openrouter_api_key",
-            },
+            {"model_proxy_openrouter_api_key"},
+        )
+        self.assertNotIn(
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE", proxy["environment"]
         )
         for key in preflight.MODEL_PROXY_SECRET_FILE_KEYS:
             self.assertNotIn(key, rendered["services"]["worker"]["environment"])
+
+    def test_openai_only_render_omits_openrouter_credential(self) -> None:
+        environment_text = self.environment_path.read_text(encoding="utf-8")
+        environment_text = environment_text.replace(
+            "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER=openrouter",
+            "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER=openai",
+        ).replace(
+            "WORKSTREAM_PROJECT_AGENT_MODEL_API=chat_completions",
+            "WORKSTREAM_PROJECT_AGENT_MODEL_API=responses",
+        )
+        environment_text = environment_text.replace(
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE=\n",
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE="
+            "/etc/workstream/secrets/model_proxy_openai_api_key\n",
+        ).replace(
+            "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE="
+            "/etc/workstream/secrets/model_proxy_openrouter_api_key",
+            "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE=",
+        )
+        environment_path = self.root / "openai-only.env"
+        environment_path.write_text(environment_text, encoding="utf-8")
+        environment = preflight.parse_environment(environment_path)
+
+        preflight.validate_environment(environment)
+        rendered = preflight.render_compose(environment_path, environment)
+        preflight.validate_compose(rendered, environment)
+
+        proxy = rendered["services"]["model-proxy"]
+        self.assertEqual(
+            {
+                item["source"]
+                for item in proxy["secrets"]
+                if item["source"] != "database_url"
+            },
+            {"model_proxy_openai_api_key"},
+        )
+        self.assertNotIn(
+            "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE", proxy["environment"]
+        )
+
+    def test_enabled_setup_rejects_missing_selected_provider_credential(self) -> None:
+        missing_openrouter = dict(self.environment)
+        missing_openrouter["WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE"] = ""
+        with self.assertRaisesRegex(preflight.PreflightError, "selected provider"):
+            preflight.validate_environment(missing_openrouter)
+
+        manager = missing_openrouter | {
+            "WORKSTREAM_PROJECT_AGENT_RUNTIME": "manager_authored",
+            "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER": "none",
+            "WORKSTREAM_PROJECT_AGENT_MODEL_API": "none",
+            "WORKSTREAM_PROJECT_AGENT_MODEL": "none",
+        }
+        with self.assertRaisesRegex(preflight.PreflightError, "at least one"):
+            preflight.validate_environment(manager)
 
     def test_checker_config_rejects_non_hosted_or_substituted_identity(self) -> None:
         cases = {
@@ -1104,25 +1362,390 @@ class HostedReleaseConfigTests(unittest.TestCase):
         with self.assertRaises(preflight.PreflightError):
             preflight.validate_checker_config(changed, self.environment)
 
-    def test_model_runtime_requires_usable_host_socket(self) -> None:
-        config = self.checker | {"cache": []}
-        for arguments in ([], ["--host-uds=none"], ["--host-uds=open", "--host-uds=none"]):
-            with self.subTest(arguments=arguments), patch.object(
-                preflight, "_run_json", return_value={"runsc": {"runtimeArgs": arguments}}
-            ):
-                with self.assertRaisesRegex(preflight.PreflightError, "host-uds"):
-                    preflight.validate_docker_runtime(config, self.environment)
-        with patch.object(
-            preflight, "_run_json",
-            return_value={"runsc": {"runtimeArgs": ["--host-uds=open"]}},
-        ):
-            preflight.validate_docker_runtime(config, self.environment)
-        with patch.object(
-            preflight, "_run_json", return_value={"runsc": {"runtimeArgs": []}}
-        ):
-            preflight.validate_docker_runtime(
-                config, self.environment | {"WORKSTREAM_MODEL_PROXY_ENABLED": "false"}
+    def test_custom_deployment_root_preserves_paths_and_refuses_unsafe_custody(
+        self,
+    ) -> None:
+        root = self.root / "owned-data"
+        root.mkdir(mode=0o700)
+        values = self.environment | {"WORKSTREAM_DEPLOYMENT_ROOT": str(root)}
+        paths = preflight.deployment_paths(values)
+        config = copy.deepcopy(self.checker)
+        config.update(
+            socket_path=str(paths.socket),
+            material_root=str(paths.scratch),
+            model_proxy_socket=str(paths.model_socket),
+            model_relay_root=str(paths.model_relays),
+        )
+        preflight.validate_environment(values)
+        preflight.validate_checker_config(config, values)
+        rendered = preflight.render_compose(self.environment_path, values)
+        preflight.validate_compose(rendered, values)
+        for role in ("api", "worker"):
+            environment = rendered["services"][role]["environment"]
+            self.assertEqual(
+                environment["WORKSTREAM_ARTIFACT_SCRATCH_ROOT"], str(paths.scratch)
             )
+            self.assertEqual(
+                environment["WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET"],
+                str(paths.socket),
+            )
+            self.assertEqual(
+                environment["WORKSTREAM_ARTIFACT_INTAKE_SERVICE_SOCKET"],
+                str(paths.socket),
+            )
+            mounts = preflight._service_mounts(rendered["services"][role])
+            self.assertEqual(mounts[str(paths.scratch)]["source"], str(paths.scratch))
+            self.assertTrue(mounts[str(paths.socket_root)]["read_only"])
+        proxy_mounts = preflight._service_mounts(rendered["services"]["model-proxy"])
+        self.assertEqual(
+            proxy_mounts[str(paths.model_root)]["source"], str(paths.model_root)
+        )
+        preflight._private_metadata(
+            root, kind="directory", uid=os.getuid(), gid=os.getgid(), mode=0o700
+        )
+        with self.assertRaisesRegex(preflight.PreflightError, "owner"):
+            preflight._private_metadata(
+                root, kind="directory", uid=os.getuid() + 1, gid=os.getgid(), mode=0o700
+            )
+        alias = self.root / "root-alias"
+        alias.symlink_to(root, target_is_directory=True)
+        for unsafe in ("/", str(alias), str(root / ".." / "owned-data")):
+            with self.subTest(root=unsafe), self.assertRaises(preflight.PreflightError):
+                preflight.validate_environment(
+                    values | {"WORKSTREAM_DEPLOYMENT_ROOT": unsafe}
+                )
+        with self.assertRaises(preflight.PreflightError):
+            preflight.validate_environment(
+                values | {"WORKSTREAM_CHECKER_SERVICE_BINARY": str(root / "service")}
+            )
+        for field, path in (
+            ("guest_binary", root / "guest"),
+            ("binary", root / "engine"),
+        ):
+            changed = copy.deepcopy(config)
+            changed["smol"][field] = str(path)
+            with self.assertRaisesRegex(preflight.PreflightError, "outside deployment"):
+                preflight.validate_checker_config(changed, values)
+        credential_values = values | {
+            "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE": str(root / "credential")
+        }
+        with self.assertRaisesRegex(preflight.PreflightError, "outside deployment"):
+            preflight.validate_checker_config(config, credential_values)
+        self.assertTrue(root.is_dir())
+
+    def test_native_socket_rejects_foreign_identity_permissions_and_links(self) -> None:
+        path = self.root / "native.sock"
+        listener = socket.socket(socket.AF_UNIX)
+        listener.bind(str(path))
+        self.addCleanup(listener.close)
+        path.chmod(0o600)
+        with self.subTest(path=path):
+            preflight._validate_native_socket(path, os.getuid(), os.getgid())
+            for uid, gid in (
+                (os.getuid() + 1, os.getgid()),
+                (os.getuid(), os.getgid() + 1),
+            ):
+                with self.assertRaisesRegex(preflight.PreflightError, "identity"):
+                    preflight._validate_native_socket(path, uid, gid)
+            path.chmod(0o660)
+            with self.assertRaises(preflight.PreflightError):
+                preflight._validate_native_socket(path, os.getuid(), os.getgid())
+            path.chmod(0o600)
+            alias = self.root / "native-alias"
+            os.link(path, alias)
+            with self.assertRaises(preflight.PreflightError):
+                preflight._validate_native_socket(path, os.getuid(), os.getgid())
+            alias.unlink()
+            preflight._validate_native_socket(path, os.getuid(), os.getgid())
+
+    def test_trial_manifest_is_paired_shared_and_confined_to_the_proxy(self) -> None:
+        manifest = self.root / "trial-authority.json"
+        manifest.write_text("fixture pinned authority", encoding="utf-8")
+        manifest.chmod(0o400)
+        self.environment.update(
+            {
+                preflight.TRIAL_KEYS[0]: str(manifest),
+                preflight.TRIAL_KEYS[1]: "sha256:"
+                + hashlib.sha256(manifest.read_bytes()).hexdigest(),
+            }
+        )
+        preflight.validate_environment(self.environment)
+        rendered = preflight.render_compose(self.environment_path, self.environment)
+        preflight.validate_compose(rendered, self.environment)
+        self.assertEqual(
+            preflight._service_mounts(rendered["services"]["model-proxy"])[
+                str(preflight.TRIAL_MANIFEST_TARGET)
+            ]["source"],
+            str(manifest),
+        )
+        for role in ("api", "worker", "beat"):
+            self.assertFalse(
+                set(preflight.TRIAL_KEYS)
+                & set(rendered["services"][role]["environment"])
+            )
+        for mutation in ("writable", "foreign-source", "worker-selector"):
+            changed = copy.deepcopy(rendered)
+            mount = next(
+                item
+                for item in changed["services"]["model-proxy"]["volumes"]
+                if item["target"] == str(preflight.TRIAL_MANIFEST_TARGET)
+            )
+            if mutation == "writable":
+                mount["read_only"] = False
+            elif mutation == "foreign-source":
+                mount["source"] = "/tmp/foreign-manifest"
+            else:
+                changed["services"]["worker"]["environment"][
+                    preflight.TRIAL_KEYS[0]
+                ] = str(preflight.TRIAL_MANIFEST_TARGET)
+            with self.assertRaises(preflight.PreflightError):
+                preflight.validate_compose(changed, self.environment)
+        native = copy.deepcopy(self.checker)
+        native.update(
+            trial_authority_manifest_path=str(manifest),
+            trial_authority_manifest_digest=self.environment[preflight.TRIAL_KEYS[1]],
+        )
+        native["trial_runtime"] = {
+            **{
+                key: str(self.root / key)
+                for key in (
+                    "relay_root",
+                    "scratch_root",
+                    "child_home_root",
+                    "offline_cache_root",
+                    "trusted_launcher_path",
+                    "filesystem_tool_path",
+                )
+            },
+            **{
+                key: "sha256:" + "f" * 64
+                for key in (
+                    "outer_runtime_config_digest",
+                    "trusted_launcher_digest",
+                    "filesystem_tool_digest",
+                )
+            },
+            "builder_image_id": native["cache"][0]["config_image_id"],
+            "deployment_owner": "hosted-native",
+            "maximum_candidate_archive_bytes": 1024,
+        }
+        native["trial_runtime"]["child_home_root"] = self.enterContext(
+            tempfile.TemporaryDirectory(prefix="ws", dir="/tmp")
+        )
+        preflight.validate_checker_config(native, self.environment)
+        for root, valid in (
+            ("/" + "a" * 17, True),
+            ("/" + "é" * 8 + "a", True),
+            ("/" + "a" * 18, False),
+            ("/" + "é" * 9, False),
+        ):
+            changed = copy.deepcopy(native)
+            changed["trial_runtime"]["child_home_root"] = root
+            with self.subTest(child_home_root=root):
+                if valid:
+                    preflight.validate_checker_config(changed, self.environment)
+                else:
+                    with self.assertRaisesRegex(preflight.PreflightError, "18-byte"):
+                        preflight.validate_checker_config(changed, self.environment)
+        substituted = native | {"trial_authority_manifest_digest": "sha256:" + "0" * 64}
+        with self.assertRaisesRegex(preflight.PreflightError, "trial authority"):
+            preflight.validate_checker_config(substituted, self.environment)
+        for key in preflight.TRIAL_KEYS:
+            changed = dict(self.environment)
+            del changed[key]
+            with self.assertRaises(preflight.PreflightError):
+                preflight.validate_environment(changed)
+        with self.assertRaisesRegex(preflight.PreflightError, "trial authority"):
+            preflight.validate_checker_config(self.checker, self.environment)
+
+    def test_smol_home_socket_budget_counts_filesystem_bytes(self):
+        for root, valid in (
+            ("/" + "a" * 58, True),
+            ("/" + "é" * 29, True),
+            ("/" + "a" * 59, False),
+            ("/" + "é" * 30, False),
+        ):
+            changed = copy.deepcopy(self.checker)
+            changed["smol"]["home"] = root
+            with self.subTest(home=root):
+                if valid:
+                    preflight.validate_checker_config(changed, self.environment)
+                else:
+                    with self.assertRaisesRegex(preflight.PreflightError, "59-byte"):
+                        preflight.validate_checker_config(changed, self.environment)
+
+    def _native_inputs(self):
+        config = copy.deepcopy(self.checker)
+        values = self.environment | {
+            "WORKSTREAM_RUNTIME_UID": str(os.getuid()),
+            "WORKSTREAM_RUNTIME_GID": str(os.getgid()),
+        }
+        smol = config["smol"]
+        home = self.root / "native-home"
+        home.mkdir(mode=0o700)
+        group = self.root / "delegated"
+        group.mkdir(mode=0o700)
+        (group / "controller").mkdir(mode=0o700)
+        for key in ("cgroup.controllers", "cgroup.subtree_control"):
+            (group / key).write_text("cpu memory pids", encoding="ascii")
+        smol.update(home=str(home), cgroup_root=str(group))
+        for key, digest_key in (
+            ("binary", "binary_sha256"),
+            ("guest_binary", "guest_sha256"),
+        ):
+            path = self.root / key
+            raw = key.encode()
+            path.write_bytes(raw)
+            path.chmod(0o400)
+            smol[key] = str(path)
+            smol[digest_key] = "sha256:" + hashlib.sha256(raw).hexdigest()
+        for index, entry in enumerate(config["cache"]):
+            for key, digest_key in (
+                ("archive", "archive_sha256"),
+                ("image_config", "config_image_id"),
+            ):
+                path = self.root / f"cache-{index}-{key}"
+                raw = f"static native custody fixture {index} {key}".encode()
+                path.write_bytes(raw)
+                path.chmod(0o400)
+                entry["smol"][key] = str(path)
+                target = entry["smol"] if key == "archive" else entry
+                target[digest_key] = "sha256:" + hashlib.sha256(raw).hexdigest()
+        values[preflight.INTAKE_DIGEST_KEYS[1]] = config["cache"][1]["config_image_id"]
+        service = self.root / "service-binary"
+        service.write_bytes(b"pinned installed native service")
+        service.chmod(0o400)
+        values["WORKSTREAM_CHECKER_SERVICE_BINARY"] = str(service)
+        values["WORKSTREAM_CHECKER_SERVICE_BINARY_SHA256"] = (
+            "sha256:" + hashlib.sha256(service.read_bytes()).hexdigest()
+        )
+        health = {
+            "runtime": "smolvm",
+            "isolation_mode": "smol-microvm",
+            "operating_system": "linux",
+            "architecture": "amd64",
+            "sandbox_uid": os.getuid(),
+            "sandbox_gid": os.getgid(),
+            "cached_platform_manifests": len(config["cache"]),
+        }
+        return config, values, service, health
+
+    def test_native_asset_refusals_preserve_operator_diagnostics(self) -> None:
+        for failure, reason in (
+            ("path", "path is not canonical"),
+            ("custody", "custody is unsafe"),
+            ("deadline", "verification deadline exceeded"),
+            ("digest", "digest or identity differs"),
+            ("missing", "is unavailable"),
+        ):
+            with self.subTest(failure=failure):
+                asset = self.root / f"asset-{failure}"
+                asset.write_bytes(b"pinned asset")
+                asset.chmod(0o400)
+                expected = "sha256:" + hashlib.sha256(asset.read_bytes()).hexdigest()
+                deadline = float("inf")
+                if failure == "path":
+                    alias = self.root / "asset-alias"
+                    alias.symlink_to(asset)
+                    asset = alias
+                elif failure == "custody":
+                    asset.chmod(0o620)
+                elif failure == "deadline":
+                    deadline = 0
+                elif failure == "digest":
+                    expected = "sha256:" + "0" * 64
+                else:
+                    asset.unlink()
+                with self.assertRaisesRegex(
+                    preflight.PreflightError, f"^native Smol asset {reason}$"
+                ):
+                    preflight._verify_smol_asset(asset, expected, os.getuid(), deadline)
+
+    def test_native_readiness_binds_static_assets_delegation_and_typed_health(
+        self,
+    ) -> None:
+        config, values, service, health = self._native_inputs()
+        with (
+            patch.object(preflight, "_run_json", return_value=health) as run,
+        ):
+            preflight.validate_smol_runtime(config, values)
+        command = run.call_args.args[0]
+        self.assertIn("configured_external_checker_execution(s).health()", command[-1])
+        self.assertIn("--network", command)
+        self.assertEqual(command[command.index("--network") + 1], "none")
+        self.assertIn("readonly", command[command.index("--mount") + 1])
+        self.assertNotIn("--env", command)
+        self.assertNotIn("--env-file", command)
+        self.assertNotIn("/var/run/docker.sock", " ".join(command))
+        for changed_health in (
+            health | {"runtime": "runsc"},
+            health | {"sandbox_uid": os.getuid() + 1},
+            health | {"cached_platform_manifests": 1},
+        ):
+            with (
+                patch.object(preflight, "_run_json", return_value=changed_health),
+            ):
+                with self.assertRaisesRegex(
+                    preflight.PreflightError, "readiness identity"
+                ):
+                    preflight.validate_smol_runtime(config, values)
+        for mutate in ("cache", "binary", "delegation"):
+            changed = copy.deepcopy(config)
+            if mutate == "cache":
+                changed["cache"][0]["smol"]["archive_sha256"] = "sha256:" + "f" * 64
+            elif mutate == "binary":
+                changed["smol"]["guest_sha256"] = "sha256:" + "f" * 64
+            else:
+                Path(changed["smol"]["cgroup_root"]).joinpath(
+                    "cgroup.subtree_control"
+                ).write_text("cpu memory", encoding="ascii")
+            with (
+                patch.object(preflight, "_run_json") as run,
+            ):
+                with self.assertRaises(preflight.PreflightError):
+                    preflight.validate_smol_runtime(changed, values)
+                run.assert_not_called()
+
+    def test_cold_start_prerequisites_never_release_application_or_require_node(
+        self,
+    ) -> None:
+        for arguments in (("migrate",), ("up", "-d", "model-proxy")):
+            with (
+                self.subTest(arguments=arguments),
+                patch.object(compose, "validate_private_host_inputs") as private,
+                patch.object(compose, "validate_smol_runtime") as native,
+                patch.object(compose, "validate_trusted_intake") as intake,
+                patch.object(compose, "run_compose", return_value=0) as run,
+            ):
+                self.assertEqual(self._compose_main(*arguments), (0, ""))
+                private.assert_called_once_with(self.environment, require_node=False)
+                native.assert_not_called()
+                intake.assert_not_called()
+                run.assert_called_once_with(
+                    self.environment_path, self.environment, list(arguments)
+                )
+        completed = subprocess.CompletedProcess([], 0)
+        with patch.object(preflight.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(
+                preflight.run_compose(
+                    self.environment_path, self.environment, ["migrate"]
+                ),
+                0,
+            )
+        self.assertEqual(
+            run.call_args.args[0][-9:],
+            [
+                "run",
+                "--rm",
+                "--no-deps",
+                "api",
+                "python",
+                "-m",
+                "alembic",
+                "upgrade",
+                "head",
+            ],
+        )
 
     def test_checker_model_paths_require_enabled_exact_proxy_topology(self) -> None:
         for key in ("model_proxy_socket", "model_relay_root"):
@@ -1140,28 +1763,13 @@ class HostedReleaseConfigTests(unittest.TestCase):
         del ordinary["model_relay_root"]
         preflight.validate_checker_config(ordinary, disabled)
 
-    def test_rendered_checker_model_relay_cannot_lose_custody(self) -> None:
+    def test_rendered_topology_rejects_a_second_checker_controller(self) -> None:
         rendered = preflight.render_compose(self.environment_path, self.environment)
-        for target, read_only in (
-            (str(preflight.MODEL_SOCKET_ROOT), False),
-            (str(preflight.MODEL_RELAY_ROOT), True),
-        ):
-            for change in ("remove", "mode", "source"):
-                with self.subTest(target=target, change=change):
-                    changed = copy.deepcopy(rendered)
-                    mounts = changed["services"]["checker-service"]["volumes"]
-                    selected = next(m for m in mounts if m["target"] == target)
-                    if change == "remove":
-                        mounts.remove(selected)
-                    elif change == "mode":
-                        selected["read_only"] = read_only
-                    else:
-                        selected["source"] = "/tmp/substituted"
-                    with self.assertRaises(preflight.PreflightError):
-                        preflight.validate_compose(changed, self.environment)
         changed = copy.deepcopy(rendered)
-        del changed["services"]["checker-service"]["depends_on"]["model-proxy"]
-        with self.assertRaises(preflight.PreflightError):
+        changed["services"]["checker-service"] = copy.deepcopy(
+            rendered["services"]["worker"]
+        )
+        with self.assertRaisesRegex(preflight.PreflightError, "bounded topology"):
             preflight.validate_compose(changed, self.environment)
 
     def test_rendered_topology_rejects_privilege_and_path_drift(self) -> None:
@@ -1177,34 +1785,14 @@ class HostedReleaseConfigTests(unittest.TestCase):
             "registry.example/workstream/backend@sha256:" + "9" * 64
         )
         cases.append(("different guide parser image", different_parser_image))
-        networked = copy.deepcopy(rendered)
-        networked["services"]["checker-service"]["network_mode"] = "default"
-        cases.append(("networked checker", networked))
-        privileged = copy.deepcopy(rendered)
-        privileged["services"]["checker-service"]["cap_drop"] = []
-        cases.append(("checker capabilities", privileged))
-        writable_material = copy.deepcopy(rendered)
-        for mount in writable_material["services"]["checker-service"]["volumes"]:
-            if mount["target"] == str(preflight.SCRATCH_ROOT):
-                mount["read_only"] = False
-        cases.append(("writable checker material", writable_material))
-        volatile_owner = copy.deepcopy(rendered)
-        for mount in volatile_owner["services"]["checker-service"]["volumes"]:
-            if mount["target"] == str(preflight.SOCKET_ROOT):
-                mount["source"] = "/run/workstream-checker"
-        cases.append(("boot-volatile checker custody", volatile_owner))
         for role in ("api", "worker"):
             writable_owner = copy.deepcopy(rendered)
             for mount in writable_owner["services"][role]["volumes"]:
-                if mount["target"] == str(preflight.SOCKET_ROOT):
+                if mount["target"] == str(
+                    preflight.deployment_paths(self.environment).socket_root
+                ):
                     mount["read_only"] = False
             cases.append((f"{role} writable checker custody", writable_owner))
-        root_controller = copy.deepcopy(rendered)
-        root_controller["services"]["checker-service"]["user"] = "0:0"
-        cases.append(("root checker controller", root_controller))
-        extra_group = copy.deepcopy(rendered)
-        extra_group["services"]["checker-service"]["group_add"].append("10002")
-        cases.append(("extra checker group", extra_group))
         expanded_worker = copy.deepcopy(rendered)
         expanded_worker["services"]["worker"]["environment"]["UNREVIEWED"] = "true"
         cases.append(("worker environment drift", expanded_worker))
@@ -1269,11 +1857,6 @@ class HostedReleaseConfigTests(unittest.TestCase):
         cases.append(
             ("hardlink runtime identity exposed to Beat", hardlink_beat_identity)
         )
-        checker_identity = copy.deepcopy(rendered)
-        checker_identity["services"]["checker-service"]["volumes"].append(
-            copy.deepcopy(rendered["services"]["api"]["volumes"][-1])
-        )
-        cases.append(("runtime identity exposed to checker", checker_identity))
         parser_secret = copy.deepcopy(rendered)
         parser_secret["services"]["guide-document-parser"]["secrets"] = [
             copy.deepcopy(rendered["services"]["worker"]["secrets"][-1])
@@ -1345,7 +1928,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
         proof_parser_socket = copy.deepcopy(rendered)
         proof_parser_socket["services"]["aws-proof-coordinate"]["environment"][
             "WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET"
-        ] = str(preflight.GUIDE_SOCKET_PATH)
+        ] = str(preflight.deployment_paths(self.environment).guide_socket)
         cases.append(("guide parser socket exposed to proof", proof_parser_socket))
         proof_provider_selector = copy.deepcopy(rendered)
         proof_provider_selector["services"]["aws-proof-coordinate"]["environment"][
@@ -1418,22 +2001,30 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 mode=0o400,
             )
 
-    def test_private_host_inputs_check_exact_socket_group_without_reading_secrets(
+    def test_private_host_inputs_check_socket_identity_without_reading_secrets(
         self,
     ) -> None:
         scratch = self.root / "scratch"
-        socket_root = self.root / "socket"
-        model_socket_root = self.root / "model-socket"
+        socket_root = self.root / "checker-runtime"
+        model_socket_root = self.root / "model-runtime"
         model_relay_root = self.root / "model-relays"
-        guide_socket_root = self.root / "guide-socket"
+        guide_socket_root = self.root / "guide-runtime"
+        intake_root = self.root / "checker-runtime"
+        intake_root.mkdir(mode=0o700)
+        intake_path = intake_root / "checker.sock"
+        intake_listener = socket.socket(socket.AF_UNIX)
+        intake_listener.bind(str(intake_path))
+        intake_path.chmod(0o600)
+        self.addCleanup(intake_listener.close)
         scratch.mkdir(mode=0o700)
-        socket_root.mkdir(mode=0o700)
-        model_socket_root.mkdir(mode=0o700)
+        socket_root.mkdir(mode=0o700, exist_ok=True)
+        model_socket_root.mkdir(mode=0o700, exist_ok=True)
         model_relay_root.mkdir(mode=0o700)
         guide_socket_root.mkdir(mode=0o750)
         host_uid = os.getuid()
         host_gid = os.getgid()
         environment = dict(self.environment)
+        environment["WORKSTREAM_DEPLOYMENT_ROOT"] = str(self.root)
         environment["WORKSTREAM_RUNTIME_UID"] = str(host_uid)
         environment["WORKSTREAM_RUNTIME_GID"] = str(host_gid)
         checker = self.root / "private-checker.json"
@@ -1451,25 +2042,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
         listener = socket.socket(socket.AF_UNIX)
         listener.bind(str(docker_socket))
         try:
-            environment["WORKSTREAM_DOCKER_SOCKET_GID"] = str(
-                docker_socket.stat().st_gid
-            )
             with (
-                patch.object(preflight, "SCRATCH_ROOT", scratch),
-                patch.object(preflight, "SOCKET_ROOT", socket_root),
-                patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
-                patch.object(preflight, "MODEL_RELAY_ROOT", model_relay_root),
-                patch.object(
-                    preflight,
-                    "MODEL_SOCKET_PATH",
-                    model_socket_root / "model.sock",
-                ),
-                patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
-                patch.object(
-                    preflight,
-                    "GUIDE_SOCKET_PATH",
-                    guide_socket_root / "guide.sock",
-                ),
                 patch.object(preflight, "GUIDE_PARSER_UID", host_uid),
                 patch.object(preflight, "GUIDE_PARSER_GID", host_gid),
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
@@ -1509,14 +2082,6 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 with self.assertRaisesRegex(preflight.PreflightError, "wrong mode"):
                     preflight.validate_private_host_inputs(environment)
                 guide_socket_root.chmod(0o750)
-                environment["WORKSTREAM_DOCKER_SOCKET_GID"] = str(
-                    docker_socket.stat().st_gid + 1
-                )
-                with self.assertRaises(preflight.PreflightError):
-                    preflight.validate_private_host_inputs(environment)
-            environment["WORKSTREAM_DOCKER_SOCKET_GID"] = str(
-                docker_socket.stat().st_gid
-            )
             scratch_secret = scratch / "project-agent-secret"
             scratch_secret.write_text("private", encoding="utf-8")
             scratch_secret.chmod(0o400)
@@ -1526,21 +2091,6 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 scratch_alias / scratch_secret.name
             )
             with (
-                patch.object(preflight, "SCRATCH_ROOT", scratch),
-                patch.object(preflight, "SOCKET_ROOT", socket_root),
-                patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
-                patch.object(preflight, "MODEL_RELAY_ROOT", model_relay_root),
-                patch.object(
-                    preflight,
-                    "MODEL_SOCKET_PATH",
-                    model_socket_root / "model.sock",
-                ),
-                patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
-                patch.object(
-                    preflight,
-                    "GUIDE_SOCKET_PATH",
-                    guide_socket_root / "guide.sock",
-                ),
                 patch.object(preflight, "GUIDE_PARSER_UID", host_uid),
                 patch.object(preflight, "GUIDE_PARSER_GID", host_gid),
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
@@ -1561,21 +2111,6 @@ class HostedReleaseConfigTests(unittest.TestCase):
             original_negative_key = environment[negative_key]
             environment[negative_key] = str(socket_identity)
             with (
-                patch.object(preflight, "SCRATCH_ROOT", scratch),
-                patch.object(preflight, "SOCKET_ROOT", socket_root),
-                patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
-                patch.object(preflight, "MODEL_RELAY_ROOT", model_relay_root),
-                patch.object(
-                    preflight,
-                    "MODEL_SOCKET_PATH",
-                    model_socket_root / "model.sock",
-                ),
-                patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
-                patch.object(
-                    preflight,
-                    "GUIDE_SOCKET_PATH",
-                    guide_socket_root / "guide.sock",
-                ),
                 patch.object(preflight, "GUIDE_PARSER_UID", host_uid),
                 patch.object(preflight, "GUIDE_PARSER_GID", host_gid),
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
@@ -1593,21 +2128,6 @@ class HostedReleaseConfigTests(unittest.TestCase):
             os.link(secret_paths[-1], secret_alias)
             environment[runtime_key] = str(secret_alias)
             with (
-                patch.object(preflight, "SCRATCH_ROOT", scratch),
-                patch.object(preflight, "SOCKET_ROOT", socket_root),
-                patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
-                patch.object(preflight, "MODEL_RELAY_ROOT", model_relay_root),
-                patch.object(
-                    preflight,
-                    "MODEL_SOCKET_PATH",
-                    model_socket_root / "model.sock",
-                ),
-                patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
-                patch.object(
-                    preflight,
-                    "GUIDE_SOCKET_PATH",
-                    guide_socket_root / "guide.sock",
-                ),
                 patch.object(preflight, "GUIDE_PARSER_UID", host_uid),
                 patch.object(preflight, "GUIDE_PARSER_GID", host_gid),
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
@@ -1619,21 +2139,6 @@ class HostedReleaseConfigTests(unittest.TestCase):
             os.link(checker, checker_alias)
             environment[negative_key] = str(checker_alias)
             with (
-                patch.object(preflight, "SCRATCH_ROOT", scratch),
-                patch.object(preflight, "SOCKET_ROOT", socket_root),
-                patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
-                patch.object(preflight, "MODEL_RELAY_ROOT", model_relay_root),
-                patch.object(
-                    preflight,
-                    "MODEL_SOCKET_PATH",
-                    model_socket_root / "model.sock",
-                ),
-                patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
-                patch.object(
-                    preflight,
-                    "GUIDE_SOCKET_PATH",
-                    guide_socket_root / "guide.sock",
-                ),
                 patch.object(preflight, "GUIDE_PARSER_UID", host_uid),
                 patch.object(preflight, "GUIDE_PARSER_GID", host_gid),
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
@@ -1651,21 +2156,6 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 }
             )
             with (
-                patch.object(preflight, "SCRATCH_ROOT", scratch),
-                patch.object(preflight, "SOCKET_ROOT", socket_root),
-                patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
-                patch.object(preflight, "MODEL_RELAY_ROOT", model_relay_root),
-                patch.object(
-                    preflight,
-                    "MODEL_SOCKET_PATH",
-                    model_socket_root / "model.sock",
-                ),
-                patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
-                patch.object(
-                    preflight,
-                    "GUIDE_SOCKET_PATH",
-                    guide_socket_root / "guide.sock",
-                ),
                 patch.object(preflight, "GUIDE_PARSER_UID", host_uid),
                 patch.object(preflight, "GUIDE_PARSER_GID", host_gid),
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
@@ -1674,6 +2164,52 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 preflight.validate_private_host_inputs(environment)
         finally:
             listener.close()
+
+    def test_trusted_intake_requires_pinned_settings_and_readonly_mounts(self) -> None:
+        for key in preflight.INTAKE_DIGEST_KEYS:
+            for value in (None, "latest"):
+                changed = dict(self.environment)
+                if value is None:
+                    del changed[key]
+                else:
+                    changed[key] = value
+                with (
+                    self.subTest(key=key, value=value),
+                    self.assertRaises(preflight.PreflightError),
+                ):
+                    preflight.validate_environment(changed)
+        rendered = preflight.render_compose(self.environment_path, self.environment)
+        for role in ("api", "worker"):
+            changed = copy.deepcopy(rendered)
+            for mount in changed["services"][role]["volumes"]:
+                if mount["target"] == str(
+                    preflight.deployment_paths(self.environment).socket_root
+                ):
+                    mount["read_only"] = False
+            with self.subTest(role=role), self.assertRaises(preflight.PreflightError):
+                preflight.validate_compose(changed, self.environment)
+
+    def test_trusted_intake_health_uses_typed_factory_without_credentials(self) -> None:
+        health = {
+            "runtime": "smolvm",
+            "isolation_mode": "smol-microvm",
+            "image_digest": self.environment[preflight.INTAKE_DIGEST_KEYS[0]],
+            "config_digest": self.environment[preflight.INTAKE_DIGEST_KEYS[1]],
+        }
+        with patch.object(preflight, "_run_json", return_value=health) as run:
+            preflight.validate_trusted_intake(self.environment)
+        command = run.call_args.args[0]
+        self.assertIn("--pull=never", command)
+        self.assertIn("trusted_submission_intake(s).health()", command[-1])
+        self.assertEqual(command[command.index("--network") + 1], "none")
+        self.assertEqual(command.count("--mount"), 1)
+        self.assertIn("readonly", command[command.index("--mount") + 1])
+        self.assertNotIn("--env-file", command)
+        self.assertNotIn("--env", command)
+        for mutation in ({"runtime": "runsc"}, {"image_digest": "sha256:" + "f" * 64}):
+            with patch.object(preflight, "_run_json", return_value=health | mutation):
+                with self.assertRaises(preflight.PreflightError):
+                    preflight.validate_trusted_intake(self.environment)
 
 
 class ReleaseSecretLoaderTests(unittest.TestCase):
@@ -1700,11 +2236,7 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             "WORKSTREAM_DATABASE_URL_FILE",
             "WORKSTREAM_CELERY_BROKER_URL_FILE",
         ),
-        "model-proxy": (
-            "WORKSTREAM_DATABASE_URL_FILE",
-            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE",
-            "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE",
-        ),
+        "model-proxy": ("WORKSTREAM_DATABASE_URL_FILE",),
         "beat": (
             "WORKSTREAM_DATABASE_URL_FILE",
             "WORKSTREAM_CELERY_BROKER_URL_FILE",
@@ -1725,6 +2257,7 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         runtime: str = "openai_agents_sdk",
         sdk_environment: str = "agents",
         include_runtime_configuration: bool = True,
+        provider_files: tuple[str, ...] = ("openrouter",),
     ) -> subprocess.CompletedProcess[str]:
         environment = os.environ.copy()
         file_names = {
@@ -1737,7 +2270,17 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
                 "model-proxy-openrouter"
             ),
         }
+        configured_provider_variables = {
+            f"WORKSTREAM_MODEL_PROXY_{name.upper()}_API_KEY_FILE"
+            for name in provider_files
+        }
         for variable, name in file_names.items():
+            if (
+                variable in preflight.MODEL_PROXY_SECRET_FILE_KEYS
+                and variable not in configured_provider_variables
+            ):
+                environment.pop(variable, None)
+                continue
             path = root / name
             if path.exists():
                 path.chmod(0o600)
@@ -1784,7 +2327,10 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             "/run/private/private-key.pem"
         )
         environment["EXPECT_PARSER_SELECTOR_SCRUB"] = "1" if role == "parser" else "0"
-        expected = {self.FILE_TO_SECRET[key] for key in self.ROLE_FILES.get(role, ())}
+        role_files = self.ROLE_FILES.get(role, ())
+        if role == "model-proxy":
+            role_files = (*role_files, *sorted(configured_provider_variables))
+        expected = {self.FILE_TO_SECRET[key] for key in role_files}
         environment["EXPECTED_SECRET_NAMES"] = ",".join(sorted(expected))
         environment["EXPECTED_SECRET_SHA256"] = hashlib.sha256(
             content.encode()
@@ -1862,30 +2408,71 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
                     self.assertEqual(completed.returncode, 0, completed.stderr)
                     self.assertEqual(completed.stdout, "loader-ok\n")
                     self.assertEqual(completed.stderr, "")
-                    if self.ROLE_FILES[role]:
+                    required_files = self.ROLE_FILES[role]
+                    if role == "model-proxy":
+                        required_files = (
+                            *required_files,
+                            "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE",
+                        )
+                    if required_files:
                         missing = self._run_loader(
                             root,
                             role=role,
-                            unset_selector=self.ROLE_FILES[role][0],
+                            unset_selector=required_files[0],
                         )
                         self.assertNotEqual(missing.returncode, 0)
                         self.assertIn(
                             "required secret file is unavailable", missing.stderr
                         )
-            openai = self._run_loader(root, role="model-proxy", provider="openai")
+            openai = self._run_loader(
+                root,
+                role="model-proxy",
+                provider="openai",
+                provider_files=("openai",),
+            )
             self.assertEqual(openai.returncode, 0, openai.stderr)
-            setup_provider_independent = self._run_loader(
-                root, role="model-proxy", provider="unknown"
+            both = self._run_loader(
+                root,
+                role="model-proxy",
+                provider="openrouter",
+                provider_files=("openai", "openrouter"),
             )
-            self.assertEqual(
-                setup_provider_independent.returncode,
-                0,
-                setup_provider_independent.stderr,
+            self.assertEqual(both.returncode, 0, both.stderr)
+            missing_selected = self._run_loader(
+                root,
+                role="model-proxy",
+                provider="openrouter",
+                provider_files=("openai",),
             )
+            self.assertNotEqual(missing_selected.returncode, 0)
+            self.assertIn("selected provider credential", missing_selected.stderr)
+            unsupported = self._run_loader(root, role="model-proxy", provider="unknown")
+            self.assertNotEqual(unsupported.returncode, 0)
+            self.assertIn("provider is unsupported", unsupported.stderr)
             unknown = self._run_loader(root, role="unknown")
             self.assertNotEqual(unknown.returncode, 0)
             self.assertEqual(unknown.stdout, "")
             self.assertIn("release role is unavailable or unsupported", unknown.stderr)
+
+    def test_api_entrypoint_executes_without_node_proxy_or_model_credentials(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            missing_socket = root / "not-started.sock"
+            with patch.dict(
+                os.environ,
+                {
+                    "WORKSTREAM_ARTIFACT_INTAKE_SERVICE_SOCKET": str(missing_socket),
+                    "WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET": str(missing_socket),
+                    "WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET": str(missing_socket),
+                },
+            ):
+                completed = self._run_loader(root, role="api", provider_files=())
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(completed.stdout, "loader-ok\n")
+            self.assertEqual(completed.stderr, "")
+            self.assertFalse(missing_socket.exists())
 
     def test_loader_binds_runtime_to_sdk_marker_before_provider_secret(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1911,6 +2498,18 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
                 sdk_environment="agents",
             )
             self.assertEqual(manager_proxy.returncode, 0, manager_proxy.stderr)
+            manager_without_provider = self._run_loader(
+                root,
+                role="model-proxy",
+                runtime="manager_authored",
+                provider="none",
+                sdk_environment="agents",
+                provider_files=(),
+            )
+            self.assertNotEqual(manager_without_provider.returncode, 0)
+            self.assertIn(
+                "at least one provider credential", manager_without_provider.stderr
+            )
             for sdk_environment in ("agents", "omnicore"):
                 with self.subTest(
                     runtime="manager_authored", sdk_environment=sdk_environment

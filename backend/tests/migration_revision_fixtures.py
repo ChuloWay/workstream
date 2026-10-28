@@ -1,6 +1,8 @@
 """Checksum-bound historical revision inputs and guarded 0047 writers."""
 
 import base64
+from tests.trusted_intake_fixtures import LocalIntakeAdapter
+
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from functools import lru_cache
@@ -21,8 +23,7 @@ from app.interfaces.artifacts import ArtifactStoreNamespaceClaim, ArtifactStoreN
 from app.modules.artifacts.models import ArtifactStorageNamespace
 from app.modules.artifacts.preparation import ArtifactPreparationService, ArtifactScratchManager
 from app.modules.artifacts.service import ArtifactStorageNamespaceSpec
-from app.modules.artifacts.submission_archive import (
-    SubmissionArchiveInspector,
+from app.modules.artifacts.api.submission_archive import (
     SubmissionArchiveLimits,
 )
 from app.modules.authorization.runtime import HumanAuthorizationContext
@@ -102,6 +103,12 @@ async def historical_revision_source(tmp_path, database_url, monkeypatch, snapsh
     seed = await _restore_historical_revision_rows(database_url, snapshot_name)
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
+    # Restore and validate the exact archived column inventory first. Only then
+    # add the nullable current-ORM projection, removed before the real upgrade.
+    async with engine.begin() as connection:
+        await connection.execute(text(
+            "ALTER TABLE public.checker_runs ADD COLUMN input_context_custody jsonb"
+        ))
     settings = _settings(tmp_path, maximum_bytes=1024 * 1024)
     manager = ArtifactScratchManager(
         root=tmp_path / "historical-post-scratch",
@@ -138,7 +145,7 @@ async def historical_revision_source(tmp_path, database_url, monkeypatch, snapsh
             store=store,
             namespace=namespace,
             preparation=preparation,
-            inspector=SubmissionArchiveInspector(SubmissionArchiveLimits()),
+            intake=LocalIntakeAdapter(), archive_limits=SubmissionArchiveLimits(), artifact_deadline_ms=180_000,
         )
 
         def archived_bootstrap(_settings, *, activation_guard):
@@ -318,7 +325,7 @@ _ATTEMPT_OUTCOME_WRITERS = (
 async def enter_predecessor_owner_shape(execute, database_url, patch):
     """Let current owners build history on a pre-0049 schema, as its owners did.
 
-    Predecessor owners stored no attempt outcomes, assignment starts or finding
+    Predecessor owners stored no input context, attempt outcomes, assignment starts or finding
     rows, so those writes are disabled and the ORM gets placeholder columns.
     ``leave_predecessor_owner_shape`` removes them before the real upgrade, so
     0049 runs against the genuine predecessor shape.
@@ -336,6 +343,7 @@ async def leave_predecessor_owner_shape(execute, database_url):
     """Remove the placeholders so the upgrade sees only predecessor DDL."""
     await execute(database_url, (
         "DROP TABLE public.checker_result_findings; "
+        "ALTER TABLE public.checker_runs DROP COLUMN input_context_custody; "
         "ALTER TABLE public.submissions DROP COLUMN attempt_status, DROP COLUMN status_reason, "
         "DROP COLUMN decided_at, DROP COLUMN updated_at; "
         "ALTER TABLE public.task_assignments DROP COLUMN started_at, DROP COLUMN updated_at"

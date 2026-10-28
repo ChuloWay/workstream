@@ -22,6 +22,7 @@ from app.interfaces.checker_model_provider import (
     CheckerModelProvider,
 )
 from app.modules.tasks.api import TaskSubmissionContextFacts
+from app.modules.model_usage.api import ProjectModelProfile
 
 from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
 from app.modules.checkers.api.selected_post_submit import (
@@ -29,9 +30,11 @@ from app.modules.checkers.api.selected_post_submit import (
     SelectedPostSubmitLockedContext,
 )
 from app.modules.checkers.api.history import CheckerHistoryReadPort
+from app.modules.checkers.api.revision_feedback import RevisionFeedbackPort
 from app.modules.checkers.api.execution import EvaluationCoordinationPort
 from typing import Any, Protocol
 from pathlib import Path
+
 
 from app.modules.checkers.api.external import (
     ExternalCheckerCapabilityDefinition,
@@ -51,6 +54,13 @@ from app.modules.checkers.api.selected_pre_submit import (
 )
 
 
+def revision_feedback_port(session) -> RevisionFeedbackPort:
+    """Compose the exact immutable feedback read under the caller's transaction."""
+    from app.modules.checkers.revision_feedback import RevisionFeedbackReader
+
+    return RevisionFeedbackReader(session)
+
+
 def external_checker_execution_factory(
     *, socket_path: Path, timeout_seconds: float
 ) -> ExternalServiceAdapterFactory[UnixSocketExternalCheckerAdapter]:
@@ -68,28 +78,75 @@ def external_checker_execution_factory(
     return factory
 
 
-def create_checker_model_provider(settings):
-    """Construct the sole provider registered for one locked model profile."""
-    from openai import AsyncOpenAI
+def create_checker_model_provider(
+    profile: ProjectModelProfile, *, api_key: str
+) -> CheckerModelProvider:
+    """Select one supported adapter from the exact immutable project profile."""
+    from app.modules.model_usage.api import ModelCallUnavailable
 
-    from app.adapters.checkers.model_provider import (
-        OPENAI_RESPONSES_PROVIDER_KEY,
-        OpenAIResponsesCheckerModelProvider,
-    )
+    identity = (profile.spec.provider, profile.spec.api)
+    provider_key = {
+        ("openai_responses", "responses.v1"): "openai_responses",
+        ("openrouter", "chat_completions"): "openrouter",
+    }.get(identity)
+    if provider_key is None:
+        raise ModelCallUnavailable("model_profile_provider_unavailable")
+    if not isinstance(api_key, str) or not api_key or len(api_key) > 8_192:
+        raise ModelCallUnavailable("model_provider_credentials_unavailable")
+
+    def openai_provider():
+        from openai import AsyncOpenAI
+
+        from app.adapters.checkers.model_provider import (
+            OpenAIResponsesCheckerModelProvider,
+            OpenAIResponsesSettings,
+        )
+
+        spec = profile.spec
+        settings = OpenAIResponsesSettings(
+            api_key=api_key,
+            model=spec.model_snapshot,
+            maximum_request_bytes=spec.maximum_request_bytes,
+            maximum_input_tokens=spec.maximum_input_tokens,
+            maximum_output_tokens=spec.maximum_output_tokens,
+            maximum_output_bytes=spec.maximum_output_bytes,
+            request_timeout_seconds=float(spec.deadline_ms / 1000),
+            reasoning_effort=spec.settings.reasoning_effort,
+            text_verbosity=spec.settings.text_verbosity,
+        )
+        return OpenAIResponsesCheckerModelProvider(
+            settings,
+            AsyncOpenAI(api_key=api_key, max_retries=0, timeout=settings.request_timeout_seconds),
+        )
+
+    def openrouter_provider():
+        import httpx
+
+        from app.adapters.checkers.openrouter_model_provider import OpenRouterCheckerModelProvider
+
+        from app.adapters.model_usage.openrouter import require_direct_openrouter_model
+
+        try:
+            require_direct_openrouter_model(profile.spec.model_snapshot)
+        except ValueError:
+            raise ModelCallUnavailable("model_profile_provider_unavailable") from None
+        client = httpx.AsyncClient(
+            transport=httpx.AsyncHTTPTransport(retries=0, trust_env=False),
+            trust_env=False,
+            follow_redirects=False,
+            timeout=profile.spec.deadline_ms / 1000.0,
+            headers={
+                "Authorization": "Bearer " + api_key,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+        )
+        return OpenRouterCheckerModelProvider(profile, client)
 
     factory = ExternalServiceAdapterFactory[CheckerModelProvider](CHECKER_MODEL_CAPABILITY_KEY)
-    factory.register(
-        OPENAI_RESPONSES_PROVIDER_KEY,
-        lambda: OpenAIResponsesCheckerModelProvider(
-            settings,
-            AsyncOpenAI(
-                api_key=settings.api_key,
-                max_retries=0,
-                timeout=settings.request_timeout_seconds,
-            ),
-        ),
-    )
-    return factory.create(OPENAI_RESPONSES_PROVIDER_KEY)
+    factory.register("openai_responses", openai_provider)
+    factory.register("openrouter", openrouter_provider)
+    return factory.create(provider_key)
 
 
 def configured_external_checker_execution_factory(settings):
@@ -163,10 +220,9 @@ def configured_post_submit_external_execution(
     )
 
 
-def selected_pre_submit_checker_execution(*, settings, archive_inspector):
+def selected_pre_submit_checker_execution(*, settings):
     """Compose default/PRE checking with deferred project-image transport."""
     return SelectedPreSubmitCheckerExecutionAdapter(
-        archive_inspector=archive_inspector,
         external_execution=configured_external_checker_execution(settings),
     )
 
@@ -264,8 +320,7 @@ class _ExecutionRequest(Protocol):
 class SelectedPreSubmitCheckerExecutionAdapter:
     """Build the selected default-plus-external PRE processor from exact ART facts."""
 
-    def __init__(self, *, archive_inspector, external_execution) -> None:
-        self._archive_inspector = archive_inspector
+    def __init__(self, *, external_execution) -> None:
         self._external_execution = external_execution
 
     def build(self, request: _ExecutionRequest) -> SelectedPreSubmitProcessor:
@@ -274,13 +329,11 @@ class SelectedPreSubmitCheckerExecutionAdapter:
         default_input = getattr(request, "default_checker_input", None)
         attempt_id = getattr(request, "attempt_id", None)
         attempt_request_digest = getattr(request, "attempt_request_digest", None)
-        grants = getattr(request, "external_grants", None)
         if (
             policy is None
             or default_input is None
             or attempt_id is None
             or attempt_request_digest is None
-            or grants is None
         ):
             raise SelectedPreSubmitInfrastructureUnavailable("material_unavailable")
         identity = PreSubmitExternalCheckerIdentity(
@@ -303,13 +356,10 @@ class SelectedPreSubmitCheckerExecutionAdapter:
             media_type="application/zip",
         )
         return SelectedPreSubmitProcessor(
-            archive_inspector=self._archive_inspector,
-            inspection=request.inspection,
             policy=policy,
             default_input=default_input,
             identity=identity,
             material=material,
-            grants=grants,
             execution=self._external_execution,
         )
 
@@ -673,3 +723,15 @@ def selected_pre_submit_run_reader(session):
     from app.modules.checkers.selected_pre_submit_reads import SelectedPreSubmitRunReader
 
     return SelectedPreSubmitRunReader(session)
+
+
+def trial_evidence_reservations(session, request, profiles):
+    """Bind trial evidence to the exact current external execution and trusted profile."""
+    from app.adapters.auth import post_submit_execution_authority
+    from app.adapters.tasks import evaluation_task_guard
+    from app.modules.checkers.trial_evidence import TrialEvidenceReservations
+
+    return TrialEvidenceReservations(
+        session, request=request, profiles=profiles,
+        tasks=evaluation_task_guard(session), authority=post_submit_execution_authority(session),
+    )

@@ -96,6 +96,12 @@ PILOT_08_REVISION_TARGETS = frozenset({
     "backend/app/modules/tasks/revision/service.py",
     "backend/app/workers/revision_recovery.py",
 })
+TRUSTED_INTAKE_TARGETS = frozenset({
+    "backend/app/adapters/artifacts/trusted_intake.py",
+    "backend/app/interfaces/trusted_submission_intake.py",
+    "backend/app/modules/artifacts/api/submission_archive.py",
+    "backend/app/modules/artifacts/trusted_intake.py",
+})
 CHECKER_IMAGE_PUBLISH_TARGETS = frozenset({
     "backend/scripts/checker_image.py",
     "backend/scripts/checker_image_process.py",
@@ -123,6 +129,8 @@ CHECKER_MODEL_RUNTIME_TARGETS = frozenset({
     "backend/app/adapters/checkers/model_proxy.py",
     "backend/app/adapters/checkers/model_proxy_transport.py",
     "backend/app/adapters/checkers/model_runtime.py",
+    "backend/app/adapters/checkers/openrouter_model_provider.py",
+    "backend/app/adapters/model_usage/openrouter.py",
     "backend/app/adapters/project_agents/setup_model_handler.py",
     "backend/app/adapters/project_agents/setup_model_proxy.py",
     "backend/app/api/deps/checker_models.py",
@@ -151,6 +159,19 @@ CHECKER_MODEL_RUNTIME_TARGETS = frozenset({
     "backend/app/modules/model_usage/setup.py",
     "backend/app/modules/projects/guide_compilation/model_usage.py",
     "backend/app/workers/checker_model_proxy.py",
+})
+CHECKER_TRIAL_RUNTIME_TARGETS = frozenset({
+    "backend/app/adapters/checkers/trial_proxy.py",
+    "backend/app/interfaces/checker_trial_proxy.py",
+    "backend/app/interfaces/trial_execution.py",
+    "backend/app/modules/checkers/api/evaluation_context.py",
+    "backend/app/modules/checkers/api/revision_feedback.py",
+    "backend/app/modules/checkers/api/trial_evidence.py",
+    "backend/app/modules/checkers/api/trial_profiles.py",
+    "backend/app/modules/checkers/revision_feedback.py",
+    "backend/app/modules/checkers/trial_evidence.py",
+    "backend/app/modules/tasks/api/evaluation_revision.py",
+    "backend/app/modules/tasks/evaluation_revision.py",
 })
 PILOT_READ_1_TARGETS = frozenset({
     "backend/app/modules/tasks/submission_attempts.py",
@@ -448,11 +469,11 @@ OMNICORE_GUIDE_RUNTIME_TARGETS = frozenset({
     "backend/app/workers/project_setup_topology.py",
 })
 NEUTRAL_GUIDE_RUNTIME_REMOVED_TARGETS = frozenset({
+    "backend/app/adapters/project_agents/openrouter_policy.py",
     "backend/app/modules/artifacts/zip_safety.py",
 })
 
 NEUTRAL_GUIDE_RUNTIME_TARGETS = frozenset({
-    "backend/app/adapters/project_agents/openrouter_policy.py",
     "backend/app/core/zip_safety.py",
     "backend/app/adapters/guide_document_tools/child.py",
     "backend/app/adapters/guide_document_tools/client.py",
@@ -1069,6 +1090,14 @@ def _validate_additive_partition_transition(
     current_by_target = {item["target"]: item for item in current_assignments}
     _validate_policy_lineage_relocation(set(trusted_targets), set(current_by_target))
     removed = set(trusted_targets) - set(current_by_target)
+    if (
+        "backend/app/adapters/project_agents/openrouter_policy.py" in removed
+        and not {
+            "backend/app/adapters/checkers/openrouter_model_provider.py",
+            "backend/app/adapters/model_usage/openrouter.py",
+        }.issubset(current_by_target)
+    ):
+        raise BehaviorOwnershipError("untrusted_partition_change")
     if removed & REV_04C_REMOVED_TARGETS and (
         "backend/app/modules/reviews/api/acceptance.py" not in current_by_target
     ):
@@ -1091,7 +1120,9 @@ def _validate_additive_partition_transition(
         | AWS_ARTIFACT_ACTIVATION_TARGETS
         | AUTH_ART_OPERATOR_TARGETS
         | CHECKER_MODEL_RUNTIME_TARGETS
+        | CHECKER_TRIAL_RUNTIME_TARGETS
         | CHECKER_IMAGE_PUBLISH_TARGETS
+        | TRUSTED_INTAKE_TARGETS
         | PILOT_READ_2_TARGETS
         | PILOT_READ_3_TARGETS
         | CON_02B_DELIVERY_TARGETS

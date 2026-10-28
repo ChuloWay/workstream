@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+grep -Eq '^Seccomp:[[:space:]]+2$' /proc/self/status
+if [ -f workspace/result.txt ]; then
+  printf 'present\n'
+else
+  printf 'absent\n'
+fi

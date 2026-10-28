@@ -64,16 +64,41 @@ authority or construct a transport. The adapter factory is instance-local and ex
 hidden CHECKERS composition. Durable PRE/POST owners retain request, lease and
 result custody, while ART owns verified material and callback-scoped grants.
 Production request/completion registration does not expose public intake.
-Local integration uses runc/docker-dev; hosted gVisor proof remains separate.
+Local Docker integration uses runc/docker-dev. Hosted release configuration
+selects the existing native Smol node through the same typed port; actual hosted
+qualification remains separate.
 
-The Rust service alone owns container-engine access. Python sends an opaque,
+The Rust service alone owns sandbox-engine access. Python sends an opaque,
 request-bound callback grant issued from ART's existing pre-admission scratch
 lifetime. The service resolves it beneath the configured private scratch root,
 recomputes exact file and directory facts, and mounts only the sealed workspace
 read-only. Its trusted cache binds one OCI platform-manifest digest to repository,
 OS, architecture and observed config image ID; it never pulls or resolves tags.
-Hosted health fails closed without `runsc`. The explicit `docker-dev` mode is a
-local mechanism qualification and cannot report hosted gVisor isolation.
+Hosted readiness requires the configured native Smol identity, delegation and
+pinned cached inputs; the release does not start a Docker/runsc fallback. The
+explicit `docker-dev` mode remains local mechanism qualification, outside the
+selected hosted topology.
+
+For an approved POST capability that needs to build or execute submitted work,
+the same service may expose one invocation-local Unix socket to the selected
+checker image. This is a typed sub-capability of the existing external-checker
+execution, not another external-service adapter, daemon, runtime factory or
+image-output continuation. A locked administrative profile authorizes the exact
+POST registry/image/configuration scope, prepared offline builder/base/cache
+identities, material-role visibility and aggregate resource ceilings. The image
+may supply only closed operation types, safe package-relative selectors and
+workload argument arrays. The service—not the image—selects the engine, runtime,
+images, mounts, host paths, network, limits and cleanup behavior.
+
+The service publishes completed trial observations into request-bound
+invocation memory only after cleanup is confirmed. The model capability may
+resolve those server-owned facts through the same invocation; checker-supplied
+copies are not evidence. Normalized final output remains the registered
+external-checker result. An image cannot trigger host work by returning a
+private plan as that result, and `project_private_plan.v1` remains invalid.
+Persisting or replaying exact trial evidence requires an owner-typed CHECKERS/ART
+contract; a transient socket receipt or ordinary isolation metadata does not by
+itself establish durable evidence custody.
 
 Registration is explicit in the FastAPI or Celery composition root.
 Runtime plugin discovery, import scanning, mutable global registration, and

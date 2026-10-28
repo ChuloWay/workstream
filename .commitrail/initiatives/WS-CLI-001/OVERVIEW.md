@@ -60,10 +60,45 @@ It does not claim a tag, published binary or signed/notarized artifact.
 
 [WS-CLI-001-48](WS-CLI-001-48.md) adds the opt-in read-only contributor
 workbench: exact-grant projects, one-page Ready/active Mine/own Submissions,
-fresh details and explicit Mine context/intake reads. Detailed findings and
-contribution evidence remain inert CLI handoffs. All mutations, management
-screens and operation-specific recovery remain separate TUI boundaries; this
+fresh details and explicit Mine context/intake reads.
+[WS-CLI-001-49](WS-CLI-001-49.md) adds exact-Submission findings pages and
+ordered locked-guide selection with explicit verified single-document download.
+[WS-CLI-001-50](WS-CLI-001-50.md) replaces their contributor presentation with
+visible collections/sections, readable instructions and truthful page/evidence
+states; it changes no public operation or lifecycle authority.
+Contribution evidence remains an inert CLI handoff. Claim/start is bounded by
+-51 below; other product mutations, management screens and their recovery remain
+separate TUI boundaries; this
 interface does not depend on first binary publication or system-wide discovery.
+
+## Connected contributor workbench
+
+The human's post-merge evaluation of -50 found that the read-only workbench was
+not a usable complete workflow and collection/detail navigation was difficult.
+Presentation proof is not completion of the contributor journey. Continue in
+the existing TUI and typed API client, not a second client or simulated demo.
+
+1. [WS-CLI-001-51](WS-CLI-001-51.md): direct collection navigation and deliberate
+   claim/start using existing public writes, exact confirmation, caller-owned
+   replay keys and uncertain-outcome recovery. This is the current bounded work.
+2. ZIP preparation: explicit local package selection, summary/attestation,
+   actual intake feedback and exact replay. Preparation is not Submission.
+3. Submission and continuation: deliberate immutable creation, current outcome,
+   checker remediation and only API-supported human revision responses. No
+   automatic acceptance, hidden mutation route or invented reviewer workflow.
+4. Contribution evidence: inspect the contributor's returned records and awards
+   inside the workbench, retaining the distinction from fulfillment.
+
+Only the first boundary is specified for implementation now. Each following
+boundary needs inspected API/replay contracts, its own bounded record and native
+public-API proof before starting. A durable automatic recovery design is needed
+before replacing caller-owned saved keys with generated keys; the current CLI
+contract must not become an unsafe in-memory TUI retry token.
+
+Risk is L1 for mutation, cancellation, disclosure and local artifact handling.
+Preserve backend authority, locked lineage, immutable evidence and atomicity.
+No new API is required for claim/start. Backend gaps discovered for subsequent
+steps must be named and independently implemented, never hidden by a UI mock.
 
 ## Current boundary
 
@@ -73,7 +108,7 @@ and separate guide-bound review/revision policy configuration. The commands
 the existing public writes with caller-owned replay keys and policy `If-Match`.
 The backend owns manager authorization for new writes, policy semantics, replay and activation;
 editing/configuring a guide does not approve or activate it. Other public API
-client gaps and the broader TUI beyond -48 remain separate work. Binary distribution's
+client gaps and the broader TUI beyond -51 remain separate work. Binary distribution's
 workflow is prepared by -44; a protected release run and public-asset audit
 remain operational work.
 
@@ -324,13 +359,14 @@ that human's credential, not a registered agent identity.
 Make every operation complete without a terminal: stable JSON output, safe
 errors, exit status, and no required prompts. Add optional terminal assistance
 only where it improves an actual workflow. The opt-in `workstream tui` browses
-the bounded contributor reads in -48 using the same client operations and never
+the bounded contributor reads in -48/-49 using the same client operations, including
+confirmed verified guide downloads and paged checker findings, and never
 becomes a second state machine. Further screens require stable public contracts
 and their own proof. Prefer
 purposeful commands over generating a flag mirror of every OpenAPI route.
 
 Go is the chosen implementation language. Cobra owns command parsing/help and
-completion. The bounded -48 workbench uses Bubble Tea, Bubbles and Lip Gloss;
+completion. The bounded -48/-49 workbench uses Bubble Tea, Bubbles and Lip Gloss;
 noninteractive commands retain their existing behavior. Do not add Python, TypeScript, or Rust duplicate
 CLIs. Keep the package independent of backend and MCP runtime dependencies.
 
@@ -422,8 +458,10 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
    journey through contribution export, with negative intake and authority checks.
    Hosted and human-review journey proof remain separate.
    Unfinished human review/revision is not current CLI implementation scope.
-26. **Optional TUI:** -48 supplies read-only contributor navigation through
-   existing typed reads. In-TUI findings/Evidence, writes and management remain
+26. **Optional TUI:** -48 supplies contributor navigation through existing typed
+   reads; -49 adds findings pages and confirmed verified guide downloads; -50
+   redraws this same contributor boundary for readable work and evidence states.
+   In-TUI Evidence, product writes and management remain
    separate boundaries; Evidence first needs a shared typed single-page client
    port without changing complete CLI exports. Never require a TUI for agents
    or scripts.

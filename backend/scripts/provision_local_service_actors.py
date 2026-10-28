@@ -32,6 +32,7 @@ JOURNEY_SERVICE_IDENTITIES = (
     "workstream.artifact.verifier",
     "workstream.artifact.scheduler",
     "workstream.artifact.binding",
+    "workstream.artifact.checker_output",
     "workstream.artifact.guide_reader",
     "workstream.artifact.materializer",
     "workstream.project.setup",

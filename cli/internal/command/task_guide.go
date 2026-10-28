@@ -1,13 +1,11 @@
 package command
 
 import (
-	"crypto/rand"
 	"encoding/json"
-	"errors"
 	"io"
-	"os"
 
 	"github.com/Flow-Research/workstream/cli/internal/api"
+	"github.com/Flow-Research/workstream/cli/internal/download"
 	"github.com/spf13/cobra"
 )
 
@@ -28,13 +26,9 @@ func addTaskGuide(task *cobra.Command, client func() (*api.Client, error), outpu
 				return &api.Failure{Code: "task_assignment_required"}
 			}
 			if directory != "" {
-				info, err := os.Lstat(directory)
-				if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-					return errors.New("download directory must be an existing real directory")
-				}
-				root, err := os.OpenRoot(directory)
+				root, err := download.OpenRoot(directory)
 				if err != nil {
-					return errors.New("cannot open download directory")
+					return err
 				}
 				defer root.Close()
 				for _, document := range result.Value.GuideDocuments {
@@ -57,31 +51,18 @@ func addTaskGuide(task *cobra.Command, client func() (*api.Client, error), outpu
 	task.AddCommand(cmd)
 }
 
-func downloadGuide(cmd *cobra.Command, client *api.Client, root *os.Root, taskID string, document api.TaskGuideDocument) error {
+func downloadGuide(cmd *cobra.Command, client *api.Client, root *download.Root, taskID string, document api.TaskGuideDocument) error {
 	name := document.Filename()
-	if _, err := root.Lstat(name); !os.IsNotExist(err) {
-		return errors.New("download target already exists or is inaccessible")
-	}
-	temporary := ".workstream-guide-" + rand.Text()
-	file, err := root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	stage, err := root.Stage(name)
 	if err != nil {
-		return errors.New("cannot create private guide download")
-	}
-	defer root.Remove(temporary)
-	defer file.Close()
-	if err := client.DownloadGuideDocument(cmd.Context(), taskID, document, file); err != nil {
 		return err
 	}
-	if err := file.Sync(); err != nil {
-		return errors.New("cannot persist guide download")
+	defer stage.Abort()
+	if err := client.DownloadGuideDocument(cmd.Context(), taskID, document, stage); err != nil {
+		return err
 	}
-	if err := file.Close(); err != nil {
-		return errors.New("cannot close guide download")
+	if err := stage.Seal(); err != nil {
+		return err
 	}
-	// A hard link publishes atomically without replacing an existing file or
-	// following a symlink. Root confines both names even if the directory moves.
-	if err := root.Link(temporary, name); err != nil {
-		return errors.New("cannot publish guide download without overwrite")
-	}
-	return nil
+	return stage.Publish()
 }

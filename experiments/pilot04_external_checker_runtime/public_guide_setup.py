@@ -13,7 +13,7 @@ from tests.projects.guide_compilation.proposals.pg_support import seed_review_ac
 from experiments.pilot04_external_checker_runtime.guide_evidence import verify_source_commitment
 from experiments.pilot04_external_checker_runtime.guide_polling import wait_for_guide_read
 from experiments.pilot04_external_checker_runtime.guide_inputs import (
-    GUIDE_BYTES, TASK_EXAMPLES, CORRECTION_REASON,
+    guide_bytes, TASK_EXAMPLES, CORRECTION_REASON,
 )
 
 
@@ -46,8 +46,14 @@ async def _public_policy_settings(client, root, token, human_review_required, ca
                    headers={**headers, "Idempotency-Key": str(uuid4())}, json=body)
 
 
-async def _finance_policy(client, factory, project_id, token_for, compensated, call):
-    finance, _ = await seed_review_actor(factory, project_id, role="finance_authority")
+async def _finance_policy(client, factory, project_id, token_for, compensated, call, attachment=None):
+    if attachment:
+        await attachment.grant(client, 'finance', 'finance_authority', project_id)
+        finance = attachment.actors['finance']
+        if compensated:
+            raise AssertionError('hosted runtime fixture requires unpaid policy')
+    else:
+        finance, _ = await seed_review_actor(factory, project_id, role="finance_authority")
     token = token_for(finance)
     definitions = []
     if compensated:
@@ -130,7 +136,7 @@ async def _approve_policies(client, compilation_root, token, call):
     return await call(client, "GET", post_root, token, 200)
 
 
-async def _source_evidence(factory, guide, setup, package):
+async def _source_evidence(factory, guide, setup, package, original):
     expected_examples = [x.model_dump(mode="json") for x in validate_task_examples(TASK_EXAMPLES)]
     examples_hash = task_examples_hash(validate_task_examples(TASK_EXAMPLES))
     async with factory() as session:
@@ -156,7 +162,7 @@ async def _source_evidence(factory, guide, setup, package):
         source._mapping, attempt._mapping, examples=expected_examples,
         examples_hash=examples_hash, source_hash=package["target"]["source_snapshot_hash"],
         source_id=setup["source_snapshot_id"], accesses=accesses,
-        original_sha256="sha256:" + hashlib.sha256(GUIDE_BYTES).hexdigest(),
+        original_sha256="sha256:" + hashlib.sha256(original).hexdigest(),
     )
     return {"guide_id": guide["id"], "setup_run_id": setup["id"],
             "setup_generation": setup["setup_generation"],
@@ -164,20 +170,41 @@ async def _source_evidence(factory, guide, setup, package):
             "source_snapshot_hash": source.bundle_hash,
             "task_examples_hash": examples_hash,
             "canonical_input_hash": attempt.canonical_input_hash,
-            "uploaded_sha256": "sha256:" + hashlib.sha256(GUIDE_BYTES).hexdigest()}
+            "uploaded_sha256": "sha256:" + hashlib.sha256(original).hexdigest()}
 
 
-async def public_guide_setup(client, factory, human_review_required, call, token_for):
-    manager, _ = await seed_review_actor(factory, None, scope="system")
+async def public_guide_setup(client, factory, human_review_required, call, token_for, *,
+                             pre_requirements=1, attachment=None):
+    model_post = attachment.model_post if attachment else None
+    if model_post and 'project_id' in model_post.state:
+        raise RuntimeError('this model qualification already owns one project')
+    original = model_post.guide_bytes() if model_post else guide_bytes(pre_requirements)
+    if attachment:
+        manager = attachment.actors['manager']
+    else:
+        manager, _ = await seed_review_actor(factory, None, scope="system")
     token = token_for(manager)
     project = await call(client, "POST", "/api/v1/projects", token, 201,
                          headers={"Idempotency-Key": str(uuid4())},
                          json={"name": "Connected guide journey", "slug": "journey-" + uuid4().hex})
-    await seed_review_actor(factory, UUID(project["id"]), actor=manager)
+    if model_post:
+        await model_post.bind_project(client, project['id'], attachment)
+    if attachment:
+        await attachment.grant(client, 'manager', 'project_manager', project['id'])
+    else:
+        await seed_review_actor(factory, UUID(project["id"]), actor=manager)
+        from guide_compilation_e2e import publish_scripted_model_profile
+        operator, _ = await seed_review_actor(factory, None, role="operator", scope="system")
+        profile = await publish_scripted_model_profile(client, token_for(operator), project["id"])
+        if (profile["spec"]["project_id"] != project["id"]
+                or profile["spec"]["profile_version"] != 1):
+            raise AssertionError("scripted setup model profile differs from the new project")
     root = f"/api/v1/projects/{project['id']}/guides"
     body = {"version": "initial", "change_summary": "Original sample worker guide",
             "task_examples": TASK_EXAMPLES,
             "documents": [{"label": "guide.md", "media_type": "text/markdown"}]}
+    if attachment:
+        body['documents'].append({'label': 'workstream-rules.json', 'media_type': 'text/markdown'})
     headers = {"Idempotency-Key": str(uuid4())}
     guide = await call(client, "POST", root, token, 201, headers=headers, json=body)
     replay = await call(client, "POST", root, token, 201, headers=headers, json=body)
@@ -188,13 +215,19 @@ async def public_guide_setup(client, factory, human_review_required, call, token
     upload = root + f"/documents/{guide['documents'][0]['document_id']}/content"
     await call(client, "POST", upload, token, 202,
                headers={"Idempotency-Key": str(uuid4()), "Content-Type": "text/markdown"},
-               content=GUIDE_BYTES)
+               content=original)
+    if attachment:
+        from experiments.pilot04_external_checker_runtime.public_hosted_attachment import manager_rules
+        await call(client, 'POST', root + f"/documents/{guide['documents'][1]['document_id']}/content",
+                   token, 202, headers={'Idempotency-Key': str(uuid4()), 'Content-Type': 'text/markdown'},
+                   content=(model_post.rules(original, attachment.capabilities, pre_requirements) if model_post else
+                            manager_rules(original, attachment.capabilities, pre_requirements)))
     setup = await wait_for_guide_read(client, root + "/setup-runs/latest", token,
                              lambda v: v["status"] == "policy_draft_ready", call)
     compilation_root = root + f"/compilations/{setup['finalized_compilation_id']}"
     initial = await call(client, "GET", compilation_root + "/proposal", token, 200)
     initial_setup = setup
-    if human_review_required:
+    if human_review_required and attachment is None:
         correction = await _correct_public_proposal(client, compilation_root, initial, token, call)
         setup = await wait_for_guide_read(client, root + "/setup-runs/latest", token,
             lambda v: v["status"] == "policy_draft_ready"
@@ -212,14 +245,14 @@ async def public_guide_setup(client, factory, human_review_required, call, token
                          "acknowledged_warning_hashes": initial["warning_hashes"]})
         compilation_root = root + f"/compilations/{setup['finalized_compilation_id']}"
     await _finance_policy(client, factory, UUID(project["id"]), token_for,
-                          not human_review_required, call)
+                          not human_review_required and attachment is None, call, attachment)
     post = await _approve_policies(client, compilation_root, token, call)
     context = post["activation_context"]
     activation = {"target": post["target"], **{field: context[field] for field in (
         "post_approval_operation_id", "post_approval_output_digest", "guide_mutation_generation",
         "review", "revision", "expected_previous_active_guide_id", "expected_previous_active_guide_generation",
     )}, **context["contribution"]}
-    evidence = await _source_evidence(factory, guide, setup, post["proposal"])
+    evidence = await _source_evidence(factory, guide, setup, post["proposal"], original)
     target, upstream = post["target"], post["target"]["upstream"]
     evidence["locked_context"] = {
         "locked_guide_version": guide["version"],

@@ -82,8 +82,8 @@ specified in the overview. PRE/POST share that ART seam and scratch owner.
 Node states: preparing -> ready -> executing -> cleaning -> closed. Preparation
 failure, peer EOF, explicit abort, cancellation, expiry and success all enter
 cleaning. Execution consumes once; wrong owner/epoch/image/resource/phase/policy,
-expired or replayed handles fail without launching. At most three retries of a
-known pre-launch preparation failure are allowed within the original deadline,
+expired or replayed handles fail without launching. At most three total preparation attempts (two retries) are allowed for a
+known pre-launch preparation failure within the original deadline,
 only after confirmed VM/cgroup absence. Launched or unknown checker outcomes
 never retry in this layer. Existing durable job owners decide later retries.
 
@@ -193,3 +193,12 @@ this additional affected owner.
 - Current-source reconciliation: `733c752f7` adds the merged audit restore-path repair without changing these runtime owners.
 - Next usable boundary: typed same-request preparation and canonical guest ART processing.
 - Remaining scope: upload-overlapped trusted intake and public durable-worker proof remain boundaries 2 and 3. Independently owned model gateway integration remains separate until its stable boundary is available.
+
+## External review repairs
+
+Guest staging rejects image-owned symlinks and non-directory `/work` and `/tmp`
+mount targets before any workload can run. Creation failures before lease custody
+or after guardian-confirmed cleanup return recoverable infrastructure failure;
+partial lease persistence, uncertain guardian custody and unconfirmed cleanup
+still close admission and require reconciliation. The preparation bound remains
+three total attempts, with no retry of launched or uncertain execution.

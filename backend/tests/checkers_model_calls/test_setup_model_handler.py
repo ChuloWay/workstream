@@ -2,18 +2,21 @@
 
 import json
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
 
-from app.adapters.project_agents.openrouter_policy import openrouter_request_options
+from app.adapters.model_usage.openrouter import (
+    bounded_response_bytes,
+    openrouter_request_options,
+)
 from app.adapters.project_agents.setup_model_handler import (
     OpenAISetupProvider,
     OpenRouterSetupProvider,
     SetupModelProxyHandler,
     SetupProviderResponse,
-    _bounded_response_bytes,
     _completed_reply,
     _validate_request,
 )
@@ -83,6 +86,7 @@ def _metadata():
             "pricing": {
                 "prompt": "0.000002",
                 "completion": "0.000012",
+                "web_search": "0.01",
                 "input_cache_read": "0.0000002",
                 "input_cache_write": "0.0000025",
                 "overrides": [
@@ -140,7 +144,7 @@ async def test_provider_body_reader_stops_before_accumulating_over_profile():
             yield b"b"
 
     with pytest.raises(ValueError, match="exceeds profile"):
-        await _bounded_response_bytes(Response(), 8)
+        await bounded_response_bytes(Response(), 8)
 
 
 async def test_openai_count_includes_every_semantic_input_field():
@@ -152,9 +156,7 @@ async def test_openai_count_includes_every_semantic_input_field():
             return SimpleNamespace(input_tokens=73)
 
     provider = object.__new__(OpenAISetupProvider)
-    provider._counter = SimpleNamespace(
-        responses=SimpleNamespace(input_tokens=Counter())
-    )
+    provider._counter = SimpleNamespace(responses=SimpleNamespace(input_tokens=Counter()))
     schema = {
         "type": "object",
         "properties": {f"field_{index}": {"type": "string"} for index in range(200)},
@@ -203,7 +205,8 @@ async def test_openai_count_includes_every_semantic_input_field():
 
 
 @pytest.mark.parametrize(
-    "mutation", ["context", "pricing", "request_fee", "alias", "parameters"]
+    "mutation",
+    ["context", "pricing", "request_fee", "disabled_search_price", "alias", "parameters"],
 )
 async def test_openrouter_metadata_drift_fails_before_dispatch(monkeypatch, mutation):
     import httpx
@@ -216,6 +219,8 @@ async def test_openrouter_metadata_drift_fails_before_dispatch(monkeypatch, muta
         data["pricing"]["overrides"][0]["completion"] = "0.000018001"
     elif mutation == "request_fee":
         data["pricing"]["request"] = "1"
+    elif mutation == "disabled_search_price":
+        data["pricing"]["web_search"] = "NaN"
     elif mutation == "alias":
         data["id"] = "openai/resolved-other-model"
     else:
@@ -284,7 +289,10 @@ def test_openai_remote_prompt_and_unpriced_tier_are_rejected(extra):
         _validate_request(profile, request, body)
 
 
-def test_openrouter_requires_locked_settings_and_routing_controls():
+@pytest.mark.parametrize(
+    "mutation", ["reasoning", "web-plugin", "search-options", "server-tool", "model-variant"]
+)
+def test_openrouter_requires_locked_settings_and_routing_controls(mutation):
     profile = _profile()
     body = {
         "model": "openai/model",
@@ -293,7 +301,7 @@ def test_openrouter_requires_locked_settings_and_routing_controls():
         "stream": False,
         "tools": _tools(),
         "usage": {"include": True},
-        "reasoning_effort": "high",
+        "reasoning_effort": "medium",
         "verbosity": "low",
         **openrouter_request_options(),
     }
@@ -304,6 +312,21 @@ def test_openrouter_requires_locked_settings_and_routing_controls():
         provider_request_json=json.dumps(body, sort_keys=True, separators=(",", ":")),
     )
 
+    _validate_request(profile, request, body)
+    if mutation == "reasoning":
+        body["reasoning_effort"] = "high"
+    elif mutation == "web-plugin":
+        body["plugins"][0]["enabled"] = True
+    elif mutation == "search-options":
+        body["web_search_options"] = {"search_context_size": "low"}
+    elif mutation == "server-tool":
+        body["tools"][0] = {"type": "openrouter:web_search"}
+    else:
+        body["model"] = "openai/model:online"
+    request = replace(
+        request,
+        provider_request_json=json.dumps(body, sort_keys=True, separators=(",", ":")),
+    )
     with pytest.raises(ModelCallUnavailable):
         _validate_request(profile, request, body)
 
@@ -327,9 +350,7 @@ def test_paid_quote_heavy_response_becomes_bounded_unavailable_reply():
         call_index=0,
         provider_request_json=json.dumps(body, sort_keys=True, separators=(",", ":")),
     )
-    response_json = json.dumps(
-        {"output": '"' * 500_000}, sort_keys=True, separators=(",", ":")
-    )
+    response_json = json.dumps({"output": '"' * 500_000}, sort_keys=True, separators=(",", ":"))
     assert len(response_json.encode()) < 1024 * 1024
 
     reply = _completed_reply(

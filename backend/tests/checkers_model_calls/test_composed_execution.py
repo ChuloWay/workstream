@@ -1,10 +1,14 @@
 """Real approval, AUTH, PostgreSQL and ART with an offline provider and image boundary."""
 
+from app.adapters.checkers import checker_output_reservations
+
 from contextlib import asynccontextmanager
 import asyncio
+import json
 import os
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from sqlalchemy import select, func
 
@@ -17,6 +21,7 @@ from app.adapters.checkers import (
     model_profile_reader,
 )
 from app.adapters.checkers.model_execution import ModelAwareExternalExecution
+from app.adapters.checkers.openrouter_model_provider import OpenRouterCheckerModelProvider
 from app.interfaces.checker_model_provider import (
     CheckerModelCreateFailure,
     CheckerModelCreateOutcome,
@@ -36,6 +41,7 @@ from app.interfaces.external_services import (
 from app.interfaces.project_agents import CapabilityParameter, CheckSpecification
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.preparation import HARD_MAXIMUM_ARTIFACT_BYTES
+from app.modules.artifacts.models import ArtifactBinding
 from app.modules.checkers.api.external import ExternalCheckerSchema, external_checker_json_hash
 from app.modules.model_usage.models import (
     ModelUsageEffect,
@@ -108,15 +114,120 @@ def model_registry_spec():
     )
 
 
+def _openrouter_metadata():
+    return {
+        "data": {
+            "id": "openai/model",
+            "canonical_slug": "openai/model-20261026",
+            "context_length": 100,
+            "top_provider": {"context_length": 100, "max_completion_tokens": 50},
+            "supported_parameters": [
+                "max_tokens",
+                "reasoning_effort",
+                "tool_choice",
+                "tools",
+                "verbosity",
+            ],
+            "pricing": {
+                "prompt": "0.000000011",
+                "completion": "0.000000029",
+                "input_cache_read": "0.000000002",
+                "input_cache_write": "0.000000011",
+            },
+        }
+    }
+
+
+def _assert_single_openrouter_dispatch(provider_requests):
+    assert provider_requests == [
+        ("GET", "https://openrouter.ai/api/v1/model/openai/model"),
+        ("POST", "https://openrouter.ai/api/v1/chat/completions"),
+    ]
+
+
+async def _assert_effect_art_identities(session, effect, project_id, roles):
+    bindings = (
+        await session.scalars(
+            select(ArtifactBinding)
+            .where(
+                ArtifactBinding.resource_type == "checker_model_call",
+                ArtifactBinding.resource_id == str(effect.id),
+            )
+            .order_by(ArtifactBinding.logical_role)
+        )
+    ).all()
+    expected_roles = sorted(f"model_{role}" for role in roles)
+    assert [binding.logical_role for binding in bindings] == expected_roles
+    by_role = {binding.logical_role: binding for binding in bindings}
+    for role in roles:
+        binding = by_role[f"model_{role}"]
+        assert binding.project_id == str(project_id)
+        assert binding.resource_id == str(effect.id)
+        assert binding.scope_version == 1
+        assert binding.id == getattr(effect, f"{role}_binding_id")
+        assert binding.content_id == getattr(effect, f"{role}_content_id")
+        assert binding.put_attempt_id == getattr(effect, f"{role}_put_attempt_id")
+        assert binding.verification_receipt_id == getattr(
+            effect, f"{role}_verification_receipt_id"
+        )
+
+
 @pytest.mark.parametrize(
-    ("storage_provider", "lose_first_image_reply", "concurrent_callback", "terminal_mode"),
+    (
+        "storage_provider",
+        "lose_first_image_reply",
+        "concurrent_callback",
+        "terminal_mode",
+        "provider_case",
+    ),
     [
-        pytest.param("local", False, False, None, id="completed"),
-        pytest.param("local", True, False, None, id="retry-retains-paid-effect"),
-        pytest.param("minio", True, False, None, id="minio-retry-retains-paid-effect"),
-        pytest.param("local", False, True, None, id="concurrent-callback-single-charge"),
-        pytest.param("local", False, False, "no_effect", id="operator-recovers-no-effect"),
-        pytest.param("minio", False, False, "failed", id="operator-recovers-settled-failure"),
+        pytest.param("local", False, False, None, "controlled", id="completed"),
+        pytest.param(
+            "local", True, False, None, "controlled", id="retry-retains-paid-effect"
+        ),
+        pytest.param(
+            "minio", True, False, None, "controlled", id="minio-retry-retains-paid-effect"
+        ),
+        pytest.param(
+            "local",
+            False,
+            True,
+            None,
+            "controlled",
+            id="concurrent-callback-single-charge",
+        ),
+        pytest.param(
+            "local",
+            False,
+            False,
+            "no_effect",
+            "controlled",
+            id="operator-recovers-no-effect",
+        ),
+        pytest.param(
+            "minio",
+            False,
+            False,
+            "failed",
+            "controlled",
+            id="operator-recovers-settled-failure",
+        ),
+        pytest.param(
+            "local",
+            True,
+            False,
+            None,
+            "openrouter_completed",
+            id="openrouter-lost-image-reply-replays-retained-art",
+        ),
+        pytest.param(
+            "local",
+            False,
+            False,
+            None,
+            "openrouter_ambiguous",
+            id="openrouter-ambiguous-response-is-held-without-redispatch",
+        ),
     ],
 )
 async def test_public_profile_to_private_model_call_and_completed_checker(
@@ -128,6 +239,7 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
     lose_first_image_reply,
     concurrent_callback,
     terminal_mode,
+    provider_case,
 ):
     if storage_provider == "minio":
         from tests import test_s3_artifact_store
@@ -145,6 +257,14 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                 "registry_entry_digest": registry.entry_digest,
             }
         )
+        if provider_case.startswith("openrouter"):
+            spec = spec.model_copy(
+                update={
+                    "provider": "openrouter",
+                    "api": "chat_completions",
+                    "model_snapshot": "openai/model",
+                }
+            )
         if terminal_mode is not None:
             # An authorized child is a second provider dispatch in the same
             # immutable envelope, even though it reuses logical call slot zero.
@@ -205,6 +325,7 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
     ) as h:
         await provision_post_submit_service(h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT)
         creates = []
+        provider_requests = []
         lost_replies = []
         recovered_references = []
         first_response_waiting = asyncio.Event()
@@ -255,11 +376,56 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                     ),
                 )
 
+        async def openrouter_transport(request):
+            provider_requests.append((request.method, str(request.url)))
+            if request.method == "GET":
+                return httpx.Response(200, json=_openrouter_metadata())
+            assert request.method == "POST"
+            body = json.loads(request.content)
+            assert body["model"] == "openai/model"
+            assert body["messages"] == [
+                {"role": "user", "content": "Evaluate the verified work"}
+            ]
+            response = {
+                "id": "gen-composed-openrouter-1",
+                "model": "openai/model",
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "tool_calls": [],
+                            "content": '{"verdict":"passed"}',
+                        },
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 20,
+                    "completion_tokens": 10,
+                    "total_tokens": 30,
+                    "prompt_tokens_details": {"cached_tokens": 5},
+                    "completion_tokens_details": {"reasoning_tokens": 2},
+                },
+            }
+            if provider_case == "openrouter_ambiguous":
+                response["choices"] = []
+            return httpx.Response(200, json=response)
+
         @asynccontextmanager
-        async def provider(_):
-            yield Provider()
+        async def provider(profile):
+            if provider_case.startswith("openrouter"):
+                client = httpx.AsyncClient(transport=httpx.MockTransport(openrouter_transport))
+                selected = OpenRouterCheckerModelProvider(profile, client=client)
+                try:
+                    yield selected
+                finally:
+                    await selected.aclose()
+            else:
+                yield Provider()
 
         outputs = checker_output_storage(
+            reservations=checker_output_reservations,
             sessions=h.factory,
             store=h.store.wrapped,
             namespace=h.namespace,
@@ -286,7 +452,7 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
             calls=model_call_service,
             profiles=model_profile_reader,
             outputs=outputs,
-            bindings=lambda session: checker_output_binding(session, namespace=h.namespace),
+            bindings=lambda session: checker_output_binding(session, namespace=h.namespace, reservations=checker_output_reservations(session)),
             provider=provider,
         )
 
@@ -328,6 +494,17 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                     reply = replies[0]
                 else:
                     reply = await proxy.handle(callback)
+                if provider_case == "openrouter_ambiguous":
+                    assert reply.outcome == "unavailable"
+                    assert reply.failure_code == (
+                        "model_provider_delivery_uncertain"
+                        if self.invocations == 1
+                        else "model_provider_recovery_unavailable"
+                    )
+                    repeated = await proxy.handle(callback)
+                    assert repeated.outcome == "unavailable"
+                    assert repeated.failure_code == "model_provider_recovery_unavailable"
+                    raise ExternalServiceUnavailableError(self.identity)
                 if terminal_mode is not None and self.invocations == 1:
                     assert reply.outcome == "unavailable", reply.outcome
                     assert reply.failure_code == (
@@ -353,7 +530,12 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
         )
         current_request = h.request
         result = await executor.evaluate_post_submission(current_request)
-        if lose_first_image_reply or terminal_mode is not None:
+        needs_retry = (
+            lose_first_image_reply
+            or terminal_mode is not None
+            or provider_case == "openrouter_ambiguous"
+        )
+        if needs_retry:
             assert result.outcome == "infrastructure_failed"
             if lose_first_image_reply:
                 assert len(lost_replies) == 1, result.infrastructure_failure_code
@@ -405,10 +587,32 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
             current_request = reserved.request
             assert current_request.evaluation_generation == 2
             result = await executor.evaluate_post_submission(current_request)
+        if provider_case == "openrouter_ambiguous":
+            assert result.outcome == "infrastructure_failed"
+            _assert_single_openrouter_dispatch(provider_requests)
+            async with h.factory() as session:
+                assert await session.scalar(
+                    select(func.count()).select_from(ModelUsageEffect)
+                ) == 1
+                attempt = await session.scalar(select(ModelUsageEffect))
+                account = await session.get(ModelUsageBudgetAccount, str(h.request.project_id))
+                assert attempt.state == "uncertain"
+                assert attempt.provider_response_id == "gen-composed-openrouter-1"
+                assert attempt.response_binding_id is None
+                assert attempt.settled_nanodollars is None
+                assert account.lifetime_reserved_nanodollars > 0
+                assert account.lifetime_settled_nanodollars == 0
+                await _assert_effect_art_identities(
+                    session, attempt, h.request.project_id, {"request"}
+                )
+            return
         assert result.outcome == "completed"
         assert len(result.execution.external_members) == 1
         assert await executor.evaluate_post_submission(current_request) == result
-        assert len(creates) == (2 if terminal_mode else 1)
+        if provider_case == "openrouter_completed":
+            _assert_single_openrouter_dispatch(provider_requests)
+        else:
+            assert len(creates) == (2 if terminal_mode else 1)
         async with h.factory() as session:
             assert await session.scalar(select(func.count()).select_from(ModelUsageEffect)) == (
                 2 if terminal_mode else 1
@@ -424,3 +628,6 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
             )
             assert UUID(attempt.response_binding_id).version == 7
             assert UUID(attempt.request_binding_id).version == 7
+            await _assert_effect_art_identities(
+                session, attempt, h.request.project_id, {"request", "response"}
+            )

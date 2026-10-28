@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -16,6 +17,8 @@ const (
 	taskID       = "30000000-0000-7000-8000-000000000001"
 	submissionID = "40000000-0000-7000-8000-000000000001"
 	policyID     = "50000000-0000-7000-8000-000000000001"
+	runID        = "60000000-0000-7000-8000-000000000001"
+	findingID    = "70000000-0000-7000-8000-000000000001"
 )
 
 type fakeClient struct {
@@ -26,6 +29,10 @@ type fakeClient struct {
 	task                             func(context.Context, string) (api.Result[api.ContributorTaskDetail], error)
 	context                          func(context.Context, string) (api.Result[api.WorkContext], error)
 	intake                           func(context.Context, string) (api.Result[api.SubmissionRequirements], error)
+	findings                         func(context.Context, string, string, int, *string) (api.Result[api.SubmissionFindingsResult], error)
+	download                         func(context.Context, string, api.TaskGuideDocument, io.Writer) error
+	claim                            func(context.Context, string, string, *string) (api.Result[api.ClaimedTask], error)
+	start                            func(context.Context, string, string, *string) (api.Result[api.MutationTask], error)
 	assignmentQuery, submissionQuery api.PageQuery
 }
 
@@ -88,6 +95,40 @@ func (f *fakeClient) Submission(context.Context, string) (api.Result[api.Submiss
 	f.calls = append(f.calls, "submission")
 	return api.Result[api.SubmissionHistory]{Value: api.SubmissionHistory{ID: submissionID, Task: taskID, Status: "review_pending", Summary: "Stored summary"}}, nil
 }
+func (f *fakeClient) SubmissionFindings(ctx context.Context, submission, run string, limit int, cursor *string) (api.Result[api.SubmissionFindingsResult], error) {
+	f.calls = append(f.calls, "findings")
+	if f.findings != nil {
+		return f.findings(ctx, submission, run, limit, cursor)
+	}
+	page := api.SubmissionCheckerPage{Items: []api.SubmissionCheckerRun{{ID: runID, Task: taskID, Submission: submission, Status: "completed", Current: true,
+		Results: []api.ContributorFinding{{ID: findingID, Checker: "lint", Status: "passed", Severity: "info"}}}}}
+	return api.Result[api.SubmissionFindingsResult]{Value: api.SubmissionFindingsResult{Page: &page}}, nil
+}
+func (f *fakeClient) DownloadGuideDocument(ctx context.Context, task string, document api.TaskGuideDocument, target io.Writer) error {
+	f.calls = append(f.calls, "download")
+	if f.download != nil {
+		return f.download(ctx, task, document, target)
+	}
+	_, err := target.Write([]byte("guide"))
+	return err
+}
+func (f *fakeClient) ClaimTask(ctx context.Context, task, key string, reason *string) (api.Result[api.ClaimedTask], error) {
+	f.calls = append(f.calls, "claim")
+	if f.claim != nil {
+		return f.claim(ctx, task, key, reason)
+	}
+	return api.Result[api.ClaimedTask]{Value: api.ClaimedTask{
+		Task:       api.MutationTask{ID: task, ProjectID: projectID, Status: "claimed"},
+		Assignment: api.TaskAssignment{TaskID: task, ProjectID: projectID, ContributorID: actorID},
+	}}, nil
+}
+func (f *fakeClient) StartTask(ctx context.Context, task, key string, reason *string) (api.Result[api.MutationTask], error) {
+	f.calls = append(f.calls, "start")
+	if f.start != nil {
+		return f.start(ctx, task, key, reason)
+	}
+	return api.Result[api.MutationTask]{Value: api.MutationTask{ID: task, ProjectID: projectID, Status: "in_progress"}}, nil
+}
 
 func apply(t *testing.T, m *Model, cmd tea.Cmd) {
 	t.Helper()
@@ -111,6 +152,8 @@ func keyMessage(key string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
 	case "tab":
 		return tea.KeyPressMsg{Code: tea.KeyTab}
+	case "shift+tab":
+		return tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
 	case "down":
 		return tea.KeyPressMsg{Code: tea.KeyDown}
 	case "up":

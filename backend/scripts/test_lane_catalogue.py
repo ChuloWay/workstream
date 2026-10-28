@@ -96,6 +96,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_provision_project_points.py",
     "tests/test_checker_image.py",
     "tests/test_checker_smol_cache.py",
+    "tests/test_trusted_intake.py",
     "tests/checkers/external/test_harnessy_proof_checker.py",
     "tests/test_github_facts_adapter.py",
     "tests/test_api_controls.py",
@@ -305,6 +306,9 @@ SHARED_FOUNDATION_MODULES = (
 ) + STATIC_FOUNDATION_MODULES
 
 PROJECT_MODULES = (
+    "tests/projects/guide_compilation/test_trial_specifications.py",
+    "tests/projects/post_policy/test_compiler.py",
+    "tests/tasks/submission_dispatch/test_evaluation_revision.py",
     # Project-bound batch custody stays in the project semantic family.
     "tests/project_catalogue/test_public.py",
     "tests/tasks/test_task_import_batch_contract.py",
@@ -492,6 +496,15 @@ PROJECT_INTAKE_MODULES = (
 
 # Checker delivery shares project dispatch ownership across the project family.
 CHECKER_DELIVERY_MODULES = (
+    "tests/checkers/execution/test_revision_feedback.py",
+    "tests/checkers/external/test_evaluation_context_selection.py",
+    "tests/checkers/external/test_revision_materialization.py",
+    "tests/checkers/external/test_trial_artifact_custody.py",
+    "tests/checkers/external/test_trial_evidence.py",
+    "tests/checkers/external/test_trial_model_custody.py",
+    "tests/checkers/external/test_trial_policy.py",
+    "tests/checkers/external/test_trial_profiles.py",
+    "tests/checkers/external/test_trial_proxy.py",
     "tests/checkers_model_calls/test_composed_execution.py",
     "tests/checkers_model_calls/test_model_call_contract.py",
     "tests/checkers_model_calls/test_model_call_transactions_postgresql.py",
@@ -507,6 +520,7 @@ CHECKER_DELIVERY_MODULES = (
     "tests/checkers_model_calls/test_setup_model_proxy_transport.py",
     "tests/checkers_model_calls/test_setup_output_custody.py",
     "tests/checkers/model_provider/test_openai_responses.py",
+    "tests/checkers/model_provider/test_openrouter.py",
     "tests/checkers/external/test_model_transport.py",
     "tests/checkers/external/test_model_proxy_transport.py",
     "tests/authorization/checker_models/test_contracts.py",
@@ -521,6 +535,7 @@ CHECKER_DELIVERY_MODULES = (
     "tests/checkers/external/test_policy.py",
     "tests/checkers/external/test_selected_post_submit.py",
     "tests/checkers/external/test_selected_pre_submit.py",
+    "tests/checkers/external/test_selected_intake_lifecycle.py",
     "tests/checkers/external/test_selected_pre_submit_coordination.py",
     "tests/checkers/external/test_selected_pre_submit_service.py",
     "tests/checkers/external/test_selected_preparation_command.py",
@@ -739,6 +754,7 @@ LANES = (
         "schema_contracts",
         (
             SCHEMA_MODULE,
+            "tests/test_checker_evidence_migrations.py",
             "tests/migrations/test_project_catalogue_read.py",
             "tests/migrations/test_contribution_read_audit.py",
             "tests/migrations/test_contribution_export_snapshots.py",

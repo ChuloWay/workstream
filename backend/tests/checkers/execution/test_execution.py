@@ -406,18 +406,19 @@ async def test_nonrecordable_material_failure_leaves_attempt_recoverable(
             await provision_post_submit_service(h.factory, ServiceIdentity.ARTIFACT_MATERIALIZER)
             expected = PostSubmissionMaterializationUnavailable
         elif failure == "cleanup":
-            import sys
             from app.modules.artifacts.sources import PreparedArtifact
 
             expected = ArtifactScratchIntegrityError
-            original_close, preceding = PreparedArtifact.close, []
+            original_close, stages = PreparedArtifact.close, []
 
             async def fail_close(prepared):
-                preceding.append(sys.exception())
+                stages.append("close")
                 await original_close(prepared)
                 raise ArtifactScratchIntegrityError("controlled close failure")
 
-            async def fail_inspect(prepared, inspector):
+            async def fail_inspect(prepared, inspector, *, on_cancel=None):
+                assert callable(on_cancel)
+                stages.append("inspection_failure")
                 raise PostSubmissionMaterializationFailure("post_submit_material_manifest_mismatch")
 
             monkeypatch.setattr(PreparedArtifact, "inspect", fail_inspect)
@@ -436,9 +437,9 @@ async def test_nonrecordable_material_failure_leaves_attempt_recoverable(
         with pytest.raises(expected):
             await executor.evaluate_post_submission(h.request)
         if failure == "cleanup":
-            assert len(preceding) == 1
-            assert isinstance(preceding[0], PostSubmissionMaterializationFailure)
-            assert str(preceding[0]) == "post_submit_material_manifest_mismatch"
+            # Cancellation-resistant cleanup runs in its own task; the relevant
+            # guarantee is that cleanup failure overrides a failed inspection.
+            assert stages == ["inspection_failure", "close"]
         assert len(h.store.opens) == (0 if failure == "authority" else 1)
         assert not h.preparation._active
         async with h.factory() as session:

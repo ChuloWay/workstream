@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
+import hashlib
 from decimal import Decimal, InvalidOperation
 import json
 import os
@@ -20,14 +22,73 @@ from uuid import UUID
 
 COMPOSE_PATH = Path(__file__).with_name("compose.yml")
 INFERENCE_COMPOSE_PATH = Path(__file__).with_name("compose.inference.yml")
-SCRATCH_ROOT = Path("/var/lib/workstream/scratch")
-SOCKET_ROOT = Path("/var/lib/workstream/checker-runtime")
-SOCKET_PATH = SOCKET_ROOT / "checker.sock"
-GUIDE_SOCKET_ROOT = Path("/var/lib/workstream/guide-runtime")
-GUIDE_SOCKET_PATH = GUIDE_SOCKET_ROOT / "guide.sock"
-MODEL_SOCKET_ROOT = Path("/var/lib/workstream/model-runtime")
-MODEL_SOCKET_PATH = MODEL_SOCKET_ROOT / "model.sock"
-MODEL_RELAY_ROOT = Path("/var/lib/workstream/model-relays")
+TRIAL_COMPOSE_PATH = Path(__file__).with_name("compose.trials.yml")
+TRIAL_MANIFEST_TARGET = Path("/etc/workstream/trial-authority.json")
+TRIAL_KEYS = (
+    "WORKSTREAM_CHECKER_TRIAL_AUTHORITY_MANIFEST_PATH",
+    "WORKSTREAM_CHECKER_TRIAL_AUTHORITY_MANIFEST_DIGEST",
+)
+MODEL_OPENAI_COMPOSE_PATH = Path(__file__).with_name("compose.model-openai.yml")
+MODEL_OPENROUTER_COMPOSE_PATH = Path(__file__).with_name("compose.model-openrouter.yml")
+DEFAULT_DEPLOYMENT_ROOT = Path("/var/lib/workstream")
+DEFAULT_CHECKER_SERVICE_BINARY = Path("/opt/workstream/bin/workstream-checker-service")
+INTAKE_DIGEST_KEYS = (
+    "WORKSTREAM_ARTIFACT_INTAKE_IMAGE_DIGEST",
+    "WORKSTREAM_ARTIFACT_INTAKE_CONFIG_DIGEST",
+)
+
+
+@dataclass(frozen=True)
+class HostedPaths:
+    root: Path
+
+    @property
+    def scratch(self) -> Path:
+        return self.root / "scratch"
+
+    @property
+    def socket_root(self) -> Path:
+        return self.root / "checker-runtime"
+
+    @property
+    def model_root(self) -> Path:
+        return self.root / "model-runtime"
+
+    @property
+    def model_relays(self) -> Path:
+        return self.root / "model-relays"
+
+    @property
+    def guide_root(self) -> Path:
+        return self.root / "guide-runtime"
+
+    @property
+    def socket(self) -> Path:
+        return self.socket_root / "checker.sock"
+
+    @property
+    def model_socket(self) -> Path:
+        return self.model_root / "model.sock"
+
+    @property
+    def guide_socket(self) -> Path:
+        return self.guide_root / "guide.sock"
+
+
+def deployment_paths(values: dict[str, str]) -> HostedPaths:
+    return HostedPaths(
+        Path(values.get("WORKSTREAM_DEPLOYMENT_ROOT", str(DEFAULT_DEPLOYMENT_ROOT)))
+    )
+
+
+def checker_service_binary(values: dict[str, str]) -> Path:
+    return Path(
+        values.get(
+            "WORKSTREAM_CHECKER_SERVICE_BINARY", str(DEFAULT_CHECKER_SERVICE_BINARY)
+        )
+    )
+
+
 GUIDE_PARSER_UID = 10002
 GUIDE_PARSER_GID = 10001
 DOCKER_SOCKET = Path("/var/run/docker.sock")
@@ -51,6 +112,14 @@ MODEL_PROXY_SECRET_FILE_KEYS = (
     "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE",
     "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE",
 )
+MODEL_PROVIDER_SECRET_FILE_KEYS = {
+    "openai": "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE",
+    "openrouter": "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE",
+}
+MODEL_PROVIDER_COMPOSE_PATHS = {
+    "openai": MODEL_OPENAI_COMPOSE_PATH,
+    "openrouter": MODEL_OPENROUTER_COMPOSE_PATH,
+}
 SECRET_FILE_KEYS = (*BASE_SECRET_FILE_KEYS, *MODEL_PROXY_SECRET_FILE_KEYS)
 SECRET_FILE_TARGETS = {
     "WORKSTREAM_DATABASE_URL_FILE": ("database_url", "/run/secrets/database_url"),
@@ -158,6 +227,7 @@ PROJECT_AGENT_RUNTIME_OPTION_BOUNDS = {
     "circuit_cooldown_seconds": (1, 600),
 }
 TIMEOUT_KEYS = (
+    "WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS",
     "WORKSTREAM_ARTIFACT_S3_CONNECT_TIMEOUT_SECONDS",
     "WORKSTREAM_ARTIFACT_S3_READ_TIMEOUT_SECONDS",
     "WORKSTREAM_ARTIFACT_S3_WRITE_TIMEOUT_SECONDS",
@@ -205,11 +275,10 @@ REQUIRED_RELEASE_KEYS = (
     "COMPOSE_PROJECT_NAME",
     "WORKSTREAM_BACKEND_IMAGE",
     "WORKSTREAM_MODEL_PROXY_IMAGE",
-    "WORKSTREAM_CHECKER_SERVICE_IMAGE",
+    "WORKSTREAM_CHECKER_SERVICE_BINARY_SHA256",
     "WORKSTREAM_MODEL_PROXY_ENABLED",
     "WORKSTREAM_RUNTIME_UID",
     "WORKSTREAM_RUNTIME_GID",
-    "WORKSTREAM_DOCKER_SOCKET_GID",
     "WORKSTREAM_TOKEN_ISSUER",
     "WORKSTREAM_TOKEN_AUDIENCE",
     "WORKSTREAM_TOKEN_JWKS_URL",
@@ -224,12 +293,16 @@ REQUIRED_RELEASE_KEYS = (
     "WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD",
     "WORKSTREAM_CHECKER_CONFIG_FILE",
     *PROJECT_AGENT_CONFIGURATION_KEYS,
+    *INTAKE_DIGEST_KEYS,
     *ROLES_ANYWHERE_HOST_FILE_KEYS,
     *AWS_S3_EVIDENCE_KEYS,
     *TIMEOUT_KEYS,
     *BASE_SECRET_FILE_KEYS,
 )
 OPTIONAL_RELEASE_KEYS = (
+    "WORKSTREAM_DEPLOYMENT_ROOT",
+    "WORKSTREAM_CHECKER_SERVICE_BINARY",
+    *TRIAL_KEYS,
     "WORKSTREAM_API_HOST_PORT",
     "WORKSTREAM_CELERY_WORKER_CONCURRENCY",
     "WORKSTREAM_OBSERVABILITY_LOG_LEVEL",
@@ -304,21 +377,38 @@ def validate_environment(values: dict[str, str]) -> None:
         raise PreflightError(
             f"release environment contains an unsupported key: {unknown[0]}"
         )
+    root = deployment_paths(values).root
+    binary = checker_service_binary(values)
+    if values.get("WORKSTREAM_DEPLOYMENT_ROOT", str(root)) != str(root) or values.get(
+        "WORKSTREAM_CHECKER_SERVICE_BINARY", str(binary)
+    ) != str(binary):
+        raise PreflightError("deployment paths must use canonical spelling")
+    for path in (root, binary):
+        if (
+            not path.is_absolute()
+            or path != path.resolve(strict=False)
+            or any(character in str(path) for character in (",", "\n", "\r", "\0"))
+            or len(path.parts) < 3
+        ):
+            raise PreflightError("deployment paths must be canonical absolute paths")
+    if root == binary or binary.is_relative_to(root) or root.is_relative_to(binary):
+        raise PreflightError("native service asset overlaps deployment data")
     for key in REQUIRED_RELEASE_KEYS:
         _required(values, key)
     for key in (
         "WORKSTREAM_BACKEND_IMAGE",
         "WORKSTREAM_MODEL_PROXY_IMAGE",
-        "WORKSTREAM_CHECKER_SERVICE_IMAGE",
     ):
         if not IMAGE_REFERENCE.fullmatch(_required(values, key)):
             raise PreflightError(f"release image must use repository@sha256: {key}")
     for key in (
         "WORKSTREAM_RUNTIME_UID",
         "WORKSTREAM_RUNTIME_GID",
-        "WORKSTREAM_DOCKER_SOCKET_GID",
     ):
         _positive_id(values, key)
+    for key in (*INTAKE_DIGEST_KEYS, "WORKSTREAM_CHECKER_SERVICE_BINARY_SHA256"):
+        if not DIGEST.fullmatch(values[key]):
+            raise PreflightError(f"trusted intake requires a pinned digest: {key}")
     for key in FORBIDDEN_RELEASE_KEYS:
         if values.get(key):
             raise PreflightError(
@@ -329,6 +419,15 @@ def validate_environment(values: dict[str, str]) -> None:
             raise PreflightError(f"unsupported release setting: {key}")
     for key in TIMEOUT_KEYS:
         _positive_decimal(values, key)
+    preparation_deadline = _positive_decimal(
+        values, "WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS"
+    )
+    # The canonical Settings owner keeps ZIP inspection at 300s, cleanup at
+    # 300s and scratch TTL at 3900s. No other scratch timing is configurable here.
+    if not 300 < float(preparation_deadline) < 3600:
+        raise PreflightError(
+            "artifact preparation deadline must be greater than 300 and less than 3600 seconds"
+        )
     for key in PROJECT_AGENT_LIMIT_KEYS:
         _positive_id(values, key)
     if (
@@ -365,10 +464,34 @@ def validate_environment(values: dict[str, str]) -> None:
     if runtime != "manager_authored" and not model_proxy_enabled:
         raise PreflightError("inference setup requires the trusted model proxy")
     if model_proxy_enabled:
-        for key in MODEL_PROXY_SECRET_FILE_KEYS:
-            _required(values, key)
+        configured_provider_keys = {
+            key for key in MODEL_PROXY_SECRET_FILE_KEYS if values.get(key)
+        }
+        if runtime == "manager_authored":
+            if not configured_provider_keys:
+                raise PreflightError(
+                    "enabled model proxy requires at least one provider credential"
+                )
+        else:
+            selected_provider_key = MODEL_PROVIDER_SECRET_FILE_KEYS[provider]
+            if selected_provider_key not in configured_provider_keys:
+                raise PreflightError(
+                    "inference setup requires its selected provider credential"
+                )
     elif any(values.get(key) for key in MODEL_PROXY_SECRET_FILE_KEYS):
         raise PreflightError("disabled model proxy cannot select provider credentials")
+    trial_path, trial_digest = (values.get(key, "") for key in TRIAL_KEYS)
+    if bool(trial_path) != bool(trial_digest) or (
+        trial_path
+        and (
+            not model_proxy_enabled
+            or not Path(trial_path).is_absolute()
+            or not DIGEST.fullmatch(trial_digest)
+        )
+    ):
+        raise PreflightError(
+            "trial authority requires the enabled proxy and one pinned manifest pair"
+        )
     try:
         runtime_options = json.loads(values["WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS"])
     except json.JSONDecodeError as exc:
@@ -436,27 +559,86 @@ def load_checker_config(path: Path) -> dict[str, Any]:
 
 def validate_checker_config(config: dict[str, Any], values: dict[str, str]) -> None:
     """Bind release selectors and cache identities to the existing runner."""
+    paths = deployment_paths(values)
     expected = {
-        "socket_path": str(SOCKET_PATH),
-        "material_root": str(SCRATCH_ROOT),
-        "docker_binary": "/usr/local/bin/docker",
-        "runtime": "runsc",
-        "isolation_mode": "gvisor",
+        "socket_path": str(paths.socket),
+        "material_root": str(paths.scratch),
+        "runtime": "smolvm",
+        "isolation_mode": "smol-microvm",
         "operating_system": "linux",
         "sandbox_uid": _positive_id(values, "WORKSTREAM_RUNTIME_UID"),
         "sandbox_gid": _positive_id(values, "WORKSTREAM_RUNTIME_GID"),
     }
+    smol = config.get("smol")
+    if not isinstance(smol, dict) or set(smol) != {
+        "binary",
+        "binary_sha256",
+        "home",
+        "guest_binary",
+        "guest_sha256",
+        "cgroup_root",
+        "maximum_parallel",
+        "maximum_storage_bytes",
+    }:
+        raise PreflightError("native Smol configuration is incomplete")
+    for key in ("binary", "guest_binary", "home", "cgroup_root"):
+        if not isinstance(smol[key], str) or not Path(smol[key]).is_absolute():
+            raise PreflightError("native Smol path is invalid")
+    if len(os.fsencode(smol["home"])) > 59:
+        raise PreflightError("native Smol home exceeds the 59-byte socket path budget")
+    for key in ("binary_sha256", "guest_sha256"):
+        if not isinstance(smol[key], str) or not DIGEST.fullmatch(smol[key]):
+            raise PreflightError("native Smol binary digest is invalid")
+    for key in ("maximum_parallel", "maximum_storage_bytes"):
+        if type(smol[key]) is not int or not 0 < smol[key] <= 2**64 - 1:
+            raise PreflightError("native Smol capacity must be explicitly bounded")
+    if Path(smol["home"]) == paths.scratch or Path(smol["home"]).is_relative_to(
+        paths.scratch
+    ):
+        raise PreflightError("native Smol home must be separate from ART material")
+    protected_inputs = [
+        checker_service_binary(values),
+        Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"]),
+        Path(smol["binary"]),
+        Path(smol["guest_binary"]),
+        *(
+            Path(values[key])
+            for key in (*_secret_file_keys(values), *ROLES_ANYWHERE_HOST_FILE_KEYS)
+        ),
+    ]
+    protected_inputs.extend(
+        Path(image["smol"][key])
+        for image in config.get("cache", [])
+        if isinstance(image, dict) and isinstance(image.get("smol"), dict)
+        for key in ("archive", "image_config")
+        if isinstance(image["smol"].get(key), str)
+    )
+    if values.get(TRIAL_KEYS[0]):
+        protected_inputs.append(Path(values[TRIAL_KEYS[0]]))
+    if any(
+        path.resolve(strict=False).is_relative_to(paths.root)
+        for path in protected_inputs
+    ):
+        raise PreflightError(
+            "private config, credentials and assets must remain outside deployment data"
+        )
     model_proxy_enabled = values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true"
-    expected.update({
-        "model_proxy_socket": str(MODEL_SOCKET_PATH) if model_proxy_enabled else None,
-        "model_relay_root": str(MODEL_RELAY_ROOT) if model_proxy_enabled else None,
-    })
+    expected.update(
+        {
+            "model_proxy_socket": str(paths.model_socket)
+            if model_proxy_enabled
+            else None,
+            "model_relay_root": str(paths.model_relays)
+            if model_proxy_enabled
+            else None,
+        }
+    )
     for key, required in expected.items():
         if config.get(key) != required:
             raise PreflightError(
                 f"checker configuration has an unsafe release value: {key}"
             )
-    if config.get("architecture") not in {"amd64", "arm64"}:
+    if config.get("architecture") != "amd64" or config.get("docker_binary") is not None:
         raise PreflightError(
             "checker architecture is unsupported by this release profile"
         )
@@ -476,6 +658,22 @@ def validate_checker_config(config: dict[str, Any], values: dict[str, str]) -> N
             raise PreflightError("checker cache manifest digest is invalid")
         if not isinstance(image_id, str) or not DIGEST.fullmatch(image_id):
             raise PreflightError("checker cache image ID is invalid")
+        image = entry.get("smol")
+        if not isinstance(image, dict) or set(image) != {
+            "archive",
+            "archive_sha256",
+            "image_config",
+        }:
+            raise PreflightError("checker cache lacks native Smol assets")
+        if not isinstance(image["archive_sha256"], str) or not DIGEST.fullmatch(
+            image["archive_sha256"]
+        ):
+            raise PreflightError("checker cache archive digest is invalid")
+        if any(
+            not isinstance(image[key], str) or not Path(image[key]).is_absolute()
+            for key in ("archive", "image_config")
+        ):
+            raise PreflightError("checker cache asset path is invalid")
         if digest in seen:
             raise PreflightError("checker cache manifest digest is duplicated")
         seen.add(digest)
@@ -483,6 +681,82 @@ def validate_checker_config(config: dict[str, Any], values: dict[str, str]) -> N
             raise PreflightError("checker cache operating system must be linux")
         if entry.get("architecture") != config["architecture"]:
             raise PreflightError("checker cache architecture differs from the runner")
+
+    intake = config.get("trusted_intake")
+    if not isinstance(intake, dict) or set(intake) != {
+        "platform_manifest_digest",
+        "default_behavior_sha256",
+    }:
+        raise PreflightError("native node lacks the trusted intake purpose")
+    selected = [
+        entry
+        for entry in cache
+        if entry["platform_manifest_digest"] == values[INTAKE_DIGEST_KEYS[0]]
+    ]
+    if (
+        len(selected) != 1
+        or selected[0]["config_image_id"] != values[INTAKE_DIGEST_KEYS[1]]
+        or intake["platform_manifest_digest"] != values[INTAKE_DIGEST_KEYS[0]]
+        or not isinstance(intake["default_behavior_sha256"], str)
+        or not DIGEST.fullmatch(intake["default_behavior_sha256"])
+    ):
+        raise PreflightError(
+            "trusted intake cache identity differs from release configuration"
+        )
+
+    trial_path, trial_digest = (values.get(key) or None for key in TRIAL_KEYS)
+    if (
+        config.get("trial_authority_manifest_path"),
+        config.get("trial_authority_manifest_digest"),
+    ) != (trial_path, trial_digest):
+        raise PreflightError("native trial authority differs from the model proxy")
+    trial = config.get("trial_runtime")
+    if trial_path:
+        path_keys = (
+            "relay_root",
+            "scratch_root",
+            "child_home_root",
+            "offline_cache_root",
+            "trusted_launcher_path",
+            "filesystem_tool_path",
+        )
+        digest_keys = (
+            "outer_runtime_config_digest",
+            "builder_image_id",
+            "trusted_launcher_digest",
+            "filesystem_tool_digest",
+        )
+        if (
+            not isinstance(trial, dict)
+            or set(trial)
+            != {
+                *path_keys,
+                *digest_keys,
+                "deployment_owner",
+                "maximum_candidate_archive_bytes",
+            }
+            or any(
+                not isinstance(trial[key], str) or not Path(trial[key]).is_absolute()
+                for key in path_keys
+            )
+            or any(
+                not isinstance(trial[key], str) or not DIGEST.fullmatch(trial[key])
+                for key in digest_keys
+            )
+            or not isinstance(trial["deployment_owner"], str)
+            or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", trial["deployment_owner"])
+            or type(trial["maximum_candidate_archive_bytes"]) is not int
+            or not 0 < trial["maximum_candidate_archive_bytes"] <= 2**64 - 1
+            or trial["builder_image_id"]
+            not in {entry["config_image_id"] for entry in cache}
+        ):
+            raise PreflightError("native trial runtime configuration is incomplete")
+        if len(os.fsencode(trial["child_home_root"])) > 18:
+            raise PreflightError(
+                "native trial child home root exceeds the 18-byte socket path budget"
+            )
+    elif trial is not None:
+        raise PreflightError("native trial runtime lacks a pinned authority manifest")
 
 
 def _private_metadata(path: Path, *, kind: str, uid: int, gid: int, mode: int) -> None:
@@ -505,40 +779,67 @@ def _private_metadata(path: Path, *, kind: str, uid: int, gid: int, mode: int) -
 
 def _secret_file_keys(values: dict[str, str]) -> tuple[str, ...]:
     if values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true":
-        return SECRET_FILE_KEYS
+        return (
+            *BASE_SECRET_FILE_KEYS,
+            *(key for key in MODEL_PROXY_SECRET_FILE_KEYS if values.get(key)),
+        )
     return BASE_SECRET_FILE_KEYS
 
 
 def _role_secret_file_keys(role: str, values: dict[str, str]) -> tuple[str, ...]:
     keys = ROLE_SECRET_FILE_KEYS[role]
     if role == "model-proxy" and values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true":
-        return (*keys, *MODEL_PROXY_SECRET_FILE_KEYS)
+        return (
+            *keys,
+            *(key for key in MODEL_PROXY_SECRET_FILE_KEYS if values.get(key)),
+        )
     return keys
 
 
-def validate_private_host_inputs(values: dict[str, str]) -> None:
+def _validate_native_socket(path: Path, uid: int, gid: int) -> None:
+    try:
+        metadata = path.lstat()
+    except OSError as exc:
+        raise PreflightError("native node socket is unavailable") from exc
+    if (
+        not stat.S_ISSOCK(metadata.st_mode)
+        or metadata.st_uid != uid
+        or metadata.st_gid != gid
+        or stat.S_IMODE(metadata.st_mode) != 0o600
+        or metadata.st_nlink != 1
+    ):
+        raise PreflightError("native node socket identity is unsafe")
+
+
+def validate_private_host_inputs(
+    values: dict[str, str], *, require_node: bool = True
+) -> None:
     """Inspect metadata only; do not read application secret contents."""
+    paths = deployment_paths(values)
     uid = _positive_id(values, "WORKSTREAM_RUNTIME_UID")
     gid = _positive_id(values, "WORKSTREAM_RUNTIME_GID")
-    _private_metadata(SCRATCH_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700)
-    _private_metadata(SOCKET_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700)
+    _private_metadata(paths.root, kind="directory", uid=uid, gid=gid, mode=0o700)
+    _private_metadata(paths.scratch, kind="directory", uid=uid, gid=gid, mode=0o700)
+    _private_metadata(paths.socket_root, kind="directory", uid=uid, gid=gid, mode=0o700)
+    if require_node:
+        _validate_native_socket(paths.socket, uid, gid)
     model_proxy_enabled = values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true"
     if model_proxy_enabled:
         _private_metadata(
-            MODEL_SOCKET_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700
+            paths.model_root, kind="directory", uid=uid, gid=gid, mode=0o700
         )
         _private_metadata(
-            MODEL_RELAY_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700
+            paths.model_relays, kind="directory", uid=uid, gid=gid, mode=0o700
         )
     _private_metadata(
-        GUIDE_SOCKET_ROOT,
+        paths.guide_root,
         kind="directory",
         uid=GUIDE_PARSER_UID,
         gid=GUIDE_PARSER_GID,
         mode=0o750,
     )
     try:
-        guide_socket = GUIDE_SOCKET_PATH.lstat()
+        guide_socket = paths.guide_socket.lstat()
     except FileNotFoundError:
         guide_socket = None
     except OSError as exc:
@@ -554,7 +855,7 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
         raise PreflightError("guide parser socket has unsafe retained state")
     if model_proxy_enabled:
         try:
-            model_socket = MODEL_SOCKET_PATH.lstat()
+            model_socket = paths.model_socket.lstat()
         except FileNotFoundError:
             model_socket = None
         except OSError as exc:
@@ -570,6 +871,7 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
             raise PreflightError("model proxy socket has unsafe retained state")
     private_paths = [
         Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"]),
+        *((Path(values[TRIAL_KEYS[0]]),) if values.get(TRIAL_KEYS[0]) else ()),
         *(Path(values[key]) for key in _secret_file_keys(values)),
         *(Path(values[key]) for key in ROLES_ANYWHERE_HOST_FILE_KEYS),
     ]
@@ -577,13 +879,13 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
         _private_metadata(path, kind="file", uid=uid, gid=gid, mode=0o400)
     try:
         shared_roots = [
-            SCRATCH_ROOT.resolve(strict=True),
-            SOCKET_ROOT.resolve(strict=True),
-            GUIDE_SOCKET_ROOT.resolve(strict=True),
+            paths.scratch.resolve(strict=True),
+            paths.socket_root.resolve(strict=True),
+            paths.guide_root.resolve(strict=True),
         ]
         if model_proxy_enabled:
-            shared_roots.append(MODEL_SOCKET_ROOT.resolve(strict=True))
-            shared_roots.append(MODEL_RELAY_ROOT.resolve(strict=True))
+            shared_roots.append(paths.model_root.resolve(strict=True))
+            shared_roots.append(paths.model_relays.resolve(strict=True))
         resolved_paths = [path.resolve(strict=True) for path in private_paths]
     except (OSError, RuntimeError) as exc:
         raise PreflightError("private host input identity is unavailable") from exc
@@ -607,8 +909,6 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
         raise PreflightError("Docker socket is unavailable") from exc
     if not stat.S_ISSOCK(docker_socket.st_mode):
         raise PreflightError("Docker control path is not a socket")
-    if docker_socket.st_gid != _positive_id(values, "WORKSTREAM_DOCKER_SOCKET_GID"):
-        raise PreflightError("Docker socket group differs from release configuration")
 
 
 def compose_environment(values: dict[str, str]) -> dict[str, str]:
@@ -641,7 +941,14 @@ def _compose_file_arguments(values: dict[str, str]) -> list[str]:
     arguments = ["--file", str(COMPOSE_PATH)]
     if values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true":
         arguments.extend(("--file", str(INFERENCE_COMPOSE_PATH)))
+        for provider, key in MODEL_PROVIDER_SECRET_FILE_KEYS.items():
+            if values.get(key):
+                arguments.extend(
+                    ("--file", str(MODEL_PROVIDER_COMPOSE_PATHS[provider]))
+                )
         arguments.extend(("--profile", "model-proxy"))
+    if values.get(TRIAL_KEYS[0]):
+        arguments.extend(["-f", str(TRIAL_COMPOSE_PATH)])
     return arguments
 
 
@@ -672,7 +979,35 @@ def run_compose(
     environment_path: Path, values: dict[str, str], compose_arguments: list[str]
 ) -> int:
     """Run one documented Compose operation with no ambient interpolation."""
-    if not compose_arguments or compose_arguments[0] not in {
+    command_timeout = None
+    if compose_arguments == ["migrate"]:
+        compose_arguments = [
+            "run",
+            "--rm",
+            "--no-deps",
+            "api",
+            "python",
+            "-m",
+            "alembic",
+            "upgrade",
+            "head",
+        ]
+    elif compose_arguments == ["stop", "worker"]:
+        # The fixed grace period matches validate_compose's worker contract.
+        compose_arguments = ["stop", "--timeout", "7320", "worker"]
+        command_timeout = 7380
+    elif compose_arguments == ["start", "worker"]:
+        compose_arguments = [
+            "up",
+            "--detach",
+            "--no-deps",
+            "--wait",
+            "--wait-timeout",
+            "60",
+            "worker",
+        ]
+        command_timeout = 120
+    elif not compose_arguments or compose_arguments[0] not in {
         "pull",
         "up",
         "ps",
@@ -690,7 +1025,12 @@ def run_compose(
             ],
             check=False,
             env=compose_environment(values),
+            timeout=command_timeout,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise PreflightError(
+            "hosted worker operation exceeded its management deadline"
+        ) from exc
     except OSError as exc:
         raise PreflightError("hosted Compose operation could not start") from exc
     return completed.returncode
@@ -704,7 +1044,7 @@ def run_shutdown(environment_path: Path, values: dict[str, str]) -> int:
     ]
     if values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true":
         phases.append(["stop", "--timeout", "7320", "model-proxy"])
-    phases.append(["stop", "guide-document-parser", "checker-service"])
+    phases.append(["stop", "guide-document-parser"])
     for arguments in phases:
         try:
             completed = subprocess.run(
@@ -842,13 +1182,13 @@ def _validate_exact_bind_mounts(
 
 def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
     """Check the rendered release process and privilege topology."""
+    paths = deployment_paths(values)
     services = rendered.get("services")
     expected_services = {
         "api",
         "worker",
         "beat",
         "guide-document-parser",
-        "checker-service",
         *PROOF_SERVICES,
     }
     model_proxy_enabled = values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true"
@@ -895,7 +1235,6 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         "api",
         "worker",
         "beat",
-        "checker-service",
         *PROOF_SERVICES,
     }
     if model_proxy_enabled:
@@ -952,36 +1291,22 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         ),
     }
     shared_backend_mounts = {
-        str(SCRATCH_ROOT): (str(SCRATCH_ROOT), False),
-        str(SOCKET_ROOT): (str(SOCKET_ROOT), True),
+        str(paths.scratch): (str(paths.scratch), False),
+        str(paths.socket_root): (str(paths.socket_root), True),
     }
     expected_mounts = {
-        "checker-service": {
-            "/etc/workstream/checker-service.json": (
-                values["WORKSTREAM_CHECKER_CONFIG_FILE"],
-                True,
-            ),
-            str(SCRATCH_ROOT): (str(SCRATCH_ROOT), True),
-            str(SOCKET_ROOT): (str(SOCKET_ROOT), False),
-            str(DOCKER_SOCKET): (str(DOCKER_SOCKET), False),
-        } | (
-            {
-                str(MODEL_SOCKET_ROOT): (str(MODEL_SOCKET_ROOT), True),
-                str(MODEL_RELAY_ROOT): (str(MODEL_RELAY_ROOT), False),
-            } if model_proxy_enabled else {}
-        ),
         "api": shared_backend_mounts | runtime_identity_mounts,
         "worker": shared_backend_mounts
-        | {str(GUIDE_SOCKET_ROOT): (str(GUIDE_SOCKET_ROOT), True)}
+        | {str(paths.guide_root): (str(paths.guide_root), True)}
         | (
-            {str(MODEL_SOCKET_ROOT): (str(MODEL_SOCKET_ROOT), True)}
+            {str(paths.model_root): (str(paths.model_root), True)}
             if model_proxy_enabled
             else {}
         )
         | runtime_identity_mounts,
         "beat": {},
         "guide-document-parser": {
-            str(GUIDE_SOCKET_ROOT): (str(GUIDE_SOCKET_ROOT), False),
+            str(paths.guide_root): (str(paths.guide_root), False),
         },
         "aws-proof-runtime": runtime_identity_mounts,
         "aws-proof-readiness": {
@@ -1016,10 +1341,15 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
     }
     if model_proxy_enabled:
         expected_mounts["model-proxy"] = {
-            str(SCRATCH_ROOT): (str(SCRATCH_ROOT), False),
-            str(MODEL_SOCKET_ROOT): (str(MODEL_SOCKET_ROOT), False),
+            str(paths.scratch): (str(paths.scratch), False),
+            str(paths.model_root): (str(paths.model_root), False),
             **runtime_identity_mounts,
         }
+    if values.get(TRIAL_KEYS[0]):
+        expected_mounts["model-proxy"][str(TRIAL_MANIFEST_TARGET)] = (
+            values[TRIAL_KEYS[0]],
+            True,
+        )
     for name, mounts in expected_mounts.items():
         _validate_exact_bind_mounts(name, services[name], mounts)
     expected_secret_files = {
@@ -1042,17 +1372,6 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             raise PreflightError(
                 f"release Compose secret file differs from configuration: {name}"
             )
-    checker = services["checker-service"]
-    if checker.get("network_mode") != "none" or checker.get("ports"):
-        raise PreflightError("checker controller must be networkless and unpublished")
-    checker_groups = checker.get("group_add")
-    if (
-        not isinstance(checker_groups, list)
-        or len(checker_groups) != 1
-        or not isinstance(checker_groups[0], str)
-        or not re.fullmatch(r"[1-9][0-9]*", checker_groups[0])
-    ):
-        raise PreflightError("checker controller must use only the Docker socket group")
     parser = services["guide-document-parser"]
     parser_environment = parser.get("environment")
     if (
@@ -1085,7 +1404,7 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         or parser_environment
         != {
             "WORKSTREAM_RELEASE_ROLE": "parser",
-            "WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET": str(GUIDE_SOCKET_PATH),
+            "WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET": str(paths.guide_socket),
         }
         or parser.get("command")
         != [
@@ -1093,7 +1412,7 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             "-m",
             "app.adapters.guide_document_tools.service",
             "--socket",
-            str(GUIDE_SOCKET_PATH),
+            str(paths.guide_socket),
         ]
     ):
         raise PreflightError("guide parser isolation profile is invalid")
@@ -1105,7 +1424,7 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         "app.adapters.guide_document_tools.service",
         "--healthcheck",
         "--socket",
-        str(GUIDE_SOCKET_PATH),
+        str(paths.guide_socket),
     ]:
         raise PreflightError("guide parser healthcheck is invalid")
     parser_tmpfs = parser.get("tmpfs")
@@ -1136,10 +1455,6 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         "required": True,
     }:
         raise PreflightError("worker must wait for a healthy model proxy")
-    if model_proxy_enabled and services["checker-service"].get("depends_on", {}).get(
-        "model-proxy"
-    ) != {"condition": "service_healthy", "required": True}:
-        raise PreflightError("checker service must wait for a healthy model proxy")
     worker = services["worker"]
     worker_command = worker.get("command")
     if (
@@ -1162,8 +1477,11 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             or proxy.get("stop_grace_period") not in {"7320s", "2h2m0s"}
             or proxy.get("healthcheck", {}).get("test")
             != [
-                "CMD-SHELL",
-                "test -S /var/lib/workstream/model-runtime/model.sock",
+                "CMD",
+                "python",
+                "-c",
+                "import pathlib,sys; sys.exit(0 if pathlib.Path(sys.argv[1]).is_socket() else 1)",
+                str(paths.model_socket),
             ]
         ):
             raise PreflightError("model proxy delivery profile is invalid")
@@ -1264,6 +1582,7 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
                     "WORKSTREAM_RELEASE_ROLE",
                     "WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET",
                     "WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET",
+                    *TRIAL_KEYS,
                 }
             }
         )
@@ -1287,9 +1606,11 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_PRIVATE_KEY_FILE": str(
             ROLES_ANYWHERE_PRIVATE_KEY_TARGET
         ),
-        "WORKSTREAM_ARTIFACT_SCRATCH_ROOT": str(SCRATCH_ROOT),
-        "WORKSTREAM_EXTERNAL_CHECKER_MATERIAL_ROOT": str(SCRATCH_ROOT),
-        "WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET": str(SOCKET_PATH),
+        "WORKSTREAM_ARTIFACT_SCRATCH_ROOT": str(paths.scratch),
+        "WORKSTREAM_EXTERNAL_CHECKER_MATERIAL_ROOT": str(paths.scratch),
+        "WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET": str(paths.socket),
+        "WORKSTREAM_ARTIFACT_INTAKE_SERVICE_SOCKET": str(paths.socket),
+        **{key: values[key] for key in INTAKE_DIGEST_KEYS},
     }
     for key, value in exact.items():
         if str(environment.get(key, "")).lower() != value:
@@ -1304,26 +1625,47 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         service_environment = services[name].get("environment")
         if not isinstance(service_environment, dict):
             raise PreflightError(f"{name} release environment is unavailable")
+        deadline_key = "WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS"
+        if str(service_environment.get(deadline_key, "")) != values[deadline_key]:
+            raise PreflightError(
+                f"rendered artifact preparation deadline differs from release: {name}.{deadline_key}"
+            )
         for key in PROJECT_AGENT_CONFIGURATION_KEYS:
             if str(service_environment.get(key, "")) != values[key]:
                 raise PreflightError(
                     "rendered project agent configuration differs from release: "
                     f"{name}.{key}"
                 )
+    for name, service in services.items():
+        environment = service.get("environment") or {}
+        expected_trial = (
+            {
+                TRIAL_KEYS[0]: str(TRIAL_MANIFEST_TARGET),
+                TRIAL_KEYS[1]: values.get(TRIAL_KEYS[1]),
+            }
+            if name == "model-proxy" and values.get(TRIAL_KEYS[0])
+            else {}
+        )
+        if {
+            key: environment[key] for key in TRIAL_KEYS if key in environment
+        } != expected_trial:
+            raise PreflightError(
+                "trial authority is exposed outside its model-proxy owner"
+            )
     worker_environment = environments["worker"]
     if worker_environment.get("WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET") != str(
-        GUIDE_SOCKET_PATH
+        paths.guide_socket
     ):
         raise PreflightError("worker lacks the fixed guide parser socket")
     if model_proxy_enabled and worker_environment.get(
         "WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET"
-    ) != str(MODEL_SOCKET_PATH):
+    ) != str(paths.model_socket):
         raise PreflightError("worker lacks the fixed model proxy socket")
     if model_proxy_enabled and environments["model-proxy"].get(
         "WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET"
-    ) != str(MODEL_SOCKET_PATH):
+    ) != str(paths.model_socket):
         raise PreflightError("model proxy lacks its fixed socket")
-    for name in ("api", "beat", "checker-service", *PROOF_SERVICES):
+    for name in ("api", "beat", *PROOF_SERVICES):
         service_environment = services[name].get("environment") or {}
         if not isinstance(service_environment, dict):
             raise PreflightError(f"{name} release environment is invalid")
@@ -1376,44 +1718,216 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             raise PreflightError(f"secret value was interpolated into Compose: {key}")
 
 
-def validate_docker_runtime(config: dict[str, Any], values: dict[str, str]) -> None:
-    """Check local runsc registration and exact preloaded image identities."""
-    runtimes = _run_json(
-        ["docker", "info", "--format", "{{json .Runtimes}}"],
-        failure="Docker runtime inventory is unavailable",
+def _verify_smol_asset(path: Path, expected: str, uid: int, deadline: float) -> None:
+    """Hash pinned regular assets without symlinks or writable substitutions."""
+    try:
+        if path.resolve(strict=True) != path:
+            raise PreflightError("native Smol asset path is not canonical")
+        descriptor = os.open(
+            path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+        )
+        with os.fdopen(descriptor, "rb") as asset:
+            metadata = os.fstat(asset.fileno())
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_uid not in {0, uid}
+                or metadata.st_mode & 0o022
+            ):
+                raise PreflightError("native Smol asset custody is unsafe")
+            digest = hashlib.sha256()
+            while True:
+                if time.monotonic() >= deadline:
+                    raise PreflightError(
+                        "native Smol asset verification deadline exceeded"
+                    )
+                chunk = asset.read(65536)
+                if not chunk:
+                    break
+                digest.update(chunk)
+            current = path.lstat()
+            if (
+                not os.path.samestat(metadata, current)
+                or metadata.st_size != current.st_size
+                or "sha256:" + digest.hexdigest() != expected
+            ):
+                raise PreflightError("native Smol asset digest or identity differs")
+    except PreflightError:
+        raise
+    except (OSError, RuntimeError) as exc:
+        raise PreflightError("native Smol asset is unavailable") from exc
+
+
+def validate_smol_runtime(config: dict[str, Any], values: dict[str, str]) -> None:
+    """Check pinned native inputs, delegation and the existing typed node health."""
+    paths = deployment_paths(values)
+    uid = _positive_id(values, "WORKSTREAM_RUNTIME_UID")
+    gid = _positive_id(values, "WORKSTREAM_RUNTIME_GID")
+    smol = config["smol"]
+    _private_metadata(
+        Path(smol["home"]), kind="directory", uid=uid, gid=gid, mode=0o700
+    )
+    group = Path(smol["cgroup_root"])
+    try:
+        if (
+            group.resolve(strict=True) != group
+            or group.stat().st_uid != uid
+            or not group.joinpath("controller").is_dir()
+        ):
+            raise PreflightError("native Smol cgroup delegation identity differs")
+        for name in ("cgroup.controllers", "cgroup.subtree_control"):
+            with group.joinpath(name).open("r", encoding="ascii") as control:
+                controllers = control.read(4097)
+            if len(controllers) > 4096 or not {"cpu", "memory", "pids"} <= set(
+                controllers.split()
+            ):
+                raise PreflightError("native Smol cgroup delegation is incomplete")
+    except (OSError, UnicodeError) as exc:
+        raise PreflightError("native Smol cgroup delegation is unavailable") from exc
+    deadline = time.monotonic() + 30
+    _verify_smol_asset(
+        checker_service_binary(values),
+        values["WORKSTREAM_CHECKER_SERVICE_BINARY_SHA256"],
+        uid,
+        deadline,
+    )
+    for path, digest in [
+        (smol["binary"], smol["binary_sha256"]),
+        (smol["guest_binary"], smol["guest_sha256"]),
+    ]:
+        _verify_smol_asset(Path(path), digest, uid, deadline)
+    for entry in config["cache"]:
+        _verify_smol_asset(
+            Path(entry["smol"]["archive"]),
+            entry["smol"]["archive_sha256"],
+            uid,
+            deadline,
+        )
+        _verify_smol_asset(
+            Path(entry["smol"]["image_config"]), entry["config_image_id"], uid, deadline
+        )
+    if values.get(TRIAL_KEYS[0]):
+        _verify_smol_asset(
+            Path(values[TRIAL_KEYS[0]]), values[TRIAL_KEYS[1]], uid, deadline
+        )
+        trial = config["trial_runtime"]
+        for key in (
+            "relay_root",
+            "scratch_root",
+            "child_home_root",
+            "offline_cache_root",
+        ):
+            _private_metadata(
+                Path(trial[key]), kind="directory", uid=uid, gid=gid, mode=0o700
+            )
+        for path_key, digest_key in (
+            ("trusted_launcher_path", "trusted_launcher_digest"),
+            ("filesystem_tool_path", "filesystem_tool_digest"),
+        ):
+            _verify_smol_asset(Path(trial[path_key]), trial[digest_key], uid, deadline)
+    script = (
+        "import asyncio,json; from dataclasses import asdict; from pathlib import Path; "
+        "from app.core.config import Settings; "
+        "from app.adapters.checkers import configured_external_checker_execution; "
+        "s=Settings(external_checker_service_socket=Path("
+        + repr(str(paths.socket))
+        + "),artifact_scratch_root=Path("
+        + repr(str(paths.scratch))
+        + "),external_checker_material_root=Path("
+        + repr(str(paths.scratch))
+        + "),external_checker_service_timeout_seconds=5.0); "
+        "print(json.dumps(asdict(asyncio.run(configured_external_checker_execution(s).health()))))"
+    )
+    health = _run_json(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--pull=never",
+            "--network",
+            "none",
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--pids-limit=64",
+            "--memory=512m",
+            "--cpus=1",
+            "--user",
+            str(uid) + ":" + str(gid),
+            "--mount",
+            f"type=bind,src={paths.socket_root},dst={paths.socket_root},readonly",
+            "--entrypoint",
+            "python",
+            values["WORKSTREAM_BACKEND_IMAGE"],
+            "-c",
+            script,
+        ],
+        failure="native Smol project readiness failed",
         environment=compose_environment(values),
     )
-    if not isinstance(runtimes, dict) or "runsc" not in runtimes:
-        raise PreflightError("Docker does not report the required runsc runtime")
-    if values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true":
-        runtime = runtimes["runsc"]
-        arguments = runtime.get("runtimeArgs", []) if isinstance(runtime, dict) else []
-        if not isinstance(arguments, list) or [
-            argument for argument in arguments
-            if isinstance(argument, str) and argument.startswith("--host-uds")
-        ] != ["--host-uds=open"]:
-            raise PreflightError(
-                "model-enabled checker runsc requires exactly --host-uds=open"
-            )
-    for entry in config["cache"]:
-        reference = f"{entry['repository']}@{entry['platform_manifest_digest']}"
-        inspected = _run_json(
-            ["docker", "image", "inspect", reference],
-            failure="one configured checker image is not preloaded",
-            environment=compose_environment(values),
-        )
-        if not isinstance(inspected, list) or len(inspected) != 1:
-            raise PreflightError("checker image inspection is ambiguous")
-        image = inspected[0]
-        if (
-            image.get("Id") != entry["config_image_id"]
-            or image.get("Os") != entry["operating_system"]
-            or image.get("Architecture") != entry["architecture"]
-            or reference not in image.get("RepoDigests", [])
-        ):
-            raise PreflightError(
-                "preloaded checker image identity differs from configuration"
-            )
+    if (
+        not isinstance(health, dict)
+        or health.get("runtime") != "smolvm"
+        or health.get("isolation_mode") != "smol-microvm"
+        or health.get("operating_system") != config["operating_system"]
+        or health.get("architecture") != config["architecture"]
+        or health.get("sandbox_uid") != uid
+        or health.get("sandbox_gid") != gid
+        or health.get("cached_platform_manifests") != len(config["cache"])
+    ):
+        raise PreflightError("native Smol project readiness identity differs")
+
+
+def validate_trusted_intake(values: dict[str, str]) -> None:
+    """Use the release image's typed ART adapter without mounting credentials."""
+    paths = deployment_paths(values)
+    script = (
+        "import asyncio,json; from dataclasses import asdict; from pathlib import Path; "
+        "from app.core.config import Settings; "
+        "from app.adapters.artifacts import trusted_submission_intake; "
+        "s=Settings(artifact_intake_service_socket=Path("
+        + repr(str(paths.socket))
+        + "),artifact_intake_image_digest="
+        + repr(values[INTAKE_DIGEST_KEYS[0]])
+        + ",artifact_intake_config_digest="
+        + repr(values[INTAKE_DIGEST_KEYS[1]])
+        + "); "
+        "print(json.dumps(asdict(asyncio.run(trusted_submission_intake(s).health()))))"
+    )
+    health = _run_json(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--pull=never",
+            "--network",
+            "none",
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--pids-limit=64",
+            "--memory=512m",
+            "--cpus=1",
+            "--user",
+            values["WORKSTREAM_RUNTIME_UID"] + ":" + values["WORKSTREAM_RUNTIME_GID"],
+            "--mount",
+            f"type=bind,src={paths.socket_root},dst={paths.socket_root},readonly",
+            "--entrypoint",
+            "python",
+            values["WORKSTREAM_BACKEND_IMAGE"],
+            "-c",
+            script,
+        ],
+        failure="trusted Smol intake readiness failed",
+        environment=compose_environment(values),
+    )
+    if (
+        not isinstance(health, dict)
+        or (health.get("runtime"), health.get("isolation_mode"))
+        != ("smolvm", "smol-microvm")
+        or health.get("image_digest") != values[INTAKE_DIGEST_KEYS[0]]
+        or health.get("config_digest") != values[INTAKE_DIGEST_KEYS[1]]
+    ):
+        raise PreflightError("trusted intake readiness identity differs")
 
 
 def parse_args() -> argparse.Namespace:
@@ -1422,7 +1936,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--configuration-only",
         action="store_true",
-        help="skip host files, Docker runsc and image-cache checks",
+        help="skip native host inputs, Smol readiness and image-cache checks",
     )
     return parser.parse_args()
 
@@ -1439,15 +1953,16 @@ def main() -> int:
         validate_compose(render_compose(args.env_file, values), values)
         if args.configuration_only:
             print(
-                "configuration valid; host identity, runsc/cache, cloud, health and recovery checks skipped"
+                "configuration valid; host identity, Smol/cache, cloud, health and recovery checks skipped"
             )
             return 0
         validate_private_host_inputs(values)
-        validate_docker_runtime(checker_config, values)
+        validate_smol_runtime(checker_config, values)
+        validate_trusted_intake(values)
     except PreflightError as exc:
         print(f"hosted release preflight failed: {exc}", file=sys.stderr)
         return 1
-    print("hosted release configuration and local runsc/cache prerequisites are valid")
+    print("hosted release configuration and native Smol prerequisites are valid")
     return 0
 
 

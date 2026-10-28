@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/Flow-Research/workstream/cli/internal/api"
+	"github.com/Flow-Research/workstream/cli/internal/download"
 	"github.com/Flow-Research/workstream/cli/internal/taskimport"
 	"github.com/spf13/cobra"
 )
@@ -75,7 +76,7 @@ func addTaskBatchSources(batch *cobra.Command, client func() (*api.Client, error
 			if !api.ValidUUID(args[0]) || !api.ValidUUID(args[1]) {
 				return commandError{"invalid_arguments", "PROJECT_ID and SOURCE_ID must be UUIDs"}
 			}
-			root, err := openBoundDownloadRoot(directory)
+			root, err := download.OpenRoot(directory)
 			if err != nil {
 				return err
 			}
@@ -92,9 +93,18 @@ func addTaskBatchSources(batch *cobra.Command, client func() (*api.Client, error
 				return &api.Failure{Code: "task_import_source_not_verified"}
 			}
 			name := result.Value.Filename()
-			if err := publishVerifiedDownload(root, name, func(target io.Writer) error {
-				return apiClient.DownloadTaskImportSource(cmd.Context(), args[0], args[1], result.Value, target)
-			}); err != nil {
+			stage, err := root.Stage(name)
+			if err != nil {
+				return err
+			}
+			defer stage.Abort()
+			if err := apiClient.DownloadTaskImportSource(cmd.Context(), args[0], args[1], result.Value, stage); err != nil {
+				return err
+			}
+			if err := stage.Seal(); err != nil {
+				return err
+			}
+			if err := stage.Publish(); err != nil {
 				return err
 			}
 			if *output == "json" {

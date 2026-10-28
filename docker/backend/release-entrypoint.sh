@@ -104,8 +104,40 @@ case "$role" in
         ;;
     model-proxy)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
-        load_required_secret OPENAI_API_KEY "${WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE:-}"
-        load_required_secret OPENROUTER_API_KEY "${WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE:-}"
+        openai_key_file="${WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE:-}"
+        openrouter_key_file="${WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE:-}"
+        if [ "$runtime" = "manager_authored" ]; then
+            if [ -z "$openai_key_file" ] && [ -z "$openrouter_key_file" ]; then
+                echo "enabled model proxy requires at least one provider credential" >&2
+                exit 1
+            fi
+        else
+            case "$provider" in
+                openai)
+                    if [ -z "$openai_key_file" ]; then
+                        echo "inference setup requires its selected provider credential" >&2
+                        exit 1
+                    fi
+                    ;;
+                openrouter)
+                    if [ -z "$openrouter_key_file" ]; then
+                        echo "inference setup requires its selected provider credential" >&2
+                        exit 1
+                    fi
+                    ;;
+                *)
+                    echo "project agent model provider is unsupported" >&2
+                    exit 1
+                    ;;
+            esac
+        fi
+        if [ -n "$openai_key_file" ]; then
+            load_required_secret OPENAI_API_KEY "$openai_key_file"
+        fi
+        if [ -n "$openrouter_key_file" ]; then
+            load_required_secret OPENROUTER_API_KEY "$openrouter_key_file"
+        fi
+        unset openai_key_file openrouter_key_file
         ;;
     beat)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"

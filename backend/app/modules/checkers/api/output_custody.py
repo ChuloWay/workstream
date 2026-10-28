@@ -12,6 +12,13 @@ from app.modules.checkers.api.canonical_values import (
     CheckerValue,
     ResourceId,
 )
+from app.modules.checkers.api.trial_evidence import (
+    TrialEvidenceArtifactRequest,
+    TrialEvidenceBindingRequest,
+    TrialEvidenceCustodyAck,
+    TrialEvidenceReservation,
+    TrialEvidenceSelector,
+)
 from app.modules.model_usage.api import (
     ModelCallEvidence,
     ModelCallExecutionFacts,
@@ -154,6 +161,11 @@ class CheckerOutputBindingPort(Protocol):
     ) -> CheckerOutputBindingResult:
         """Bind verified checker output under the checker binding action."""
 
+    async def bind_trial_evidence(
+        self, request: TrialEvidenceBindingRequest
+    ) -> TrialEvidenceCustodyAck:
+        """Bind an exact verified trial receipt in the caller transaction."""
+
 
 class CheckerArtifactOutputPort(Protocol):
     """Store generated output for one fixed checker execution."""
@@ -171,9 +183,24 @@ class CheckerArtifactOutputPort(Protocol):
     ) -> bytes:
         """Read one authorized private response with exact byte/hash verification."""
 
+    async def store_trial_evidence(
+        self, request: TrialEvidenceArtifactRequest
+    ) -> CheckerOutputArtifactResult:
+        """Store bounded trial receipt bytes under fresh exact authority."""
 
-GeneratedOutputSelector = CheckerOutputSelector | SetupModelOutputSelector
-GeneratedOutputReservation = CheckerOutputReservation | SetupModelOutputReservation
+    async def recover_trial_evidence(
+        self, selector: TrialEvidenceSelector
+    ) -> CheckerOutputArtifactResult | None:
+        """Recover the original receipt upload without regenerating evidence."""
+
+    async def read_trial_evidence(
+        self, selector: TrialEvidenceSelector, evidence: TrialEvidenceCustodyAck
+    ) -> bytes:
+        """Read and independently verify the exact retained trial receipt."""
+
+
+GeneratedOutputSelector = CheckerOutputSelector | TrialEvidenceSelector | SetupModelOutputSelector
+GeneratedOutputReservation = CheckerOutputReservation | TrialEvidenceReservation | SetupModelOutputReservation
 GENERATED_OUTPUT_SELECTOR = TypeAdapter(GeneratedOutputSelector)
 GENERATED_OUTPUT_RESERVATION = TypeAdapter(GeneratedOutputReservation)
 
@@ -187,17 +214,17 @@ class GeneratedOutputSubject:
     task_id: UUID | None
     submission_id: UUID | None
     submission_version: int | None
-    resource_type: Literal["checker_model_call", "setup_model_call"]
+    resource_type: Literal["checker_model_call", "checker_trial_evidence", "setup_model_call"]
     resource_id: UUID
-    logical_role: Literal["model_request", "model_response"]
+    logical_role: str
+    model_call_attempt_id: UUID | None
+    checker_trial_evidence_id: UUID | None
     operation_identity: str
     request_digest_facts: dict[str, object]
 
 
-def generated_output_subject(
-    reservation: GeneratedOutputReservation,
-) -> GeneratedOutputSubject:
-    """Preserve checker identities and add one exact setup-effect subject."""
+def generated_output_subject(reservation: GeneratedOutputReservation) -> GeneratedOutputSubject:
+    """Normalize the three exact owners without changing retained output identities."""
     reservation = GENERATED_OUTPUT_RESERVATION.validate_python(reservation)
     selector, slot = reservation.selector, reservation.slot
     if isinstance(reservation, SetupModelOutputReservation):
@@ -211,6 +238,8 @@ def generated_output_subject(
             "setup_model_call",
             selector.model_call_attempt_id,
             slot.key,
+            selector.model_call_attempt_id,
+            None,
             canonical_json_hash(
                 {
                     "request_type": "setup_model_output",
@@ -228,6 +257,32 @@ def generated_output_subject(
                 "maximum_bytes": slot.maximum_bytes,
             },
         )
+    if isinstance(reservation, TrialEvidenceReservation):
+        subject = reservation.subject
+        return GeneratedOutputSubject(
+            "checker_output",
+            subject.project_id,
+            subject.task_id,
+            subject.submission_id,
+            subject.submission_version,
+            "checker_trial_evidence",
+            selector.trial_evidence_id,
+            slot.key,
+            None,
+            selector.trial_evidence_id,
+            canonical_json_hash(
+                {
+                    "request_type": "checker_trial_evidence",
+                    "trial_evidence_id": str(selector.trial_evidence_id),
+                    "logical_role": slot.key,
+                }
+            ),
+            {
+                "subject": subject.model_dump(mode="json"),
+                "slot": slot.model_dump(mode="json"),
+                "content_sha256": selector.content_sha256,
+            },
+        )
     paid = selector.paid_slot
     return GeneratedOutputSubject(
         "checker_output",
@@ -238,6 +293,8 @@ def generated_output_subject(
         "checker_model_call",
         selector.model_call_attempt_id,
         slot.key,
+        selector.model_call_attempt_id,
+        None,
         canonical_json_hash(
             {
                 "request_type": "checker_output",

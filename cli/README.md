@@ -26,36 +26,77 @@ non-terminal input/output and JSON mode before making an API request.
 
 Start with your exact-grant projects, then browse **Ready**, **Mine** (active
 assignments) and **Submissions**. Enter opens fresh contributor-safe task or
-owned Submission detail. Active Mine details also offer explicit Context and
-Intake reads. Each list fetches one page; filtering searches only that loaded
-page. Project membership, terms and action hints are observations, not authority
-for a later operation. Workstream rechecks each public read.
+owned Submission detail. Active Mine details offer Context, Intake and Guide
+sections after Overview. Submission detail offers Overview and paged Findings.
+The header keeps the project, collection and active section visible. At
+100×24 or larger, a stable left worklist and scrollable right detail pane keep
+long instructions and acceptance criteria readable. Guide confirmation replaces
+both panes with a scrollable exact-target review; smaller usable terminals
+show one pane at a time, and `--plain` is always single-column. Below 40×10,
+the workspace shows only resize/quit guidance and cannot confirm a download.
+An unopened row previews only loaded-page facts; Enter makes a fresh exact read.
+Each list fetches one page, and filtering searches only that loaded page. The
+status line labels loaded rows, page/continuation and local observation time,
+not a total or a server-wide search. Project membership, potential locked terms
+and action hints are observations, not authority for a later operation.
+Instructions and criteria lead task detail; exact IDs, hashes and decimal
+terms remain available separately. Workstream rechecks each public read.
 
 | Key | Action |
 |---|---|
-| Arrows / Enter | Select, scroll and inspect |
+| Arrows / Enter | Select a row or scroll detail; Enter inspects freshly |
 | Tab / Esc | Change section / go back or cancel |
+| Shift+Tab | Previous collection or detail section |
+| `1` / `2` / `3` | Go directly to Ready / Mine / Submissions from ordinary views |
+| `a` in task Overview | Open Claim or Start when the freshly inspected task supports that action |
 | `g` | Fetch the project picker again |
 | `n` / `r` | Fetch the next page / refresh the current view |
 | `/` | Filter loaded names/titles locally; Enter finishes and Esc cancels |
 | `c` / `?` | Show inert CLI arguments / keyboard help |
-| `q` / Ctrl+C | Quit and cancel outstanding client reads |
+| `d` in Guide | Enter an existing download directory; Enter reviews the scrollable exact target, `y` confirms |
+| `q` / Ctrl+C | Quit and cancel outstanding client requests, not committed server effects; `q` is text during text entry, Ctrl+C always quits |
 
-This first workspace is read-only: it does not claim/start work, prepare or
-submit ZIPs, download documents, export records, poll, acquire tokens or save
-local history. Guide metadata is not proof of downloaded-byte integrity.
-Detailed findings and contribution evidence are clearly labelled manual CLI
-handoffs, not populated TUI screens; displayed arguments never execute or copy
-automatically. Use `submission findings SUBMISSION_ID` and
-`contributions --project PROJECT_ID` explicitly when needed.
+Claim and Start are separate deliberate actions through the existing public
+API. Inspect an exact Ready task to claim it; inspect a claimed Mine task to
+start it. Supply a UUID key you have saved outside this session, review the
+exact action/actor/project/task/key, press `s` to acknowledge the save warning,
+then `y` to confirm. Enter alone never sends the action. The workbench does not generate or persist these keys. Save the
+action, task ID and key together for recovery; this slice omits the optional
+reason. A read or displayed action is not write authority.
+
+There is no automatic retry or claim-to-start chain. A lost response means
+unknown outcome, not rollback. Explicit replay uses the unchanged action, task
+and key (`p`, then review and acknowledge with `s` and confirm with `y`);
+a later denial cannot prove the earlier request failed. Quit cancels
+the client request, not any committed server effect. After restarting, use the
+explicit CLI with your saved inputs and the same API origin and actor. Do not
+substitute a fresh key or infer success from a refreshed list. Automatic
+crash-safe recovery is not implemented.
+
+The workspace does not prepare or submit ZIPs, export records, poll, acquire
+tokens or save local history. Guide metadata is not proof of downloaded-byte integrity. In Guide,
+select one document, enter an existing real directory and confirm its label,
+document/task IDs, path, UUID filename, byte count and hash. Verified bytes are
+published under that filename without overwriting an existing file. Cancelled
+or failed downloads are not published.
+PDF/Office documents are downloaded, not rendered or opened automatically.
+Findings display each returned run's identity, current flag and checker evidence;
+they do not imply the stored Submission outcome or acceptance. `n` fetches one
+next findings page. Contribution facts, available through the explicit CLI,
+do not establish payment or fulfillment.
+Contribution evidence remains a manual CLI handoff: use
+`contributions --project PROJECT_ID`. Displayed arguments never execute or copy
+automatically.
 
 A denial clears affected content; expired authentication clears the session's
-work data. Network failure is shown as unavailable, never as an empty queue or
-successful operation. Refresh is deliberate. No background request retries or
-write recovery occur. The profile read may perform Workstream's existing actor
-admission, last-seen and audit effects; “read-only” does not mean no server-side
-effects. This local interface does not establish a deployed service, payment,
-or completion of the broader [terminal design](../docs/design/cli-terminal-experience.md).
+work data. A failed current read clears its content and continuation and is
+shown as unavailable, never as an empty queue or successful operation. Refresh
+is deliberate. A confirmed write receipt remains distinct from a failed refresh;
+minimal inert replay references do not restore protected task content. The
+profile read may perform Workstream's existing actor
+admission, last-seen and audit effects. This local interface does not establish
+a deployed service, payment or complete submission/management workflows. See
+the [terminal presentation contract](../docs/design/cli-terminal-experience.md).
 
 ## Explicit commands
 
@@ -324,6 +365,41 @@ Silicon macOS (`darwin-arm64`), and Windows x86-64 (`windows-amd64`). Linux
 ARM64 and Windows ARM64 are not part of this first contract. Use the archive
 whose platform matches your host; a different architecture or OS will not run.
 There is no package-manager or automatic-update channel.
+
+### What publication means
+
+Users download from the Releases page, not from an Actions run. Maintainers
+create an approved annotated tag; GitHub Actions builds and tests all four
+platforms, assembles the archives and checksums, then waits for independent
+approval of the `cli-release` environment. Only after approval and successful
+publication do those files become public release downloads. A tag or green
+build alone is not a release. If no published CLI release is listed, use the
+source build below. Maintainers should follow the
+[release runbook](../docs/engineering/cli-release.md); users do not need to
+approve or run that workflow.
+
+### Verify your installation and connection
+
+After verifying and installing the archive as described below, run
+`workstream --version`. Configure `WORKSTREAM_API_URL` with your deployed API
+origin and supply `WORKSTREAM_TOKEN` through your existing secret environment
+mechanism, then run `workstream whoami` and `workstream me projects`.
+The first confirms an authenticated self-read; the second lists exact-grant
+project membership, which may legitimately be empty. Neither proves an entire
+task lifecycle or grants management authority. Do not put tokens in commands,
+screenshots or issue reports.
+
+The connected local CLI journey has separately exercised manager-authored
+setup, task work, ZIP intake, durable evaluation, unpaid automated acceptance
+and contribution evidence with PostgreSQL, MinIO and Celery; see
+[the journey evidence](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-43.md).
+That proof is not hosted deployment verification or proof of human review.
+The [capability ledger](../docs/roadmap_status.md) identifies those remaining
+product boundaries. The interactive workspace exposes claim/start alongside
+contributor reads and guide downloads; explicit commands remain the interface
+for preparation, submission and the other supported mutations.
+
+### Download and install
 
 Download the exact platform archive and `SHA256SUMS` from the same GitHub
 release over HTTPS. Compare the archive's SHA-256 with its exact filename line

@@ -14,10 +14,11 @@ CHECKER_MODEL_CAPABILITY_KEY = "checker_model_generation"
 MAX_CHECKER_MODEL_PROMPT_BYTES = 1 * 1024 * 1024
 MAX_CHECKER_MODEL_OUTPUT_BYTES = 1 * 1024 * 1024
 MAX_CHECKER_MODEL_PROVIDER_ID_LENGTH = 256
-MAX_CHECKER_MODEL_NAME_LENGTH = 128
+MAX_CHECKER_MODEL_NAME_LENGTH = 160
 MAX_CHECKER_MODEL_TOKEN_COUNT = 2**63 - 1
 
-_PROVIDER_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
+_PROVIDER_RESPONSE_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
+_PROVIDER_MODEL_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
 
 
 class CheckerModelProviderStatus(StrEnum):
@@ -85,6 +86,7 @@ class CheckerModelResponseReference:
             self.provider_response_id,
             maximum_length=MAX_CHECKER_MODEL_PROVIDER_ID_LENGTH,
             label="checker model response identity",
+            pattern=_PROVIDER_RESPONSE_IDENTIFIER,
         )
 
 
@@ -136,6 +138,7 @@ class CheckerModelObservation:
             self.provider_model,
             maximum_length=MAX_CHECKER_MODEL_NAME_LENGTH,
             label="checker model provider identity",
+            pattern=_PROVIDER_MODEL_IDENTIFIER,
         )
         if type(self.status) is not CheckerModelProviderStatus:
             raise ValueError("checker model observation is invalid")
@@ -234,10 +237,16 @@ class CheckerModelProvider(ExternalServiceAdapter, Protocol):
         """Close provider transport resources owned by this adapter."""
 
 
-def _require_provider_identifier(value: object, *, maximum_length: int, label: str) -> None:
+def _require_provider_identifier(
+    value: object,
+    *,
+    maximum_length: int,
+    label: str,
+    pattern: re.Pattern[str],
+) -> None:
     if (
         not isinstance(value, str)
         or len(value) > maximum_length
-        or _PROVIDER_IDENTIFIER.fullmatch(value) is None
+        or pattern.fullmatch(value) is None
     ):
         raise ValueError(f"{label} is invalid")

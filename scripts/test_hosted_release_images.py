@@ -5,6 +5,7 @@ import copy
 import json
 from pathlib import Path
 import re
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -479,6 +480,7 @@ class ReleaseImageProofTests(unittest.TestCase):
             )
         }
         evidence.update(
+            proof_scope="all-release-images",
             source_sha="b" * 40,
             tree_sha="c" * 40,
             backend_agents_image_id="sha256:" + "d" * 64,
@@ -499,6 +501,95 @@ class ReleaseImageProofTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 proof.write_evidence(linked, evidence)
             self.assertEqual(json.loads(output.read_text()), evidence)
+
+    def test_native_hosted_proves_both_backends_without_controller_image(self):
+        head = "a" * 40
+        for checker_image in (False, True):
+            arguments = [
+                "verify_hosted_release_images.py",
+                "--scope",
+                "native-hosted",
+                "--expected-head",
+                head,
+                "--container-owner",
+                "123-1",
+                "--backend-agents-image",
+                "agents",
+                "--backend-omnicore-image",
+                "omnicore",
+                "--evidence",
+                "/unused/evidence.json",
+            ]
+            if checker_image:
+                arguments.extend(["--checker-image", "controller"])
+
+            def checked(command):
+                if command[:3] == ["git", "status", "--porcelain"]:
+                    return b""
+                return (head + "\n").encode()
+
+            omnicore = self.backend | {"sdk_environment": "omnicore"}
+            with (
+                self.subTest(checker_image=checker_image),
+                patch.object(sys, "argv", arguments),
+                patch.object(proof, "checked", side_effect=checked),
+                patch.object(proof, "source_inventory", return_value=self.source),
+                patch.object(proof, "expected_packages", return_value=self.packages),
+                patch.object(proof, "file_hash", return_value=self.loader),
+                patch.object(
+                    proof, "image_metadata", side_effect=lambda image, role: image
+                ) as metadata,
+                patch.object(
+                    proof, "inspect_image", side_effect=[self.backend, omnicore]
+                ) as inspect,
+                patch.object(proof, "verify_backend_entrypoint") as entrypoint,
+                patch.object(proof, "verify_checker") as checker,
+                patch.object(proof, "write_evidence") as write,
+            ):
+                if checker_image:
+                    with self.assertRaisesRegex(ValueError, "checker image"):
+                        proof.main()
+                    metadata.assert_not_called()
+                    write.assert_not_called()
+                    continue
+                proof.main()
+                self.assertEqual(metadata.call_args_list[0].args, ("agents", "backend"))
+                self.assertEqual(
+                    metadata.call_args_list[1].args, ("omnicore", "backend")
+                )
+                self.assertEqual(inspect.call_count, 2)
+                self.assertEqual(entrypoint.call_count, 2)
+                checker.assert_not_called()
+                evidence = write.call_args.args[1]
+                self.assertEqual(evidence["proof_scope"], "native-hosted")
+                self.assertFalse(any(key.startswith("checker_") for key in evidence))
+
+    def test_native_hosted_evidence_cannot_claim_controller_or_node_attestation(self):
+        evidence = {
+            "proof_scope": "native-hosted",
+            "source_sha": "a" * 40,
+            "tree_sha": "b" * 40,
+            "backend_agents_image_id": "sha256:" + "c" * 64,
+            "backend_omnicore_image_id": "sha256:" + "d" * 64,
+            **{
+                key: "e" * 64
+                for key in (
+                    "backend_source_sha256",
+                    "backend_lock_sha256",
+                    "loader_sha256",
+                    "roles_anywhere_helper_sha256",
+                )
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "evidence.json"
+            proof.write_evidence(path, evidence)
+            self.assertEqual(json.loads(path.read_text()), evidence)
+            for key in ("checker_image_id", "native_service_sha256", "guest_sha256"):
+                with self.subTest(key=key), self.assertRaisesRegex(ValueError, "shape"):
+                    proof.write_evidence(
+                        Path(directory) / "bad.json", evidence | {key: "f" * 64}
+                    )
 
 
 if __name__ == "__main__":

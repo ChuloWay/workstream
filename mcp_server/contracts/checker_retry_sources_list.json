@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "92e2c6beb79ece65efdda72ff67caa35f9f990295eddd82e62e16e45c20d6ce6",
+  "canonical_sha256": "5c0d85b8c1accb02cd4982ce8b636b329b073eb74c8214374ff47a8516fd6fac",
   "components": {
     "schemas": {
       "ApiError": {
@@ -160,6 +160,14 @@
             "title": "Created At",
             "type": "string"
           },
+          "model_recovery_candidates": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ModelRecoveryCandidate"
+            },
+            "title": "Model Recovery Candidates",
+            "type": "array"
+          },
           "recovery_state": {
             "enum": [
               "eligible",
@@ -310,6 +318,123 @@
           "detail",
           "error"
         ],
+        "type": "object"
+      },
+      "ModelPaidSlotKey": {
+        "additionalProperties": false,
+        "description": "Paid-effect identity stable across checker leases and retry generations.",
+        "properties": {
+          "assignment_id": {
+            "format": "uuid",
+            "title": "Assignment Id",
+            "type": "string"
+          },
+          "configuration_sha256": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Configuration Sha256",
+            "type": "string"
+          },
+          "profile_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Profile Digest",
+            "type": "string"
+          },
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_version": {
+            "minimum": 1.0,
+            "title": "Profile Version",
+            "type": "integer"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "registry_entry_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Registry Entry Digest",
+            "type": "string"
+          },
+          "requirement_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.-]*$",
+            "title": "Requirement Id",
+            "type": "string"
+          },
+          "slot_index": {
+            "default": 0,
+            "maximum": 99.0,
+            "minimum": 0.0,
+            "title": "Slot Index",
+            "type": "integer"
+          },
+          "submission_id": {
+            "format": "uuid",
+            "title": "Submission Id",
+            "type": "string"
+          },
+          "submission_version": {
+            "minimum": 1.0,
+            "title": "Submission Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_id",
+          "assignment_id",
+          "submission_id",
+          "submission_version",
+          "requirement_id",
+          "registry_entry_digest",
+          "configuration_sha256",
+          "profile_id",
+          "profile_version",
+          "profile_digest"
+        ],
+        "title": "ModelPaidSlotKey",
+        "type": "object"
+      },
+      "ModelRecoveryCandidate": {
+        "additionalProperties": false,
+        "description": "Exact terminal paid effect disclosed under existing Operator retry reads.",
+        "properties": {
+          "parent_attempt_id": {
+            "format": "uuid",
+            "title": "Parent Attempt Id",
+            "type": "string"
+          },
+          "registry_entry_id": {
+            "format": "uuid",
+            "title": "Registry Entry Id",
+            "type": "string"
+          },
+          "request_sha256": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Request Sha256",
+            "type": "string"
+          },
+          "slot": {
+            "$ref": "#/components/schemas/ModelPaidSlotKey"
+          },
+          "terminal_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Terminal Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slot",
+          "registry_entry_id",
+          "terminal_digest",
+          "request_sha256",
+          "parent_attempt_id"
+        ],
+        "title": "ModelRecoveryCandidate",
         "type": "object"
       }
     }
@@ -609,7 +734,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "operations.checker_retry_source.list",
-    "backend_git_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694",
+    "backend_git_sha": "9e38a8491f3497702c7395bb24260433ea8b4199",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/operations/projects/{project_id}/checker-retry-sources"

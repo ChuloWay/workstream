@@ -44,13 +44,68 @@ for separate runner provisioning and Operator registration; it changes no policy
   normalized result and settles owned resources.
 - The image evaluates the approved project requirements and returns bounded
   findings. It cannot approve a submission, mutate project policy, select another
-  image, mount another project's files or request a private host-side continuation.
+  image, mount another project's files or request a private host-side continuation
+  through its final output.
+
+POST grants use one aggregate v2 workspace with fixed role roots and a separate
+temporary manifest for each selected binding. Current work mounts at
+`/work/input`. A registry-declared, policy-approved revision-context selection
+may additionally expose the exact prior attempt at `/work/context/predecessor`
+and bounded prior findings in `input.evaluation_context`. Neither a global
+Submission version nor a project image request authorizes historical access.
+Initial attempts carry explicit null prior context, including after another
+contributor releases a task. PRE keeps its distinct pre-admission grant; there
+is no POST fallback to the PRE protocol. See the
+[POST contract](../docs/architecture_checker_framework.md#post-submit-contract)
+for selection, evidence, quota and replay rules.
 
 The service does not interpret project-private build plans. An image that needs
-to compile or test submitted work must implement that behavior within the
-supported isolation and resource contract. Unsupported runtime needs must be
-resolved explicitly before approving that capability; they are not permission
-to add a named-project exception or expose the host Docker socket.
+to compile or test submitted work may use the typed generic invocation-local
+trial tool only when its exact POST binding and administrative profile authorize
+that capability. The image supplies bounded generic operations, safe relative
+selectors and workload argument arrays through `/work/execution.sock`; it never
+selects Docker flags, host paths, mounts, runtime, images, network, devices,
+credentials or resource enlargements. Opaque profile material roles control
+build and runtime visibility. Shared Rust contains no project filenames, task
+allowlists, rubrics or command allowlists.
+
+A visible read-only role occupies one profile-selected top-level workspace
+name. Nested overlay destinations and existing-entry collisions are refused;
+the launcher removes its temporary mountpoint before retaining workspace
+state. Build-context and state-seed selectors may still use safe nested paths.
+
+The service keeps Smol launch authority, approved offline material, protected
+role projection, aggregate limits, observation and cleanup custody. Workload
+argv is passed to the trusted guest launcher as bounded workload arguments; it
+is never interpreted as host launcher flags. Trial observations become usable
+only after required operations and cleanup complete. A dependent model call
+resolves server-owned same-invocation receipt facts instead of trusting JSON
+copied by the checker. Unsupported runtime or material remains an explicit gap;
+it is not permission to expose the host Docker socket or add a named-project
+service branch.
+
+Candidate images are checked before Smol loads them: ordered uncompressed
+layer digests must match the image configuration, and streaming expansion plus
+conservative file/directory allocation must fit the invocation's remaining
+byte and entry allowances. Repeated layers consume that allowance again.
+Malformed archives and unsupported sparse/device representations are refused.
+Smol does not create anonymous storage from image `Volumes` metadata; the
+trusted launcher owns writable mounts and their quotas. These are runtime
+capability limits, not additional project requirements. Project checks must report unavailable execution distinctly
+from a verified work failure.
+
+Every completed build or step records `export_outcome` separately from the
+child's exit code or signal. `exported` means the bounded candidate or workspace
+was retained; `capacity_exceeded` means its logical bytes or entries exceed the
+allowance; `invalid` means it cannot be represented by the supported export
+format. The latter two produce `disk_exceeded` or `export_invalid` observations
+while preserving the actual child status. A forced runtime stop records
+`unavailable` and does not invent an exit code or signal. `not_started` covers
+dependency-skipped steps and failed builds that never request candidate export.
+Only an exported workspace whose work outcome the profile permits may feed a
+later step. Host storage or export I/O failures remain infrastructure failures;
+they are not evidence that submitted work exceeded its allowance. Project
+images interpret these execution facts against their own approved requirements.
 
 ## Optional model socket
 
@@ -106,15 +161,41 @@ because this path does not rely on privileged ownership changes.
 Docker development proves only the ordinary runtime path. A gVisor `runsc`
 deployment must separately enable `host-uds=open` before a mounted host Unix
 socket can work. This repository does not claim that the model relay has been
-qualified under gVisor.
+qualified under gVisor at the current source; historical runsc composition
+evidence applies only to its recorded implementation.
 
-The Smol engine does not currently project host Unix sockets into its guest.
-Its service configuration therefore rejects the model-proxy/relay pair, and a
-model-entitled request sent to a Smol-only node returns
-`implementation_unavailable` before VM admission. Model-enabled POST remains a
-`runsc`/`gvisor` deployment capability until a separately reviewed guest-native
-transport preserves the same invocation-local custody; this merge does not
-claim such support.
+Smol exposes guest-local model and execution sockets through its trusted guest
+stream. The host forwards only the capabilities granted to that invocation to
+the existing relays. A persistent model connection can remain open while an
+execution request runs. Each execution session carries one request and response,
+then closes with exact EOF. The transport uses a fresh execution-relay connection
+for each request and reaps completed handlers, retaining at most one handler per
+channel. The current trial relay authorizes one plan and one execution connection
+per checker invocation; transport support for sequential sessions does not grant
+additional trials. Workload stdout never carries control frames. No host
+socket or provider credential is mounted into the microVM. Trials use fresh
+Smol sibling VMs and have no Docker/runsc fallback. Controlled KVM composition
+013 passed on native build `b2ce3fa45`: trusted intake, two trials of 17 steps, four controlled
+model effects, verified PostgreSQL/MinIO ART receipts, replay without new model
+calls and confirmed VM/cgroup cleanup. Builder and candidate-step execution
+verified the shared syscall filter. The [qualification record](../.commitrail/changes/terminal-systems-project-checkers.md#repaired-confinement-and-resource-qualification-on-real-kvm)
+binds the exact source, artifacts and 2 GiB aggregate disk profile. This initial
+submission composition does not exercise predecessor material; direct proof 36
+separately covers predecessor transport/custody and guest resource ceilings.
+Active nested caller cancellation, exact child VMM death and controller death/restart
+passed in physical cases 026–028 at proof source `8012f2792`, using the same native
+build: no false completion or trial ART effects, full owned cleanup, and both
+admission slots reusable. See the [interruption evidence](../.commitrail/changes/terminal-systems-project-checkers.md#active-nested-interruption-qualification-on-real-kvm).
+Hosted Smol composition and its scoped AWS proof are tracked separately in
+[PR #692](https://github.com/Flow-Research/workstream/pull/692); that owned baseline
+does not establish live-model grading or the full Terminal Systems
+guide-to-contribution journey.
+
+The [hosted composition](../deploy/hosted/README.md) uses that same native node
+for typed intake and project execution, with credentials confined to the trusted
+proxy. Its configuration/readiness checks do not establish a live model call or
+public lifecycle qualification. PRE model selectors remain unsupported; only
+existing approved POST model lineage can issue that grant.
 
 The opt-in
 [`model_relay_docker.py`](workstream-checker-service/tests/model_relay_docker.py)
@@ -190,15 +271,19 @@ configuration before starting this version; unknown configuration is rejected.
 Retain registry entries, locked policies, submissions and historical evidence.
 Do not rewrite them to point at replacement images. Any replacement needs the
 normal versioned registration, proposal and approval process. A retained image
-that returns a private plan now produces an invalid-output infrastructure failure,
-not a continuation or a contributor-work failure. Do not blindly retry it as if
-the capability still exists.
+that returns `project_private_plan.v1` or another private plan as its outer
+output still produces an invalid-output infrastructure failure, not a
+continuation or a contributor-work failure. The typed invocation tool does not
+parse an outer result to start host work. Do not blindly retry a retired plan as
+if that capability still exists.
 
 ## Smol microVM engine
 
-The node also accepts the deployment pair `smolvm` / `smol-microvm`. Python still
+The hosted node uses the deployment pair `smolvm` / `smol-microvm`. Python still
 uses the single `external_checker_execution/unix_socket` provider; neither a
-project policy nor a checker request can choose the engine. Each execution gets
+project policy nor a checker request can choose the engine. The trusted guest
+receives typed current and optional predecessor material roots and the authorized
+callback capabilities. Each execution gets
 a fresh VM and the same verified ART grant and JSON result contract. The native
 bootstrap has no Python or shell dependency in a project image.
 
@@ -207,35 +292,82 @@ Use Linux x86-64 with `/dev/kvm`, cgroup v2 and Smol 1.31.4. The
 places the controller in its own subgroup; `DelegateSubgroup` requires systemd
 254 or later ([systemd documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html#DelegateSubgroup=)).
 Set `smol.cgroup_root` to that unit's delegated root, not the controller subgroup.
-The service refuses startup outside its delegation. Use the ART grant issuer's
-Unix identity and a separate private socket directory, Smol HOME and image cache
-for each node. The sample unit's CPU, memory and task ceilings are deployment
-capacity; individual registered checker limits remain unchanged.
+The service refuses startup outside its delegation. Use the ART grant issuer's numeric UID/GID (`10001:10001` in the hosted unit)
+and a separate private socket directory, Smol HOME and image cache for each node. The sample unit's CPU, memory and task ceilings are deployment
+capacity; individual registered checker limits remain unchanged. Hosted releases
+may select one canonical private deployment root and a digest-pinned native
+binary path; the same derived absolute scratch/socket paths must appear in the
+node JSON and API/worker mounts. See the
+[hosted operator sequence](../deploy/hosted/README.md#start-and-inspect) for
+migration/activation/proxy prerequisites and native readiness.
+
+Keep the canonical Smol HOME path at most 59 filesystem bytes. Trial-enabled
+nodes also need a separately owned `trial_runtime.child_home_root` at most 18
+bytes (for example, an operator-created private `/var/lib/wschild`). Smol appends
+its VM directory and socket names; each child additionally receives its full
+random private HOME name. Startup rejects longer paths before accepting work.
+These bounds count encoded bytes, not characters. Do not use symlink aliases or
+shorten invocation identities to fit the Linux Unix-socket limit.
 
 For this engine omit `docker_binary`, and configure `smol` with absolute `binary`,
 `home`, `guest_binary`, `cgroup_root` paths; `binary_sha256` and `guest_sha256`;
-and `maximum_parallel`. Install the verified Smol release bundle together and
+and required positive `maximum_parallel` and `maximum_storage_bytes`. Install the verified Smol release bundle together and
 keep it operator-controlled. Build `workstream-checker-guest` for
 `x86_64-unknown-linux-musl`; the node and bootstrap must come from the same source.
 Each existing cache entry additionally has `smol.archive`,
 `smol.archive_sha256` and `smol.image_config`. The
-[cache preparation command](../backend/scripts/checker_smol_cache.py) checks an already local
-Docker-save archive against its platform manifest, config and rootfs identities.
-Run it from `backend/` with `uv run python -m scripts.checker_smol_cache`.
-It shares platform-manifest validation with the image publisher and verifies
-every declared layer blob and its uncompressed identity. It emits cache configuration; it neither registers the image nor activates a
-policy. Runtime execution needs no Docker daemon, registry credentials or image
-pull. Smol retains private hard links to imported archives; link count alone is
-not an image-integrity check.
+[cache preparation command](../backend/scripts/checker_smol_cache.py) verifies an already local
+Docker-save archive against its approved platform manifest, config and rootfs identities.
+It writes a distinct canonical USTAR archive containing only the closed Docker-save
+manifest and exact approved platform/config and selected/approved layer bytes. Nullable
+source tags, layer-source hints and unrelated compatibility metadata confer no authority
+and are omitted. The source archive and its permissions remain unchanged; the new archive
+has its own hash while the approved platform/config/layer identities stay the same.
 
-The node reserves aggregate memory and concurrent slots before launch. A guest
+Run from `backend/` with two new, distinct output paths:
+
+```sh
+uv run python -m scripts.checker_smol_cache \
+  --archive /absolute/source/image.tar --repository registry.example/checker \
+  --manifest sha256:<approved-platform-manifest> \
+  --archive-output /absolute/cache/image.tar --config-output /absolute/cache/config.json
+```
+
+The command bounds raw headers, paths and metadata before parsing, rejects aliases,
+links, unsupported tar extensions and conflicting ancestry, and rehashes graph bytes
+while copying. Outputs are created exclusively and sealed read-only; failure removes
+only partial files still matching this invocation's created inodes. It shares platform
+validation with the image publisher and verifies each layer's uncompressed identity.
+It emits cache configuration; it neither registers the image nor activates a policy.
+Runtime execution needs no Docker daemon, registry credentials or image pull. Smol
+retains private hard links to imported archives; link count alone is not an integrity check.
+
+The node reserves aggregate memory, disk and concurrent slots before launch.
+A trial invocation reserves the outer checker plus one sequential child VM
+atomically, before either VM launch or model spend. A one-slot node rejects such
+an invocation instead of waiting for capacity while holding its only slot. A guest
 supervisor applies the exact requested CPU and memory controls, a bounded PID
 limit, non-root IDs, no capabilities, read-only root/material, a 16 MiB `/tmp`,
-and denied management syscalls and network access. Submitted material is staged
+and denied management syscalls and network access. Image-owned `/work` and `/tmp`
+links or non-directory mount roots are rejected before the image command runs.
+Submitted material is staged
 on bounded VM disk, separate from checker heap. The host bounds VMM resources
 and charges virtualization overhead separately. Results are returned only after
 VM and cgroup removal is confirmed. Unknown cleanup closes admission and requires
-startup reconciliation. Independent lease guardians survive controller death;
+startup reconciliation. Failures before lease creation or after confirmed cleanup
+return recoverable infrastructure failure without stopping other checks.
+The private trial stream carries the export header, export bytes, retained stdout,
+retained stderr and final receipt in that order. Each output length and digest is
+bound by both header and final receipt; successful exit and exact EOF are required.
+The combined raw output ceiling is the approved profile's bound, at most 4 MiB;
+JSON control frames remain at most 1 MiB. Output capture and transmission stay in
+the finite guest operation envelope. Observations retain exact UTF-8 text and its
+hash. When an enforced output cut splits a trailing UTF-8 scalar, only that
+incomplete suffix (at most three bytes) is trimmed, without changing the
+`output_exceeded` outcome. Intrinsically invalid UTF-8 is an explicit unsupported
+text-protocol failure; it is never replaced, silently discarded or rehashed as
+empty output.
+Independent lease guardians survive controller death;
 `KillMode=process` preserves that cleanup lifetime. Preserve the private owner
 file and lease directory across restarts. Never clone them between running nodes.
 
@@ -245,8 +377,71 @@ covers the node contract; it is not public upload, admission, durable POST or
 FinalAcceptance evidence. The [recovery proof](workstream-checker-service/tests/smol_recovery.py)
 requires an isolated test unit: it kills the controller and injects a deletion
 failure while checking foreign VM/cgroup survival, bounded cleanup and closed
-readiness. Never run it against a shared production node.
-Same-request upload preparation and trusted guest ZIP/
-default processing are the next boundary in
-[WS-EXEC-001](../.commitrail/initiatives/WS-EXEC-001/OVERVIEW.md). Existing hosted
-Docker/runsc release composition remains a distinct deployment configuration.
+readiness. The [creation proof](workstream-checker-service/tests/smol_creation.py)
+checks that denied lease or cgroup creation preserves an already running check
+and keeps the controller available after confirmed cleanup. Never run either
+proof against a shared production node.
+The [guest mount proof](workstream-checker-service/tests/smol_guest_mounts.py)
+uses a clean image and two variants built from the
+[test Dockerfile](workstream-checker-service/tests/fixtures/mount-targets/Dockerfile)
+with `MOUNT_ROOT=work` and `MOUNT_ROOT=tmp`. It checks a command marker and the
+bootstrap rejection reason, so an error after image code ran cannot pass. Run
+it only with an isolated runtime home; exact test machines and disks are removed.
+
+## Trusted submission intake
+
+ART uses the separate typed `trusted_submission_intake/unix_socket` capability.
+After task/project authorization, the upload request starts one trusted VM while
+receiving the ZIP. The sealed artifact reader streams the exact bytes into that
+VM for canonical inspection and extraction. ART verifies every exported path,
+size, mode and hash in quota-owned scratch. The default PRE checker runs inside
+the trusted VM only after the selected PRE reservation commits. Cleanup must be
+acknowledged before project checker execution, including on a one-slot node.
+POST uses the same intake capability during authorized artifact download and
+retains its existing lease and material revalidation.
+
+Build `intake/Dockerfile` from the repository root, pin its platform manifest and
+config, and provision it with the same cache command. Configure the node's
+`trusted_intake` object with `platform_manifest_digest` and
+`default_behavior_sha256` (the canonical `WORKSTREAM_DEFAULT_BEHAVIOR_SHA256` from
+`app.modules.checkers.api.default_checker`). The node selects this image; project
+registrations cannot select the trusted intake mode. The trusted guest uses
+1 CPU, 2 GiB memory and 3 GiB private disk; aggregate node capacity must include
+virtualization overhead. Its private writable scratch is bounded processing
+space, never artifact storage.
+
+Backend API and durable workers require all three settings:
+
+- `WORKSTREAM_ARTIFACT_INTAKE_SERVICE_SOCKET`: private absolute Unix socket path.
+- `WORKSTREAM_ARTIFACT_INTAKE_IMAGE_DIGEST`: exact trusted platform manifest digest.
+- `WORKSTREAM_ARTIFACT_INTAKE_CONFIG_DIGEST`: exact image config digest.
+
+The configured socket must serve Smol with the expected trusted image and default
+behavior. The hosted release uses the same native node socket for this typed capability
+and project execution; the protocols and privileged intake image remain separate.
+Missing or mismatched configuration fails closed. Local Docker-only mechanism
+configurations still cannot supply Smol intake readiness.
+
+The original artifact deadline bounds upload and intake preparation together.
+Only known pre-launch infrastructure failures permit at most three preparation
+attempts, after confirmed cleanup, with 100/200 ms backoff inside that deadline.
+No retry occurs after archive bytes are accepted. Upload failure, cancellation,
+EOF or expiry closes the lease; capacity remains reserved until guardian cleanup.
+A lost cleanup acknowledgment is an infrastructure failure, never evidence that
+resources were released. Used VMs are destroyed; only capacity is reused.
+
+The opt-in [intake proof](workstream-checker-service/tests/trusted_intake.py) uses
+backend dependencies and an isolated `maximum_parallel=1` node. It exercises
+retained ART inspection/export/grant custody, poisons host ZIP/default execution,
+and checks cancellation, abandoned uploads and idle expiry. Run with
+
+```bash
+PYTHONPATH=backend python external_checkers/workstream-checker-service/tests/trusted_intake.py \
+  --socket /absolute/node.sock --image sha256:... --config sha256:...
+```
+
+This matrix proves the adapter/ART boundary. The separate
+[public lifecycle drill](../experiments/pilot04_external_checker_runtime/README.md)
+connects the same node to API uploads and durable workers, including the public
+Operator retry and both governed policy branches. Its recorded Flow/inference
+fixtures do not certify production identity, live models or hosted deployment.

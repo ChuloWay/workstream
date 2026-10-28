@@ -164,14 +164,14 @@ func addSubmissionCommands(root, task *cobra.Command, client func() (*api.Client
 		if err != nil {
 			return err
 		}
-		raw, err := c.SubmissionFindings(cmd.Context(), args[0], run, limit, cursor)
+		result, err := c.SubmissionFindings(cmd.Context(), args[0], run, limit, cursor)
 		if err != nil {
 			return err
 		}
 		if *output == "json" {
-			return writeSafeJSON(stdout, raw)
+			return writeSafeJSON(stdout, result.Raw)
 		}
-		return writeTaskContextFields(stdout, []contextField{{"Checker evidence (not acceptance)", raw}})
+		return writeTaskContextFields(stdout, []contextField{{"Checker evidence (not acceptance)", result.Raw}})
 	}
 	submission.AddCommand(findings)
 	root.AddCommand(submission)

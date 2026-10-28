@@ -257,6 +257,9 @@ jobs:
           # Tests that exercise concurrency create their own threads.
           cargo test --workspace --locked -- --test-threads=1
 
+      - name: Verify trial qualification evidence guards
+        run: python3 external_checkers/workstream-checker-service/tests/test_qualify_smol_script.py -v
+
   lanes:
     needs: [scope, minio-image]
     if: >-
