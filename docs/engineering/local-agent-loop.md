@@ -338,10 +338,26 @@ non-blocking `warning` finding with code `harnessy.operator_approved`: the work
 may earn points but may not be paid in money until an independent reviewer
 confirms it. The verdict does not change.
 
-**Until facts are wired.** WorkStream's POST evaluation does not yet supply
-facts (initiative chunk 04). Until it does, every evaluation with this checker
-fails with `facts_missing`, so this stack cannot reach automatic
-FinalAcceptance through it. There is deliberately no shape-only mode.
+**Where the facts come from.** For a POST binding that selects forge facts,
+WorkStream's POST evaluation reads the claimed `pr_url` from `proof.json`,
+and, when it names a change in the configured repository on the configured
+`forge_origin`, reads that change's facts from the forge before running the
+checker (initiative chunk 04). GitHub is read as the read-only GitHub App
+configured by the `WORKSTREAM_GITHUB_APP_*` settings in `backend/.env.example`;
+its web origin follows the API URL (`https://github.com` for the public API,
+the Enterprise host otherwise), and a binding whose `forge_origin` differs ends
+as an infrastructure failure. For reviewers who approved the head commit, the
+App also reads their current repository permission, so an approval counts only
+from someone with write access. A missing, oversized or malformed `proof.json`
+fails with the checker's `missing`, `too_large` or `invalid_json` finding. A
+claim that names another repository, a change the forge does not have, a
+change into another base branch, or one with more changed files, reviews or
+checks than GitHub lists (3000 files) yields no facts, and the checker fails
+with `facts_missing`; so do facts too large for the 1 MiB checker input. If the forge is
+unreachable, refuses the credential, cannot read the configured repository or
+answers outside its protocol, or the App is not configured, the evaluation ends
+as an infrastructure failure that an Operator can retry; it never passes.
+There is deliberately no shape-only mode.
 
 ## Create the manager project and the agent submitter
 

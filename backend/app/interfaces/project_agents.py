@@ -35,7 +35,9 @@ from app.modules.checkers.api.external import (
     ExternalCheckerCapabilityProjection,
 )
 from app.modules.checkers.api.external_policy import (
+    FORGE_FACTS_VERSION_KEY,
     MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS,
+    SELECTED_POST_FORGE_FACTS_BUDGET_MS,
     MAXIMUM_SELECTED_PRE_EXECUTION_BUDGET_MS,
     SELECTED_POST_MATERIALIZATION_BUDGET_MS,
     WORKSTREAM_DEFAULT_EXECUTION_BUDGET_MS,
@@ -1021,7 +1023,14 @@ def require_complete_generated_specifications(
             raise ValueError("pre-submit checker deadline exceeds the bounded stage")
         if specification.maximum_duration_seconds * 1000 > deadline_ms:
             raise ValueError("check specification exceeds the checker deadline")
-        supported_deadlines[binding.requirement_id] = deadline_ms
+        # A POST binding that selects forge facts also spends the facts read.
+        reads_forge_facts = binding.stage is CompilationStage.POST_SUBMIT and any(
+            parameter.name == FORGE_FACTS_VERSION_KEY
+            for parameter in getattr(binding, "parameters", ())
+        )
+        supported_deadlines[binding.requirement_id] = deadline_ms + (
+            SELECTED_POST_FORGE_FACTS_BUDGET_MS if reads_forge_facts else 0
+        )
 
     for stage, fixed_budget, maximum_budget in (
         (
