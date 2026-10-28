@@ -19,6 +19,7 @@ from app.interfaces.forge_facts import (
 )
 from app.modules.checkers.api.external import (
     PostSubmitExternalCheckerIdentity,
+    external_checker_input_fits,
     external_checker_json_hash,
     make_external_checker_execution_request,
 )
@@ -153,6 +154,13 @@ class SelectedPostSubmitProcessor:
                 if selected_evaluation_context_roles(binding.configuration, binding.stage) is not None:
                     context, materials = material_view.evaluation_material(binding)
                     input_value["evaluation_context"] = context.model_dump(mode="json")
+                # Facts are bounded by the forge's listing, not by the checker's
+                # input ceiling. Facts too large to carry are withheld, so the
+                # checker fails the proof rather than the request being invalid.
+                if FORGE_FACTS_INPUT_KEY in input_value and not external_checker_input_fits(
+                    input_value
+                ):
+                    del input_value[FORGE_FACTS_INPUT_KEY]
                 request = make_external_checker_execution_request(
                     registry=binding.registry,
                     identity=self._identity,

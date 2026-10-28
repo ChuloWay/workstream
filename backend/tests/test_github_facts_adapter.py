@@ -809,11 +809,11 @@ async def test_factory_registers_github_as_a_forge_provider() -> None:
 def test_factory_refuses_missing_or_unusable_credentials() -> None:
     unconfigured = Settings(_env_file=None, environment="test")
     with pytest.raises(ExternalServiceConfigurationError):
-        forge_facts_adapter_factory(unconfigured).create("github_app")
+        forge_facts_adapter_factory(unconfigured).create("github")
     unusable = "-----BEGIN PRIVATE KEY-----\nnot-a-key\n-----END PRIVATE KEY-----\n"
     with pytest.raises(ExternalServiceConfigurationError) as caught:
         forge_facts_adapter_factory(_settings(github_app_private_key=unusable)).create(
-            "github_app"
+            "github"
         )
     assert caught.value.__cause__ is None
 

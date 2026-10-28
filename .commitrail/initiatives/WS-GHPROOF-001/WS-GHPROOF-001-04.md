@@ -91,11 +91,15 @@ by a forge-neutral one before any caller depends on it.
   (at most 64 KiB, listed as a file in the verified manifest) and its `pr_url`,
   parses it with the provider's `parse_change_url`, and reads facts only when
   the repository equals the configured one (case-insensitively), always naming
-  the configured repository and base branch. A missing, oversized, malformed
-  or foreign claim, a change the forge does not have, a change into another
-  base branch, or one with more files than the forge lists yields no facts and
-  the checker fails with `facts_missing`. Integrity errors reading the
-  verified file propagate.
+  the configured repository and base branch. Any of these yields no facts, and
+  the checker fails the proof: a missing, oversized or malformed `proof.json`
+  (the checker reports `missing`, `too_large` or `invalid_json`); a claim
+  without a usable `pr_url` or naming another repository, a change the forge
+  does not have, a change into another base branch, more files, reviews or
+  checks than the forge lists, or facts too large for the 1 MiB checker input
+  (the checker reports `facts_missing`). A listing shorter than the change's
+  reported file count is an incomplete read (`invalid_output`), not an
+  ineligible change. Integrity errors reading the verified file propagate.
 - **Failures.** Unavailable or inconsistent forge reads, credential or
   permission refusal, an unreadable repository, missing required checks, an
   unconfigured or unknown provider, a provider for another instance, and no

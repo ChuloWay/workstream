@@ -772,6 +772,21 @@ async def test_claimed_repository_matches_the_configuration_case_insensitively()
 
 
 @pytest.mark.asyncio
+async def test_facts_too_large_for_the_checker_input_are_withheld() -> None:
+    # 3000 long paths fit the forge listing but not the 1 MiB checker input.
+    identity = execution_identity("post_submit")
+    large = SimpleNamespace(
+        model_dump=lambda mode: {"changed_files": ["p" * 400] * 3000}
+    )
+    execution, forge = _Execution(), _Forge(facts=large)
+    await _evaluate(
+        _forge_policy(), _ProofView(execution_material(identity), _proof()), forge, execution
+    )
+    assert forge.reads == [("Flow-Research/harnessy-v2", 169)]
+    assert "forge_facts" not in execution.requests[0].input
+
+
+@pytest.mark.asyncio
 async def test_proof_that_is_not_a_file_reads_no_facts() -> None:
     identity = execution_identity("post_submit")
     view = _ProofView(execution_material(identity), _proof(), entry_type="directory")

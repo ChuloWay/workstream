@@ -348,10 +348,12 @@ its web origin follows the API URL (`https://github.com` for the public API,
 the Enterprise host otherwise), and a binding whose `forge_origin` differs ends
 as an infrastructure failure. For reviewers who approved the head commit, the
 App also reads their current repository permission, so an approval counts only
-from someone with write access. A claim that is missing, malformed or names
-another repository, a change the forge does not have, a change into another
-base branch, or one with more changed files than GitHub lists (3000) yields no
-facts, and the checker fails with `facts_missing`. If the forge is
+from someone with write access. A missing, oversized or malformed `proof.json`
+fails with the checker's `missing`, `too_large` or `invalid_json` finding. A
+claim that names another repository, a change the forge does not have, a
+change into another base branch, or one with more changed files, reviews or
+checks than GitHub lists (3000 files) yields no facts, and the checker fails
+with `facts_missing`; so do facts too large for the 1 MiB checker input. If the forge is
 unreachable, refuses the credential, cannot read the configured repository or
 answers outside its protocol, or the App is not configured, the evaluation ends
 as an infrastructure failure that an Operator can retry; it never passes.
