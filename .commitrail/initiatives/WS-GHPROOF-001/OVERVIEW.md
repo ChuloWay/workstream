@@ -31,14 +31,16 @@ enter a container that runs submitted material.
 ## Design
 
 1. The locked checker binding `configuration` selects forge facts and names
-   the forge, repository and base branch, for example
-   `{"workstream_forge_facts_version": "v1", "forge": "github",
-   "repository": "Flow-Research/harnessy-v2", "base_branch": "dev"}`.
+   the forge, its instance origin, the repository and the base branch, for
+   example `{"workstream_forge_facts_version": "v1", "forge": "github",
+   "forge_origin": "https://github.com", "repository":
+   "Flow-Research/harnessy-v2", "base_branch": "dev"}`.
    The registry `configuration_schema` must declare the selection key. It is
    not a project setting.
 2. A typed `ForgeFactsAdapter` port (ADR 0014, capability `forge_facts`, one
    provider per forge, provider key = forge name) reads, for one change: state,
-   merged flag, merge commit, base branch and head commit; author; reviews;
+   merged flag, landed commit, base branch and head commit; author; reviews
+   (oldest first, with each head-commit approver's write access);
    changed files; and each required check of the base branch with the results
    judged for the head commit and who produced them. It returns one immutable
    `workstream.forge_change_facts.v1` value with the fetch time and the SHA-256
@@ -50,24 +52,29 @@ enter a container that runs submitted material.
 4. The facts reach the checker in the request `input` under `forge_facts`, so
    the request digest binds them. They are not a second ART mount.
 5. `harnessy.work_proof` has one fail-closed mode. Its configuration must
-   select facts and name the forge, repository and base branch, and facts must
+   select facts and name the forge, instance origin, repository and base
+   branch, and facts must
    be present; otherwise it fails. It reports one error finding for each
    mismatch. It builds no URL: `pr_url` must equal the facts' `change_url`,
    and `ci_run_url` must equal a required check's `run_url`.
 6. One canonical change identity: chunk 04 takes the change number from the
-   single shared parser `parse_change_url(forge, url)`, reads only the
-   configured repository, and the checker re-asserts exact equality of the
-   claimed URL with the facts. Every fact is bound to one change state
-   (`head_sha`, `merge_commit_sha`).
+   provider's own `parse_change_url`, reads only the configured instance and
+   repository, and the checker re-asserts exact equality of the claimed URL
+   and instance origin with the facts. Every fact is bound to one change state
+   (`head_sha`, `landed_commit_sha`).
 
 ## Forge neutrality (owner decision 21, 28 October 2026)
 
 Git work will not always run through GitHub; GitLab, Forgejo or another forge
 may follow. The capability, facts, configuration and checker use forge-neutral
 names now, before anything ships, so nothing needs migrating. Only the GitHub
-provider is built. Each provider reports only what its forge can prove: a fact
-it cannot prove is null (a review without a commit, a result without a
-producer), and the checker fails closed on it, so the integrity layers below
+provider is built. Facts name the forge instance (`forge_origin`), so GitHub
+Enterprise or a self-hosted GitLab or Forgejo is distinct from the public
+host; repository paths may have more than two segments (GitLab subgroups);
+review and producer ids are opaque. Each provider reports only what its forge
+can prove: a fact it cannot prove is null (a review without a commit, a result
+without a producer, a reviewer's write access), and the checker fails closed
+on it, so the integrity layers below
 hold on every forge. Provider-specific settings (the GitHub App id, key and
 time limits) keep provider names. Harnessy's proof format is unchanged here;
 a forge-neutral proof is Harnessy's follow-up.
@@ -98,8 +105,8 @@ trusts nothing the contributor could produce. Missing facts never pass.
 |---|---|---|
 | 1 | Facts come only from the forge through WorkStream's read-only credential, never from the submission. The reader stays factual: it reports the change, its author, all reviews, all changed files, and each required check with the producer of each judged result. It makes no policy decision. If the forge reports more changed files than it can list, the read fails as incomplete. | 02, 04 |
 | 2 | Every required check must be bound to a producer, and every judged result must come from it. A requirement that accepts any source is an error unless the locked configuration explicitly allows it. | 03 |
-| 3 | A change to CI or repository configuration (`.github/**`, `**/CODEOWNERS`, `.gitlab-ci.yml`, `.circleci/**`, plus configured paths; renames count on both names) cannot be auto-accepted and requires explicit human acceptance. | 03, routing in 07 |
-| 4 | At least one independent approval on the final head commit: an `approved` latest decisive review by a reviewer of kind `user` who is not the author. A later `changes_requested` or `dismissed` review by the same reviewer cancels the approval; an approval of an earlier commit, or one the forge cannot bind to a commit, does not count. | 03 |
+| 3 | A change to CI or repository configuration (`.github/**`, `.gitlab/**`, `.gitlab-ci.yml`, `.forgejo/**`, `.gitea/**`, `.woodpecker/**`, `.woodpecker.yml`, `.woodpecker.yaml`, `**/CODEOWNERS`, `.circleci/**`, plus configured paths; renames count on both names) cannot be auto-accepted and requires explicit human acceptance. | 03, routing in 07 |
+| 4 | At least one independent approval on the final head commit: an `approved` latest decisive review (by list position) by a reviewer of kind `user` whom the forge proves has write access and who is not the author. A later `changes_requested` or `dismissed` review by the same reviewer cancels the approval; an approval of an earlier commit, or one the forge cannot bind to a commit, does not count. | 03 |
 | 5 | Approval only by configured operator logins is reported as a non-blocking finding: the work may earn points but may not be paid in money until an independent reviewer confirms it. | 03 |
 | 6 | A claim that contradicts the forge is "suspected misreporting", distinct from a failed check. After one flag (configurable) the contributor account is paused from claiming, and administrators are alerted. | 07 |
 | 7 | A failed check gives a clear reason and may be resubmitted without penalty. An administrator override is recorded as a human override, never as a pass. | 07 |
@@ -143,8 +150,9 @@ them to forge-neutral terms:
 
 - The GitHub App is read-only. Pull requests, checks, commit statuses and
   metadata need read access. Reading classic branch protection needs the
-  repository administration read permission; chunk 06 confirms the minimum
-  permission set before hosted use.
+  repository administration read permission. The App also reads approving
+  reviewers' repository permission; chunk 06 confirms the minimum permission
+  set, including that read, before hosted use.
 - Installation tokens are requested per repository and cached in process until
   shortly before expiry. Only response bodies of facts requests are hashed;
   token responses are never hashed or stored.

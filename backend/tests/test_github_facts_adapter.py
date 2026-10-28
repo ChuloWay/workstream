@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib.util
 import json
 import logging
 import time
 import traceback
+from pathlib import Path
 
 import httpx
 import jwt
@@ -1712,3 +1714,36 @@ def test_facts_model_binds_landed_commit_and_forge_origin(changes: dict, valid: 
     else:
         with pytest.raises(ValidationError):
             ForgeChangeFacts.model_validate(body)
+
+
+def _proof_checker():
+    """Load the networkless checker the way its own tests do."""
+    root = Path(__file__).parents[2] / "external_checkers" / "harnessy_proof"
+    spec = importlib.util.spec_from_file_location("harnessy_proof_checker", root / "checker.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize(
+    "variant", ["merged", "open", "enterprise"], ids=("merged", "open", "enterprise")
+)
+async def test_provider_facts_satisfy_the_checker_facts_contract(variant: str) -> None:
+    # The two sides of decision 21 share one contract; drift fails here.
+    fake = FakeGitHub()
+    api = API
+    if variant == "open":
+        fake.route("GET", f"/repos/{REPOSITORY}/pulls/12", _pull(state="open", merged=False))
+    if variant == "enterprise":
+        fake.prefix, api = "/api/v3", "https://ghe.example/api/v3"
+        fake.route(
+            "GET",
+            f"/repos/{REPOSITORY}/pulls/12",
+            _pull(html_url=f"https://ghe.example/{REPOSITORY}/pull/12"),
+        )
+    facts = (await _fetch(_adapter(fake, api=api))).model_dump(mode="json")
+
+    checker = _proof_checker()
+    assert checker.valid_facts(facts)
+    assert checker.qualifying_approvals(facts) == ["reviewer"]

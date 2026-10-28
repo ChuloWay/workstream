@@ -340,15 +340,22 @@ confirms it. The verdict does not change.
 
 **Where the facts come from.** For a POST binding that selects forge facts,
 WorkStream's evaluation worker reads the claimed `pr_url` from `proof.json`,
-and, when it names a change in the configured repository, reads that change's
-facts from the forge before running the checker (initiative chunk 04). GitHub
-is read as the read-only GitHub App configured by the `WORKSTREAM_GITHUB_APP_*`
-settings in `backend/.env.example`. A claim that is missing, malformed or names
-another repository, or a change the forge does not have, yields no facts, and
-the checker fails with `facts_missing`. If the forge is unreachable, refuses
-the credential or answers outside its protocol, or the App is not configured,
-the evaluation ends as an infrastructure failure that an Operator can retry;
-it never passes. There is deliberately no shape-only mode.
+and, when it names a change in the configured repository on the configured
+`forge_origin`, reads that change's facts from the forge before running the
+checker (initiative chunk 04). GitHub is read as the read-only GitHub App
+configured by the `WORKSTREAM_GITHUB_APP_*` settings in `backend/.env.example`;
+its web origin follows the API URL (`https://github.com` for the public API,
+the Enterprise host otherwise), and a binding whose `forge_origin` differs ends
+as an infrastructure failure. For reviewers who approved the head commit, the
+App also reads their current repository permission, so an approval counts only
+from someone with write access. A claim that is missing, malformed or names
+another repository, a change the forge does not have, a change into another
+base branch, or one with more changed files than GitHub lists (3000) yields no
+facts, and the checker fails with `facts_missing`. If the forge is
+unreachable, refuses the credential, cannot read the configured repository or
+answers outside its protocol, or the App is not configured, the evaluation ends
+as an infrastructure failure that an Operator can retry; it never passes.
+There is deliberately no shape-only mode.
 
 ## Create the manager project and the agent submitter
 
