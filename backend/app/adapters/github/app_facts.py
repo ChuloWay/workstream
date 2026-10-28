@@ -43,6 +43,7 @@ from app.interfaces.forge_facts import (
     ForgeChangedFileFact,
     ForgeFactsAccessDeniedError,
     ForgeFactsIncompleteError,
+    is_forge_origin,
     ForgeFactsInconsistentError,
     ForgeFactsProtocolError,
     ForgeFactsUnavailableError,
@@ -140,9 +141,10 @@ def github_web_origin(api_base_url: str) -> str:
     Enterprise Server API (``https://host/api/v3``) serves ``https://host``.
     """
     parsed = urlsplit(api_base_url)
-    if parsed.netloc == "api.github.com":
+    netloc = parsed.netloc.lower()
+    if netloc == "api.github.com":
         return "https://github.com"
-    return f"{parsed.scheme}://{parsed.netloc}"
+    return f"{parsed.scheme.lower()}://{netloc}"
 
 
 def is_github_repository(value: object) -> bool:
@@ -222,6 +224,10 @@ class GitHubAppFactsAdapter:
         parsed = urlsplit(configuration.api_base_url)
         self._api_origin = (parsed.scheme, parsed.netloc)
         self._web_origin = github_web_origin(configuration.api_base_url)
+        # Facts name an https instance origin; any other origin could never
+        # produce valid facts, so refuse it here rather than on every read.
+        if not is_forge_origin(self._web_origin):
+            raise ExternalServiceConfigurationError(_IDENTITY)
         origin = re.escape(self._web_origin)
         self._change_url = re.compile(
             rf"{origin}/({_GITHUB_REPOSITORY_PATTERN})/pull/([1-9][0-9]{{0,9}})"
@@ -347,8 +353,13 @@ class GitHubAppFactsAdapter:
         changed_files_count = pull_facts["changed_files_count"]
         if changed_files_count > GITHUB_MAXIMUM_LISTED_FILES:
             raise ForgeChangeNotEligibleError(_IDENTITY)
+        # Anyone may review or run checks on a change; more than the bounded
+        # listing is a property of the change, so it is ineligible, not an outage.
         reviews = await session.read_pages(
-            "reviews", f"{pull_path}/reviews", item_key=None
+            "reviews",
+            f"{pull_path}/reviews",
+            item_key=None,
+            over_limit=ForgeChangeNotEligibleError,
         )
         # GitHub lists reviews oldest first; sort by id so the order is explicit.
         try:
@@ -366,12 +377,14 @@ class GitHubAppFactsAdapter:
             "check_runs",
             f"/repos/{repository}/commits/{head_sha}/check-runs",
             item_key="check_runs",
+            over_limit=ForgeChangeNotEligibleError,
         )
         statuses = await session.read_pages(
             "commit_status",
             f"/repos/{repository}/commits/{head_sha}/status",
             item_key="statuses",
             require_sha=head_sha,
+            over_limit=ForgeChangeNotEligibleError,
         )
         final = self._pull_request_facts(
             await session.read_json(
@@ -540,6 +553,8 @@ class _FactsSession:
             json_body=json_body,
             not_found=ForgeFactsAccessDeniedError,
             installation=False,
+            # GitHub refuses a token for a repository outside the installation.
+            unprocessable=ForgeFactsAccessDeniedError,
         )
         return _json(response)
 
@@ -563,11 +578,13 @@ class _FactsSession:
         item_key: str | None,
         maximum_pages: int = MAXIMUM_PAGES,
         require_sha: str | None = None,
+        over_limit: type[Exception] = ForgeFactsProtocolError,
     ) -> list[dict]:
         """Follow same-origin ``next`` links for a bounded number of pages.
 
         ``item_key`` names the list inside an object body; None means the body
-        itself is the list. More pages than ``maximum_pages`` fail closed.
+        itself is the list. More pages than ``maximum_pages`` raise
+        ``over_limit``.
         ``require_sha`` requires each page body's ``sha`` to equal that commit.
         """
         url = self._url(path) + f"?per_page={PAGE_SIZE}"
@@ -599,7 +616,7 @@ class _FactsSession:
             if (parsed.scheme, parsed.netloc) != self._adapter._api_origin:
                 raise ForgeFactsProtocolError(_IDENTITY)
             url = next_url
-        raise ForgeFactsProtocolError(_IDENTITY)
+        raise over_limit(_IDENTITY)
 
     def _record(self, label: str, response: httpx.Response) -> None:
         """Keep the SHA-256 of one raw facts response body."""
@@ -645,6 +662,7 @@ class _FactsSession:
         json_body: dict[str, Any] | None,
         not_found: type[Exception],
         installation: bool,
+        unprocessable: type[Exception] = ForgeFactsProtocolError,
     ) -> httpx.Response:
         """Send with bounded retries for transport errors, 5xx and rate limits."""
         configuration = self._adapter._configuration
@@ -675,6 +693,8 @@ class _FactsSession:
                     return response
                 if status == 404:
                     raise not_found(_IDENTITY) from None
+                if status == 422:
+                    raise unprocessable(_IDENTITY) from None
                 if status == 401:
                     if installation:
                         raise _TokenRejected()
@@ -854,9 +874,12 @@ async def _reviewer_write_access(
 
     Other reviewers' access is not read and is reported as unknown. A reviewer
     without a permission record, or whose record names another account, has
-    no write access. More approving reviewers than the bound fail closed.
+    no write access; neither does an approving account that is not a user,
+    whose permission is never read. More approving users than the bound make
+    the change ineligible.
     """
     reviewer_ids: dict[int, str] = {}
+    access: dict[int, bool] = {}
     for item in reviews:
         user = item.get("user")
         if (
@@ -866,10 +889,12 @@ async def _reviewer_write_access(
             and type(user.get("id")) is int
             and isinstance(user.get("login"), str)
         ):
-            reviewer_ids[user["id"]] = user["login"]
+            if user.get("type") == "User":
+                reviewer_ids[user["id"]] = user["login"]
+            else:
+                access[user["id"]] = False
     if len(reviewer_ids) > MAXIMUM_PERMISSION_READS:
-        raise ForgeFactsIncompleteError(_IDENTITY)
-    access: dict[int, bool] = {}
+        raise ForgeChangeNotEligibleError(_IDENTITY)
     for user_id, login in reviewer_ids.items():
         if not _GITHUB_LOGIN.fullmatch(login):
             access[user_id] = False

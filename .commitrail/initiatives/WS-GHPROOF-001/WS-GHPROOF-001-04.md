@@ -68,10 +68,16 @@ by a forge-neutral one before any caller depends on it.
   ids become `github_app:<id>`; the web origin follows the API URL
   (`https://github.com` for `api.github.com`, the Enterprise host otherwise);
   `html_url` must equal the canonical change URL; run URLs use the same origin.
-  For each reviewer who approved the head commit (at most 20; more fail as
-  incomplete) it reads the reviewer's current repository permission; `admin`,
-  `maintain` and `write` count, a missing record or one naming another account
-  does not, and other reviewers' access is reported as unknown. It reads the
+  For each user who approved the head commit (at most 20) it reads the
+  reviewer's current repository permission; `admin`, `maintain` and `write`
+  count, a missing record or one naming another account does not, an
+  approving bot or other non-user account has none and is never looked up,
+  and other reviewers' access is reported as unknown. Because anyone can
+  review or run checks on a change, more approving users, reviews, check runs
+  or statuses than the provider lists make the change ineligible (no facts,
+  the proof fails) rather than an outage an Operator would retry forever. A
+  token GitHub refuses for the repository is an access failure, and a
+  provider whose web origin is not https is refused when it is configured. It reads the
   repository first, so a repository outside the App's installation is an
   access failure rather than a contributor's missing change. Settings keep
   GitHub names because they configure the GitHub provider.
@@ -148,7 +154,7 @@ by a forge-neutral one before any caller depends on it.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Adapter, contract, policy, processor and guide budget behavior | `pytest tests/test_github_facts_adapter.py tests/checkers/external/test_policy.py tests/checkers/external/test_selected_post_submit.py tests/projects/guide_compilation/test_check_specifications.py` (macOS, Python 3.12, outside the Linux lockfile) | 160, 31 and 35 passed; guide specifications pass; the 2 database-backed processor tests need CI | Database-backed and Linux-only suites run in CI |
+| Adapter, contract, policy, processor and guide budget behavior | `pytest tests/test_github_facts_adapter.py tests/checkers/external/test_policy.py tests/checkers/external/test_selected_post_submit.py tests/projects/guide_compilation/test_check_specifications.py` (macOS, Python 3.12, outside the Linux lockfile) | 165, 31 and 35 passed; guide specifications pass; the 2 database-backed processor tests need CI | Database-backed and Linux-only suites run in CI |
 | No regression in checker suites | `pytest tests/checkers/` on this branch and on `origin/main` | This branch's failures are a subset of main's (environment only: Postgres and Linux sockets) | CI is authoritative |
 | Ownership partition | `behavior_ownership.py validate --trusted-revision origin/main`; `pytest tests/test_behavior_ownership.py tests/test_ci_lane_catalogue.py tests/test_ci_test_lanes.py` | Pass; 244 passed | — |
 | Deadline regressions are discriminating | New deadline tests against the previous adapter | Both fail | — |
@@ -172,6 +178,13 @@ by a forge-neutral one before any caller depends on it.
     by repository rulesets are not seen. Chunk 06 confirms the Flow
     repositories use classic protection.
   - Write access is read at evaluation time, not at review time.
-  - A local API URL over plain `http` yields an `http` origin that the facts
-    model rejects, so a local drill needs a TLS fake forge (chunk 06).
+  - A provider whose web origin is not https is refused when it is
+    configured, so a local drill needs a TLS fake forge (chunk 06).
   - Each evaluation mints its own installation token.
+  - A listing within its page bound can still be too slow for the read
+    deadline; that ends as a retryable infrastructure failure.
+  - Reviews are ordered by GitHub review id (creation order). A pending
+    review created before an approval but submitted after it sorts first;
+    GitHub allows one pending review per user, so the window is narrow.
+  - With a fixed installation id, the token request names the repository
+    without its owner; chunk 06 checks the installation account.

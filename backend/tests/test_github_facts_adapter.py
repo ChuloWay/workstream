@@ -1323,7 +1323,8 @@ async def test_malformed_listing_page_is_a_protocol_error(path: str, body: objec
         await _fetch(_adapter(fake))
 
 
-async def test_listing_longer_than_the_page_bound_fails_closed() -> None:
+async def test_review_listing_longer_than_the_page_bound_is_not_eligible() -> None:
+    # Anyone can flood a change with reviews: no facts, never an endless retry.
     fake = FakeGitHub()
     reviews = f"/repos/{REPOSITORY}/pulls/12/reviews"
     fake.route(
@@ -1335,7 +1336,7 @@ async def test_listing_longer_than_the_page_bound_fails_closed() -> None:
             headers={"link": f'<{API}{reviews}?per_page=100&page=99>; rel="next"'},
         ),
     )
-    with pytest.raises(ForgeFactsProtocolError):
+    with pytest.raises(ForgeChangeNotEligibleError):
         await _fetch(_adapter(fake))
     assert sum(r.url.path == reviews for r in fake.requests) == 10
 
@@ -1621,7 +1622,7 @@ async def test_malformed_permission_response_is_a_protocol_error() -> None:
         await _fetch(_adapter(fake))
 
 
-async def test_more_approving_reviewers_than_the_bound_fails_closed() -> None:
+async def test_more_approving_users_than_the_bound_is_not_eligible() -> None:
     fake = FakeGitHub()
     fake.route(
         "GET",
@@ -1631,7 +1632,7 @@ async def test_more_approving_reviewers_than_the_bound_fails_closed() -> None:
             for index in range(1, 22)
         ],
     )
-    with pytest.raises(ForgeFactsIncompleteError):
+    with pytest.raises(ForgeChangeNotEligibleError):
         await _fetch(_adapter(fake))
 
 
@@ -1747,3 +1748,51 @@ async def test_provider_facts_satisfy_the_checker_facts_contract(variant: str) -
     checker = _proof_checker()
     assert checker.valid_facts(facts)
     assert checker.qualifying_approvals(facts) == ["reviewer"]
+
+
+async def test_approving_bot_has_no_write_access_and_is_never_looked_up() -> None:
+    fake = FakeGitHub()
+    bot = {"login": "copilot[bot]", "id": 99, "type": "Bot"}
+    fake.route(
+        "GET",
+        f"/repos/{REPOSITORY}/pulls/12/reviews",
+        [REVIEWS[0], {**REVIEWS[0], "id": 63, "user": bot}],
+    )
+    facts = await _fetch(_adapter(fake))
+    assert [item.reviewer_write_access for item in facts.reviews] == [True, False]
+    assert not any("copilot" in request.url.path for request in fake.requests)
+
+
+async def test_check_run_listing_longer_than_the_page_bound_is_not_eligible() -> None:
+    fake = FakeGitHub()
+    runs = f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/check-runs"
+    fake.route(
+        "GET",
+        runs,
+        httpx.Response(
+            200,
+            json={"check_runs": []},
+            headers={"link": f'<{API}{runs}?per_page=100&page=99>; rel="next"'},
+        ),
+    )
+    with pytest.raises(ForgeChangeNotEligibleError):
+        await _fetch(_adapter(fake))
+
+
+async def test_token_refused_for_a_repository_outside_the_installation_is_access_denied() -> None:
+    fake = FakeGitHub()
+    fake.route(
+        "POST", "/app/installations/77/access_tokens", httpx.Response(422, json={})
+    )
+    with pytest.raises(ForgeFactsAccessDeniedError):
+        await _fetch(_adapter(fake))
+
+
+def test_api_without_an_https_web_origin_is_refused_when_configured() -> None:
+    with pytest.raises(ExternalServiceConfigurationError):
+        _adapter(FakeGitHub(), api="http://127.0.0.1:8080")
+
+
+def test_enterprise_web_origin_is_lowercased() -> None:
+    adapter = _adapter(FakeGitHub(), api="https://GHE.Example/api/v3")
+    assert adapter.forge_origin == "https://ghe.example"
