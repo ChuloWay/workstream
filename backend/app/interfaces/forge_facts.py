@@ -42,15 +42,16 @@ FORGE_FACTS_SCHEMA_VERSION = "workstream.forge_change_facts.v1"
 GITHUB_FORGE = "github"
 Forge = Literal["github"]
 SUPPORTED_FORGES: tuple[str, ...] = (GITHUB_FORGE,)
+# The absolute upper bound of one facts read; provider settings stay within it
+# and the selected POST budget reserves it for each binding that reads facts.
+FORGE_FACTS_MAXIMUM_READ_SECONDS = 120
+FORGE_FACTS_MAXIMUM_READ_MS = FORGE_FACTS_MAXIMUM_READ_SECONDS * 1000
 
-# GitHub owner logins are at most 39 characters; repository names at most 100.
-_GITHUB_REPOSITORY = re.compile(
-    r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/(?!\.{1,2}$)[A-Za-z0-9._-]{1,100}$"
-)
-_GITHUB_CHANGE_URL = re.compile(
-    r"https://github\.com/([A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100})"
-    r"/pull/([1-9][0-9]{0,9})"
-)
+# A repository is a path of segments, as on every forge (GitLab allows
+# subgroups); each provider enforces its own stricter grammar.
+_REPOSITORY_PATH = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+$")
+# The web origin of one forge instance: https, host and optional port only.
+_FORGE_ORIGIN = re.compile(r"^https://[A-Za-z0-9.-]+(?::[0-9]{1,5})?$")
 
 # SHA-1 (40) or SHA-256 (64) object names, lowercase.
 GitSha = Annotated[StrictStr, Field(pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")]
@@ -75,28 +76,19 @@ ForgeReviewState = Literal[
 ]
 
 
-def is_forge_repository(forge: object, value: object) -> bool:
-    """Return whether a value is one canonical repository path on a supported forge."""
-    if forge == GITHUB_FORGE:
-        return isinstance(value, str) and _GITHUB_REPOSITORY.fullmatch(value) is not None
-    return False
+def is_repository_path(value: object) -> bool:
+    """Return whether a value is a forge-neutral repository path."""
+    return (
+        isinstance(value, str)
+        and len(value) <= 255
+        and _REPOSITORY_PATH.fullmatch(value) is not None
+        and all(segment not in {".", ".."} for segment in value.split("/"))
+    )
 
 
-def parse_change_url(forge: object, value: object) -> tuple[str, int] | None:
-    """Return (repository, number) from one canonical change URL, or None.
-
-    This is the single parser for a claimed change URL. For GitHub only
-    ``https://github.com/{owner}/{name}/pull/{number}`` in ASCII is accepted:
-    no port, user information, query, fragment, trailing slash, percent
-    encoding or backslash. The checker re-asserts exact equality of the claim
-    with the facts' ``change_url``, so the reader and the checker cannot disagree.
-    """
-    if forge != GITHUB_FORGE or not isinstance(value, str) or not value.isascii():
-        return None
-    match = _GITHUB_CHANGE_URL.fullmatch(value)
-    if match is None or not is_forge_repository(forge, match.group(1)):
-        return None
-    return match.group(1), int(match.group(2))
+def is_forge_origin(value: object) -> bool:
+    """Return whether a value is one forge instance's https web origin."""
+    return isinstance(value, str) and _FORGE_ORIGIN.fullmatch(value) is not None
 
 
 class _FactsValue(BaseModel):
@@ -114,15 +106,18 @@ class ForgeActorFact(_FactsValue):
 
 
 class ForgeReviewFact(_FactsValue):
-    """One submitted review, unfiltered.
+    """One submitted review, unfiltered; reviews are listed oldest first.
 
-    ``reviewer`` is null when the forge no longer has the account, and
-    ``commit_id`` is null when the forge cannot bind the review to a commit.
-    Policy, such as taking each reviewer's latest review, belongs to the consumer.
+    ``id`` is opaque. ``reviewer`` is null when the forge no longer has the
+    account; ``commit_id`` is null when the forge cannot bind the review to a
+    commit; ``reviewer_write_access`` says whether the reviewer can merge into
+    the repository, and is null when the forge cannot prove it. Policy, such as
+    taking each reviewer's latest review, belongs to the consumer.
     """
 
-    id: Annotated[StrictInt, Field(ge=1)]
+    id: Annotated[StrictStr, Field(min_length=1, max_length=100)]
     reviewer: ForgeActorFact | None
+    reviewer_write_access: StrictBool | None
     state: ForgeReviewState
     commit_id: GitSha | None
     submitted_at: datetime | None
@@ -180,21 +175,25 @@ class ForgeResponseDigest(_FactsValue):
 class ForgeChangeFacts(_FactsValue):
     """Immutable ``workstream.forge_change_facts.v1`` value for one change.
 
-    ``merge_commit_sha`` is null unless the change is merged. ``head_sha`` and
-    ``merge_commit_sha`` are the single change state every other fact was bound
-    to: a provider re-reads the change after all other reads and discards the
-    read if that state moved. Serialize with ``model_dump(mode="json")`` to place
-    the value in checker request input.
+    ``forge_origin`` names the forge instance. ``change_number`` is the
+    per-repository number (GitLab's iid). ``landed_commit_sha`` is the commit
+    the change landed as on the base branch (merge, squash or rebase result),
+    present exactly when the change is merged. ``head_sha`` and
+    ``landed_commit_sha`` are the single change state every other fact was
+    bound to: a provider re-reads the change after all other reads and discards
+    the read if that state moved. Serialize with ``model_dump(mode="json")`` to
+    place the value in checker request input.
     """
 
     schema_version: Literal["workstream.forge_change_facts.v1"] = FORGE_FACTS_SCHEMA_VERSION
     forge: Forge
+    forge_origin: Annotated[StrictStr, Field(max_length=300)]
     repository: Annotated[StrictStr, Field(min_length=1, max_length=255)]
     change_number: Annotated[StrictInt, Field(ge=1)]
     change_url: Annotated[StrictStr, Field(min_length=1, max_length=2048)]
     state: Literal["open", "closed"]
     merged: StrictBool
-    merge_commit_sha: GitSha | None
+    landed_commit_sha: GitSha | None
     base_ref: Annotated[StrictStr, Field(min_length=1, max_length=255)]
     head_sha: GitSha
     author: ForgeActorFact
@@ -207,11 +206,15 @@ class ForgeChangeFacts(_FactsValue):
 
     @model_validator(mode="after")
     def validate_facts(self) -> Self:
-        """Bind the listing to its count and the repository to its forge."""
+        """Bind the listing to its count, the change to one merge state."""
         if self.changed_files_count != len(self.changed_files):
             raise ValueError("changed file count differs from the listed files")
-        if not is_forge_repository(self.forge, self.repository):
-            raise ValueError("repository is not canonical for the forge")
+        if not is_repository_path(self.repository) or not is_forge_origin(self.forge_origin):
+            raise ValueError("repository or forge origin is not canonical")
+        if self.merged != (self.landed_commit_sha is not None) or (
+            self.merged and self.state != "closed"
+        ):
+            raise ValueError("merged state and landed commit disagree")
         return self
 
 
@@ -259,18 +262,50 @@ class ForgeFactsInconsistentError(ExternalServiceUnavailableError):
 
 
 class ForgeFactsIncompleteError(ForgeFactsProtocolError):
-    """The forge cannot list every changed file, so the facts would be partial."""
+    """The forge listed fewer items than it reported, so the facts would be partial."""
 
     code = "forge_facts_incomplete"
 
 
+class ForgeChangeNotEligibleError(ExternalServiceAdapterError):
+    """The change cannot be proven as claimed work for this binding.
+
+    It targets another base branch than the locked configuration names, or it
+    is larger than the forge can list. No facts are read; the checker fails.
+    """
+
+    code = "forge_change_not_eligible"
+    category = "not_found"
+
+
 class ForgeFactsAdapter(ExternalServiceAdapter, Protocol):
-    """Read verified facts about one change with a read-only credential."""
+    """Read verified facts about one change with a read-only credential.
+
+    One provider serves one forge instance, named by ``forge_origin``. It owns
+    its forge's URL and repository grammar.
+    """
+
+    @property
+    def forge_origin(self) -> str:
+        """Return the web origin of the forge instance this provider reads."""
+
+    def parse_change_url(self, value: object) -> tuple[str, int] | None:
+        """Return (repository, number) from one canonical change URL, or None.
+
+        This is the single parser for a claimed change URL. The checker
+        re-asserts exact equality of the claim with the facts' ``change_url``,
+        so the reader and the checker cannot disagree.
+        """
 
     async def fetch_change_facts(
         self,
         *,
         repository: str,
         change_number: int,
+        base_branch: str,
     ) -> ForgeChangeFacts:
-        """Return facts or raise a secret-free ``ExternalServiceAdapterError``."""
+        """Return facts, or raise a secret-free ``ExternalServiceAdapterError``.
+
+        A change whose base is not ``base_branch`` raises
+        ``ForgeChangeNotEligibleError`` before protection is read.
+        """

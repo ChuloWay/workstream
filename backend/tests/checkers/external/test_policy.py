@@ -688,7 +688,11 @@ async def test_policy_compilation_refuses_pre_images_exceeding_platform_custody(
 
 def _forge_binding(configuration, *, declared=True, phase="post_submit"):
     """A binding over a published schema that does or does not declare forge facts."""
-    properties = {"repository": {"type": "string"}, "forge": {"type": "string"}}
+    properties = {
+        "repository": {"type": "string"},
+        "forge": {"type": "string"},
+        "forge_origin": {"type": "string"},
+    }
     if declared:
         properties[FORGE_FACTS_VERSION_KEY] = {"const": "v1"}
     document = {"type": "object", "properties": properties}
@@ -710,6 +714,7 @@ def _forge_binding(configuration, *, declared=True, phase="post_submit"):
 _FORGE_SELECTION = {
     FORGE_FACTS_VERSION_KEY: "v1",
     "forge": "github",
+    "forge_origin": "https://github.com",
     "repository": "Flow-Research/harnessy-v2",
     "base_branch": "dev",
 }
@@ -718,7 +723,24 @@ _FORGE_SELECTION = {
 def test_forge_facts_are_selected_only_by_an_exact_declared_post_capability():
     binding = _forge_binding(_FORGE_SELECTION)
     assert selected_forge_facts(binding.configuration, binding.stage) == ForgeFactsSelection(
-        forge="github", repository="Flow-Research/harnessy-v2", base_branch="dev"
+        forge="github",
+        forge_origin="https://github.com",
+        repository="Flow-Research/harnessy-v2",
+        base_branch="dev",
+    )
+    # A neutral path may hold subgroups and a self-hosted instance with a port.
+    assert selected_forge_facts(
+        {
+            **_FORGE_SELECTION,
+            "forge_origin": "https://git.example.org:8443",
+            "repository": "group/subgroup/project",
+        },
+        "post_submit",
+    ) == ForgeFactsSelection(
+        forge="github",
+        forge_origin="https://git.example.org:8443",
+        repository="group/subgroup/project",
+        base_branch="dev",
     )
     assert selected_forge_facts({"repository": "a/b"}, "post_submit") is None
     with pytest.raises(ValueError, match="schema does not declare forge facts"):
@@ -733,6 +755,12 @@ def test_forge_facts_are_selected_only_by_an_exact_declared_post_capability():
         {"forge": None},
         {"repository": "Flow-Research"},
         {"repository": "https://github.com/Flow-Research/harnessy-v2"},
+        {"repository": "Flow-Research/.."},
+        {"repository": "a/" + "b" * 254},
+        {"forge_origin": None},
+        {"forge_origin": "http://github.com"},
+        {"forge_origin": "https://github.com/"},
+        {"forge_origin": "https://github.com/Flow-Research"},
         {"base_branch": ""},
         {"base_branch": 7},
     ],

@@ -22,7 +22,12 @@ from app.modules.checkers.api.external import (
     ExternalCheckerRegistryPort,
     external_checker_json_hash,
 )
-from app.interfaces.forge_facts import SUPPORTED_FORGES, is_forge_repository
+from app.interfaces.forge_facts import (
+    FORGE_FACTS_MAXIMUM_READ_MS,
+    SUPPORTED_FORGES,
+    is_forge_origin,
+    is_repository_path,
+)
 from app.modules.model_usage.api import ModelProfileReaderPort
 from app.modules.checkers.api.model_profiles import (
     ModelProfileConfigurationError,
@@ -55,10 +60,11 @@ EVALUATION_CONTEXT_ROLES_KEY = "workstream_evaluation_context_roles"
 EVALUATION_CONTEXT_ROLES = ("predecessor_findings", "predecessor_submission_archive")
 FORGE_FACTS_VERSION_KEY = "workstream_forge_facts_version"
 FORGE_FACTS_FORGE_KEY = "forge"
+FORGE_FACTS_ORIGIN_KEY = "forge_origin"
 FORGE_FACTS_REPOSITORY_KEY = "repository"
 FORGE_FACTS_BASE_BRANCH_KEY = "base_branch"
-# Provider settings cap one forge facts read at 120 seconds; reserve that per selection.
-SELECTED_POST_FORGE_FACTS_BUDGET_MS = 120_000
+# Provider settings cap one forge facts read; reserve that maximum per selection.
+SELECTED_POST_FORGE_FACTS_BUDGET_MS = FORGE_FACTS_MAXIMUM_READ_MS
 
 
 class ExternalCheckerPolicyError(ValueError):
@@ -105,9 +111,10 @@ def validated_evaluation_context_roles(
 
 @dataclass(frozen=True, slots=True)
 class ForgeFactsSelection:
-    """The forge, repository and base branch a POST binding asks WorkStream to read."""
+    """The forge instance, repository and base branch a POST binding asks WorkStream to read."""
 
     forge: str
+    forge_origin: str
     repository: str
     base_branch: str
 
@@ -120,18 +127,22 @@ def selected_forge_facts(
     if FORGE_FACTS_VERSION_KEY not in configuration:
         return None
     forge = configuration.get(FORGE_FACTS_FORGE_KEY)
+    forge_origin = configuration.get(FORGE_FACTS_ORIGIN_KEY)
     repository = configuration.get(FORGE_FACTS_REPOSITORY_KEY)
     base_branch = configuration.get(FORGE_FACTS_BASE_BRANCH_KEY)
     if (
         phase != "post_submit"
         or configuration[FORGE_FACTS_VERSION_KEY] != "v1"
         or forge not in SUPPORTED_FORGES
-        or not is_forge_repository(forge, repository)
+        or not is_forge_origin(forge_origin)
+        or not is_repository_path(repository)
         or type(base_branch) is not str
         or not 1 <= len(base_branch) <= 255
     ):
         raise ExternalCheckerPolicyError("forge facts selection is invalid")
-    return ForgeFactsSelection(forge=forge, repository=repository, base_branch=base_branch)
+    return ForgeFactsSelection(
+        forge=forge, forge_origin=forge_origin, repository=repository, base_branch=base_branch
+    )
 
 
 def validated_forge_facts(

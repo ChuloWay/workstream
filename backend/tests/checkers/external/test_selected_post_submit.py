@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
 import json
+import re
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -26,8 +27,12 @@ from app.modules.checkers.api.external import (
     external_checker_json_hash,
     make_external_checker_execution_result,
 )
-from app.interfaces.external_services import UnknownExternalServiceProviderError
+from app.interfaces.external_services import (
+    ExternalServiceConfigurationError,
+    UnknownExternalServiceProviderError,
+)
 from app.interfaces.forge_facts import (
+    ForgeChangeNotEligibleError,
     ForgeChangeNotFoundError,
     ForgeFactsAccessDeniedError,
     ForgeFactsIncompleteError,
@@ -592,6 +597,7 @@ def test_selected_post_content_uses_exact_locked_external_policy() -> None:
 _FORGE_CONFIGURATION = {
     FORGE_FACTS_VERSION_KEY: "v1",
     "forge": "github",
+    "forge_origin": "https://github.com",
     "repository": "Flow-Research/harnessy-v2",
     "base_branch": "dev",
 }
@@ -618,7 +624,9 @@ def _open_input_entry(configuration_schema) -> ExternalCheckerRegistryEntry:
     )
 
 
-def _forge_policy(configuration=_FORGE_CONFIGURATION) -> LockedExternalPostSubmitPolicy:
+def _forge_policy(
+    configuration=_FORGE_CONFIGURATION, *, count: int = 1
+) -> LockedExternalPostSubmitPolicy:
     """The selected POST policy with a published schema that declares forge facts."""
     document = {"type": "object", "properties": {key: {} for key in configuration}}
     schema = ExternalCheckerSchema(
@@ -627,32 +635,35 @@ def _forge_policy(configuration=_FORGE_CONFIGURATION) -> LockedExternalPostSubmi
         document=document,
         schema_sha256=external_checker_json_hash(document),
     )
-    binding = LockedExternalCheckerBinding(
-        requirement_id="harnessy.work_proof",
-        stage="post_submit",
-        registry=_open_input_entry(schema),
-        configuration=configuration,
-        configuration_sha256=external_checker_json_hash(configuration),
+    bindings = tuple(
+        LockedExternalCheckerBinding(
+            requirement_id=f"harnessy.work_proof.{index}" if index else "harnessy.work_proof",
+            stage="post_submit",
+            registry=_open_input_entry(schema),
+            configuration=configuration,
+            configuration_sha256=external_checker_json_hash(configuration),
+        )
+        for index in range(count)
     )
     body = {
         "schema_version": "external_post_submit_policy.v1",
-        "entries": [binding.model_dump(mode="json")],
+        "entries": [binding.model_dump(mode="json") for binding in bindings],
     }
     return LockedExternalPostSubmitPolicy(
-        entries=(binding,), policy_sha256=canonical_json_hash(body)
+        entries=bindings, policy_sha256=canonical_json_hash(body)
     )
 
 
 class _ProofView(_MaterialView):
     """A material view whose submission holds one ``proof.json``."""
 
-    def __init__(self, material, proof: bytes | None) -> None:
+    def __init__(self, material, proof: bytes | None, *, entry_type: str = "file") -> None:
         super().__init__(material)
         self.proof = proof
         if proof is not None:
             self.entries = (
                 *self.entries,
-                SubmissionMaterialEntry("proof.json", "file", len(proof), SHA, False),
+                SubmissionMaterialEntry("proof.json", entry_type, len(proof), SHA, False),
             )
 
     def read_file(self, normalized_path, *, maximum_bytes):
@@ -664,18 +675,31 @@ def _proof(pr_url=_CHANGE_URL) -> bytes:
     return json.dumps({"schema": "harnessy.work.proof.v1", "pr_url": pr_url}).encode()
 
 
+_GITHUB_CHANGE_URL = re.compile(r"https://github\.com/([^/]+/[^/]+)/pull/([1-9][0-9]*)")
+
+
 class _Forge:
     """Records reads; returns ``facts`` or raises ``error``."""
 
-    def __init__(self, *, facts=None, error=None) -> None:
+    def __init__(
+        self, *, facts=None, error=None, origin="https://github.com", resolve_error=None
+    ) -> None:
         self.facts, self.error, self.reads, self.forges = facts, error, [], []
+        self.forge_origin, self.resolve_error, self.base_branches = origin, resolve_error, []
 
     def __call__(self, forge):
         self.forges.append(forge)
+        if self.resolve_error is not None:
+            raise self.resolve_error
         return self
 
-    async def fetch_change_facts(self, *, repository, change_number):
+    def parse_change_url(self, value):
+        match = _GITHUB_CHANGE_URL.fullmatch(value) if isinstance(value, str) else None
+        return None if match is None else (match.group(1), int(match.group(2)))
+
+    async def fetch_change_facts(self, *, repository, change_number, base_branch):
         self.reads.append((repository, change_number))
+        self.base_branches.append(base_branch)
         if self.error is not None:
             raise self.error
         return self.facts
@@ -704,6 +728,7 @@ async def test_selected_forge_facts_reach_the_checker_request_input() -> None:
 
     assert forge.forges == ["github"]
     assert forge.reads == [("Flow-Research/harnessy-v2", 169)]
+    assert forge.base_branches == ["dev"]
     request = execution.requests[0]
     assert request.input["forge_facts"] == {"schema_version": "workstream.forge_change_facts.v1"}
     assert request.input_sha256 == external_checker_json_hash(request.input)
@@ -747,10 +772,63 @@ async def test_claimed_repository_matches_the_configuration_case_insensitively()
 
 
 @pytest.mark.asyncio
-async def test_missing_change_reads_no_facts() -> None:
+async def test_proof_that_is_not_a_file_reads_no_facts() -> None:
+    identity = execution_identity("post_submit")
+    view = _ProofView(execution_material(identity), _proof(), entry_type="directory")
+    execution, forge = _Execution(), _Forge(facts=_facts())
+    await _evaluate(_forge_policy(), view, forge, execution)
+    assert forge.reads == []
+    assert "forge_facts" not in execution.requests[0].input
+
+
+@pytest.mark.asyncio
+async def test_each_selecting_binding_reads_its_own_facts() -> None:
+    identity = execution_identity("post_submit")
+    execution, forge = _Execution(), _Forge(facts=_facts())
+    await _evaluate(
+        _forge_policy(count=2),
+        _ProofView(execution_material(identity), _proof()),
+        forge,
+        execution,
+    )
+    assert forge.reads == [("Flow-Research/harnessy-v2", 169)] * 2
+    assert all("forge_facts" in request.input for request in execution.requests)
+    assert len(execution.requests) == 2
+
+
+@pytest.mark.asyncio
+async def test_provider_for_another_forge_instance_is_infrastructure() -> None:
+    identity = execution_identity("post_submit")
+    execution, forge = _Execution(), _Forge(facts=_facts(), origin="https://github.example")
+    with pytest.raises(SelectedPostSubmitInfrastructureUnavailable) as raised:
+        await _evaluate(
+            _forge_policy(), _ProofView(execution_material(identity), _proof()), forge, execution
+        )
+    assert raised.value.code == "implementation_unavailable"
+    assert forge.reads == [] and execution.requests == []
+
+
+@pytest.mark.asyncio
+async def test_unconfigured_provider_is_infrastructure() -> None:
     identity = execution_identity("post_submit")
     execution = _Execution()
-    forge = _Forge(error=ForgeChangeNotFoundError())
+    forge = _Forge(resolve_error=ExternalServiceConfigurationError())
+    with pytest.raises(SelectedPostSubmitInfrastructureUnavailable) as raised:
+        await _evaluate(
+            _forge_policy(), _ProofView(execution_material(identity), _proof()), forge, execution
+        )
+    assert raised.value.code == "implementation_unavailable"
+    assert execution.requests == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error", [ForgeChangeNotFoundError(), ForgeChangeNotEligibleError()], ids=("absent", "ineligible")
+)
+async def test_missing_change_reads_no_facts(error) -> None:
+    identity = execution_identity("post_submit")
+    execution = _Execution()
+    forge = _Forge(error=error)
     await _evaluate(
         _forge_policy(), _ProofView(execution_material(identity), _proof()), forge, execution
     )

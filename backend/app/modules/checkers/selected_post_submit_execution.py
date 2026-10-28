@@ -13,9 +13,9 @@ from app.interfaces.external_services import (
     ExternalServiceUnavailableError,
 )
 from app.interfaces.forge_facts import (
+    ForgeChangeNotEligibleError,
     ForgeChangeNotFoundError,
     ForgeFactsAdapter,
-    parse_change_url,
 )
 from app.modules.checkers.api.external import (
     PostSubmitExternalCheckerIdentity,
@@ -46,12 +46,15 @@ FORGE_FACTS_INPUT_KEY = "forge_facts"
 ForgeFactsResolver = Callable[[str], ForgeFactsAdapter]
 
 
-def _claimed_change_number(material_view, selection: ForgeFactsSelection) -> int | None:
+def _claimed_change_number(
+    material_view, selection: ForgeFactsSelection, adapter: ForgeFactsAdapter
+) -> int | None:
     """Return the claimed change in the selected repository, or None.
 
     A missing, oversized or malformed claim, or one naming another repository,
     yields no facts; the checker then fails closed with its own finding. Facts
     are never read from a repository the locked configuration does not name.
+    The provider parses its own forge's change URL.
     """
     entry = next((item for item in material_view.entries if item.normalized_path == PROOF_PATH), None)
     if entry is None or entry.entry_type != "file" or entry.byte_count > MAX_PROOF_BYTES:
@@ -60,9 +63,8 @@ def _claimed_change_number(material_view, selection: ForgeFactsSelection) -> int
         proof = json.loads(material_view.read_file(PROOF_PATH, maximum_bytes=MAX_PROOF_BYTES))
     except (ValueError, RecursionError):
         return None
-    claimed = parse_change_url(
-        selection.forge,
-        proof.get(PROOF_CHANGE_URL_KEY) if isinstance(proof, dict) else None,
+    claimed = adapter.parse_change_url(
+        proof.get(PROOF_CHANGE_URL_KEY) if isinstance(proof, dict) else None
     )
     if claimed is None or claimed[0].lower() != selection.repository.lower():
         return None
@@ -103,18 +105,26 @@ class SelectedPostSubmitProcessor:
         self._forge_facts = forge_facts
 
     async def _read_forge_facts(self, selection, material_view) -> dict[str, object] | None:
-        """Read facts outside the checker sandbox; forge failures are infrastructure."""
-        number = _claimed_change_number(material_view, selection)
-        if number is None:
-            return None
+        """Read facts outside the checker sandbox; forge failures are infrastructure.
+
+        The provider must serve the forge instance the binding names; a change
+        the forge does not have, or one outside the selection, yields no facts.
+        """
         if self._forge_facts is None:
             raise SelectedPostSubmitInfrastructureUnavailable("implementation_unavailable")
         try:
-            facts = await self._forge_facts(selection.forge).fetch_change_facts(
+            adapter = self._forge_facts(selection.forge)
+            if adapter.forge_origin != selection.forge_origin:
+                raise SelectedPostSubmitInfrastructureUnavailable("implementation_unavailable")
+            number = _claimed_change_number(material_view, selection, adapter)
+            if number is None:
+                return None
+            facts = await adapter.fetch_change_facts(
                 repository=selection.repository,
                 change_number=number,
+                base_branch=selection.base_branch,
             )
-        except ForgeChangeNotFoundError:
+        except (ForgeChangeNotFoundError, ForgeChangeNotEligibleError):
             return None
         except ExternalServiceConfigurationError as exc:
             raise SelectedPostSubmitInfrastructureUnavailable(

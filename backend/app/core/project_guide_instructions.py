@@ -4,8 +4,10 @@ import json
 
 from app.modules.checkers.api.external import EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
 from app.modules.checkers.api.external_policy import (
+    FORGE_FACTS_VERSION_KEY,
     MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS,
     MAXIMUM_SELECTED_PRE_EXECUTION_BUDGET_MS,
+    SELECTED_POST_FORGE_FACTS_BUDGET_MS,
     SELECTED_POST_MATERIALIZATION_BUDGET_MS,
     WORKSTREAM_DEFAULT_EXECUTION_BUDGET_MS,
 )
@@ -373,7 +375,9 @@ PROJECT_GUIDE_INSTRUCTIONS += (
     f"materialization {SELECTED_POST_MATERIALIZATION_BUDGET_MS}. "
     "Add every separate entry's registered deadline (or proposed duration for a missing "
     f"image) plus {EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS} milliseconds cleanup, "
-    "without overlap. Only a stage exceeding its total may declare execution_capacity/"
+    "without overlap. A POST entry whose parameters include "
+    f"{FORGE_FACTS_VERSION_KEY} adds {SELECTED_POST_FORGE_FACTS_BUDGET_MS} milliseconds "
+    "for the forge facts read. Only a stage exceeding its total may declare execution_capacity/"
     "runtime_gap; explain the exact shortfall in its specification. Validation checks "
     "the totals. A proposal grants no extra capacity.\n"
 )

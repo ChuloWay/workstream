@@ -204,7 +204,12 @@ class _ConfiguredExternalCheckerExecution:
 
 
 def configured_forge_facts(settings):
-    """Resolve the forge facts provider a locked binding names, only when it is used."""
+    """Resolve the forge facts provider a locked binding names, only when it is used.
+
+    Each evaluation builds its own provider: evaluations may run on separate
+    event loops, so a provider (and its cached installation token) is not
+    shared between them.
+    """
     from app.adapters.github import forge_facts_adapter_factory
 
     return forge_facts_adapter_factory(settings).create
@@ -593,7 +598,7 @@ def selected_submission_evaluation_content(
 
 
 def delivery_bound_post_submission_executor(
-    *, sessions, materialization, envelope, request, selected_execution=None, forge_facts=None
+    *, sessions, materialization, envelope, request, forge_facts, selected_execution=None
 ):
     """Add invocation custody to the existing executor without registering delivery."""
     from app.adapters.auth import post_submit_execution_authority
@@ -633,8 +638,8 @@ def reconciliation_bound_post_submission_executor(
     original,
     payload,
     request,
+    forge_facts,
     selected_execution=None,
-    forge_facts=None,
 ):
     """Run the existing executor behind exact original-and-child recovery custody."""
     from app.adapters.auth import (

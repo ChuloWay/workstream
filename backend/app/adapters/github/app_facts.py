@@ -38,6 +38,7 @@ from app.interfaces.forge_facts import (
     GITHUB_FORGE,
     ForgeActorFact,
     ForgeChangeFacts,
+    ForgeChangeNotEligibleError,
     ForgeChangeNotFoundError,
     ForgeChangedFileFact,
     ForgeFactsAccessDeniedError,
@@ -50,7 +51,6 @@ from app.interfaces.forge_facts import (
     ForgeRequiredChecksNotConfiguredError,
     ForgeResponseDigest,
     ForgeReviewFact,
-    is_forge_repository,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,16 +66,21 @@ JWT_LIFETIME_SECONDS = 540
 TOKEN_REFRESH_MARGIN_SECONDS = 300
 INITIAL_BACKOFF_SECONDS = 0.5
 GITHUB_ACTIONS_APP_ID = 15368
-_ACTIONS_DETAILS_URL = re.compile(
-    r"https://github\.com/([A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100})"
-    r"/actions/runs/([1-9][0-9]{0,18})(?:/job/[1-9][0-9]{0,18})?"
+# GitHub owner logins are at most 39 characters; repository names at most 100.
+_GITHUB_REPOSITORY_PATTERN = r"[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}"
+_GITHUB_REPOSITORY = re.compile(
+    r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/(?!\.{1,2}$)[A-Za-z0-9._-]{1,100}$"
 )
+_GITHUB_LOGIN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?:\[bot\])?")
+# Reviewers whose write access is read: those approving the head commit.
+MAXIMUM_PERMISSION_READS = 20
+_WRITE_PERMISSIONS = frozenset({"admin", "maintain", "write"})
 # Whole facts reads attempted when the pull request moves during a read.
 FACTS_CONSISTENCY_ATTEMPTS = 3
 _BOUND_PULL_FIELDS = (
     "head_sha",
     "merged",
-    "merge_commit_sha",
+    "landed_commit_sha",
     "base_ref",
     "state",
     "changed_files_count",
@@ -128,6 +133,25 @@ class GitHubAppFactsConfiguration:
     maximum_attempts: int
 
 
+def github_web_origin(api_base_url: str) -> str:
+    """Return the web origin for a GitHub API base URL.
+
+    ``https://api.github.com`` serves ``https://github.com``; a GitHub
+    Enterprise Server API (``https://host/api/v3``) serves ``https://host``.
+    """
+    parsed = urlsplit(api_base_url)
+    if parsed.netloc == "api.github.com":
+        return "https://github.com"
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def is_github_repository(value: object) -> bool:
+    """Return whether ``value`` is a GitHub ``owner/name`` repository path."""
+    return isinstance(value, str) and value.isascii() and bool(
+        _GITHUB_REPOSITORY.fullmatch(value)
+    )
+
+
 def load_github_app_private_key(secret: SecretStr) -> RSAPrivateKey:
     """Parse one bounded PEM RSA key without exposing its bytes."""
     key: object = None
@@ -169,6 +193,9 @@ class GitHubAppFactsAdapter:
         "_installations",
         "_token_lock",
         "_api_origin",
+        "_web_origin",
+        "_change_url",
+        "_actions_run_url",
     )
 
     def __init__(
@@ -194,6 +221,15 @@ class GitHubAppFactsAdapter:
         self._token_lock = asyncio.Lock()
         parsed = urlsplit(configuration.api_base_url)
         self._api_origin = (parsed.scheme, parsed.netloc)
+        self._web_origin = github_web_origin(configuration.api_base_url)
+        origin = re.escape(self._web_origin)
+        self._change_url = re.compile(
+            rf"{origin}/({_GITHUB_REPOSITORY_PATTERN})/pull/([1-9][0-9]{{0,9}})"
+        )
+        self._actions_run_url = re.compile(
+            rf"{origin}/({_GITHUB_REPOSITORY_PATTERN})"
+            r"/actions/runs/([1-9][0-9]{0,18})(?:/job/[1-9][0-9]{0,18})?"
+        )
 
     def __repr__(self) -> str:
         """Show only the non-secret App id."""
@@ -204,17 +240,38 @@ class GitHubAppFactsAdapter:
         """Return the fixed GitHub App facts provider identity."""
         return _IDENTITY
 
+    @property
+    def forge_origin(self) -> str:
+        """Return the GitHub web origin this App reads, e.g. https://github.com."""
+        return self._web_origin
+
+    def parse_change_url(self, value: object) -> tuple[str, int] | None:
+        """Parse ``{origin}/{owner}/{name}/pull/{number}`` in ASCII, nothing else.
+
+        No port other than the origin's, user information, query, fragment,
+        trailing slash, percent encoding or backslash is accepted.
+        """
+        if not isinstance(value, str) or not value.isascii():
+            return None
+        match = self._change_url.fullmatch(value)
+        if match is None or not is_github_repository(match.group(1)):
+            return None
+        return match.group(1), int(match.group(2))
+
     async def fetch_change_facts(
         self,
         *,
         repository: str,
         change_number: int,
+        base_branch: str,
     ) -> ForgeChangeFacts:
         """Read the pull request, base-branch required checks and head-SHA results."""
         if (
-            not is_forge_repository(GITHUB_FORGE, repository)
+            not is_github_repository(repository)
             or type(change_number) is not int
             or change_number < 1
+            or type(base_branch) is not str
+            or not base_branch
         ):
             raise ExternalServiceConfigurationError(_IDENTITY)
         seconds = self._configuration.total_deadline_seconds
@@ -236,7 +293,7 @@ class GitHubAppFactsAdapter:
                     digests: list[ForgeResponseDigest] = []
                     session = _FactsSession(self, client, repository, deadline, digests)
                     facts = await self._read_consistent_facts(
-                        session, repository, change_number, digests
+                        session, repository, change_number, base_branch, digests
                     )
                     if facts is not None:
                         if deadline.remaining() <= 0:
@@ -253,6 +310,7 @@ class GitHubAppFactsAdapter:
         session: _FactsSession,
         repository: str,
         pull_request_number: int,
+        base_branch: str,
         digests: list[ForgeResponseDigest],
     ) -> ForgeChangeFacts | None:
         """Read every fact once, bracketed by two pull-request reads.
@@ -263,11 +321,19 @@ class GitHubAppFactsAdapter:
         base branch, state, changed-file count), so every fact belongs to one
         pull-request state. Returns None when the state moved.
         """
+        # A repository outside the App's installation answers 404 like a
+        # missing pull request; reading it first keeps that a configuration
+        # failure rather than a contributor's missing change.
+        await session.read_json(
+            "repository", f"/repos/{repository}", not_found=ForgeFactsAccessDeniedError
+        )
         pull_path = f"/repos/{repository}/pulls/{pull_request_number}"
         pull = await session.read_json(
             "pull_request", pull_path, not_found=ForgeChangeNotFoundError
         )
-        pull_facts = _pull_request_facts(pull, repository, pull_request_number)
+        pull_facts = self._pull_request_facts(pull, repository, pull_request_number)
+        if pull_facts["base_ref"] != base_branch:
+            raise ForgeChangeNotEligibleError(_IDENTITY)
         required = _required_checks(
             await session.read_json(
                 "required_status_checks",
@@ -280,10 +346,16 @@ class GitHubAppFactsAdapter:
         head_sha = pull_facts["head_sha"]
         changed_files_count = pull_facts["changed_files_count"]
         if changed_files_count > GITHUB_MAXIMUM_LISTED_FILES:
-            raise ForgeFactsIncompleteError(_IDENTITY)
+            raise ForgeChangeNotEligibleError(_IDENTITY)
         reviews = await session.read_pages(
             "reviews", f"{pull_path}/reviews", item_key=None
         )
+        # GitHub lists reviews oldest first; sort by id so the order is explicit.
+        try:
+            reviews.sort(key=lambda item: item["id"])
+        except (KeyError, TypeError):
+            raise ForgeFactsProtocolError(_IDENTITY) from None
+        write_access = await _reviewer_write_access(session, repository, reviews, head_sha)
         files = await session.read_pages(
             "files",
             f"{pull_path}/files",
@@ -301,7 +373,7 @@ class GitHubAppFactsAdapter:
             item_key="statuses",
             require_sha=head_sha,
         )
-        final = _pull_request_facts(
+        final = self._pull_request_facts(
             await session.read_json(
                 "pull_request_final", pull_path, not_found=ForgeChangeNotFoundError
             ),
@@ -317,16 +389,17 @@ class GitHubAppFactsAdapter:
         try:
             return ForgeChangeFacts(
                 forge=GITHUB_FORGE,
+                forge_origin=self._web_origin,
                 repository=pull_facts["repository"],
                 change_number=pull_request_number,
                 change_url=pull_facts["change_url"],
                 state=pull_facts["state"],
                 merged=pull_facts["merged"],
-                merge_commit_sha=pull_facts["merge_commit_sha"],
+                landed_commit_sha=pull_facts["landed_commit_sha"],
                 base_ref=pull_facts["base_ref"],
                 head_sha=head_sha,
                 author=_actor(pull_facts["author"]),
-                reviews=tuple(_review(item) for item in reviews),
+                reviews=tuple(_review(item, write_access) for item in reviews),
                 changed_files_count=changed_files_count,
                 changed_files=tuple(
                     ForgeChangedFileFact(
@@ -338,7 +411,14 @@ class GitHubAppFactsAdapter:
                 ),
                 required_checks=tuple(
                     _required_check_fact(
-                        name, app_id, check_runs, statuses, head_sha, pull_facts["repository"]
+                        name,
+                        app_id,
+                        check_runs,
+                        statuses,
+                        head_sha,
+                        pull_facts["repository"],
+                        self._web_origin,
+                        self._actions_run_url,
                     )
                     for name, app_id in required
                 ),
@@ -349,6 +429,10 @@ class GitHubAppFactsAdapter:
             raise ForgeFactsProtocolError(_IDENTITY) from None
 
     # -- credentials -------------------------------------------------------
+
+    def _pull_request_facts(self, body: object, repository: str, number: int) -> dict[str, Any]:
+        """Translate one pull request read with this instance's web origin."""
+        return _pull_request_facts(body, repository, number, self._web_origin)
 
     def _app_jwt(self) -> str:
         """Sign a short-lived RS256 App JWT; it authenticates only token exchange."""
@@ -505,7 +589,10 @@ class _FactsSession:
             ):
                 raise ForgeFactsProtocolError(_IDENTITY)
             items.extend(page_items)
-            next_url = response.links.get("next", {}).get("url")
+            try:
+                next_url = response.links.get("next", {}).get("url")
+            except ValueError:
+                raise ForgeFactsProtocolError(_IDENTITY) from None
             if next_url is None:
                 return items
             parsed = urlsplit(next_url)
@@ -579,6 +666,8 @@ class _FactsSession:
                 )
             except httpx.TransportError:
                 response = None
+            except (httpx.HTTPError, httpx.InvalidURL):
+                raise ForgeFactsProtocolError(_IDENTITY) from None
             delay = INITIAL_BACKOFF_SECONDS * (2 ** (attempt - 1))
             if response is not None:
                 status = response.status_code
@@ -639,7 +728,9 @@ def _rate_limit_delay(response: httpx.Response, now: float) -> float | None:
     return None
 
 
-def _pull_request_facts(body: object, repository: str, number: int) -> dict[str, Any]:
+def _pull_request_facts(
+    body: object, repository: str, number: int, web_origin: str
+) -> dict[str, Any]:
     """Extract the pull request fields and confirm it belongs to the repository."""
     try:
         if not isinstance(body, dict):
@@ -652,10 +743,10 @@ def _pull_request_facts(body: object, repository: str, number: int) -> dict[str,
             "repository": full_name,
             "state": body["state"],
             "merged": merged,
-            "merge_commit_sha": body["merge_commit_sha"] if merged is True else None,
+            "landed_commit_sha": body["merge_commit_sha"] if merged is True else None,
             "base_ref": base["ref"],
             "head_sha": head["sha"],
-            "change_url": f"https://github.com/{full_name}/pull/{number}",
+            "change_url": f"{web_origin}/{full_name}/pull/{number}",
             "author": body["user"],
             "changed_files_count": body["changed_files"],
         }
@@ -714,7 +805,7 @@ def _latest(items: list[dict]) -> dict | None:
     return max(items, key=lambda item: item["id"], default=None)
 
 
-def _workflow_run_id(run: dict, repository: str) -> int | None:
+def _workflow_run_id(run: dict, repository: str, run_url: re.Pattern[str]) -> int | None:
     """Return the Actions workflow run id from a GitHub Actions run's details URL.
 
     The App lacks Actions read permission, so the run id comes from GitHub's own
@@ -727,7 +818,7 @@ def _workflow_run_id(run: dict, repository: str) -> int | None:
         return None
     if not isinstance(details_url, str):
         return None
-    match = _ACTIONS_DETAILS_URL.fullmatch(details_url)
+    match = run_url.fullmatch(details_url)
     if match is None or match.group(1).casefold() != repository.casefold():
         return None
     return int(match.group(2))
@@ -752,14 +843,64 @@ def _actor(body: object) -> ForgeActorFact:
     )
 
 
-def _review(body: dict) -> ForgeReviewFact:
+class _NotCollaborator(Exception):
+    """Internal signal that GitHub has no permission record for a reviewer."""
+
+
+async def _reviewer_write_access(
+    session: _FactsSession, repository: str, reviews: list[dict], head_sha: str
+) -> dict[int, bool]:
+    """Read write access for reviewers who approved ``head_sha``.
+
+    Other reviewers' access is not read and is reported as unknown. A reviewer
+    without a permission record, or whose record names another account, has
+    no write access. More approving reviewers than the bound fail closed.
+    """
+    reviewer_ids: dict[int, str] = {}
+    for item in reviews:
+        user = item.get("user")
+        if (
+            item.get("state") == "APPROVED"
+            and item.get("commit_id") == head_sha
+            and isinstance(user, dict)
+            and type(user.get("id")) is int
+            and isinstance(user.get("login"), str)
+        ):
+            reviewer_ids[user["id"]] = user["login"]
+    if len(reviewer_ids) > MAXIMUM_PERMISSION_READS:
+        raise ForgeFactsIncompleteError(_IDENTITY)
+    access: dict[int, bool] = {}
+    for user_id, login in reviewer_ids.items():
+        if not _GITHUB_LOGIN.fullmatch(login):
+            access[user_id] = False
+            continue
+        try:
+            body = await session.read_json(
+                "reviewer_permission",
+                f"/repos/{repository}/collaborators/{login}/permission",
+                not_found=_NotCollaborator,
+            )
+        except _NotCollaborator:
+            access[user_id] = False
+            continue
+        if not isinstance(body, dict) or not isinstance(body.get("user"), dict):
+            raise ForgeFactsProtocolError(_IDENTITY)
+        access[user_id] = (
+            body["user"].get("id") == user_id and body.get("permission") in _WRITE_PERMISSIONS
+        )
+    return access
+
+
+def _review(body: dict, write_access: dict[int, bool]) -> ForgeReviewFact:
     """Translate one review; GitHub reports a deleted reviewer as null."""
     user = body.get("user")
-    if not isinstance(body.get("state"), str):
+    if not isinstance(body.get("state"), str) or type(body.get("id")) is not int:
         raise ForgeFactsProtocolError(_IDENTITY)
+    reviewer = None if user is None else _actor(user)
     return ForgeReviewFact(
-        id=body["id"],
-        reviewer=None if user is None else _actor(user),
+        id=str(body["id"]),
+        reviewer=reviewer,
+        reviewer_write_access=None if reviewer is None else write_access.get(reviewer.id),
         state=_REVIEW_STATES.get(body["state"], "other"),
         commit_id=body.get("commit_id"),
         submitted_at=body.get("submitted_at"),
@@ -773,6 +914,8 @@ def _required_check_fact(
     statuses: list[dict],
     head_sha: str,
     repository: str,
+    web_origin: str,
+    run_url: re.Pattern[str],
 ) -> ForgeRequiredCheckFact:
     """Judge only the latest check run and latest status for one required check.
 
@@ -794,7 +937,7 @@ def _required_check_fact(
     workflow_run_id = None
     if run is not None:
         check_run_head_sha = run.get("head_sha")
-        workflow_run_id = _workflow_run_id(run, repository)
+        workflow_run_id = _workflow_run_id(run, repository, run_url)
         app = run.get("app")
         check_run_app_id = app.get("id") if isinstance(app, dict) else None
         if check_run_app_id is not None and type(check_run_app_id) is not int:
@@ -841,6 +984,6 @@ def _required_check_fact(
         run_url=(
             None
             if workflow_run_id is None
-            else f"https://github.com/{repository}/actions/runs/{workflow_run_id}"
+            else f"{web_origin}/{repository}/actions/runs/{workflow_run_id}"
         ),
     )

@@ -20,6 +20,7 @@ from app.adapters.github import forge_facts_adapter_factory
 from app.adapters.github.app_facts import (
     GitHubAppFactsAdapter,
     GitHubAppFactsConfiguration,
+    github_web_origin,
     load_github_app_private_key,
     _InstallationToken,
 )
@@ -35,13 +36,13 @@ from app.interfaces.forge_facts import (
     ForgeFactsProtocolError,
     ForgeFactsUnavailableError,
     ForgeChangeFacts,
+    ForgeChangeNotEligibleError,
     ForgeChangeNotFoundError,
     ForgeJudgedResultFact,
     ForgeRequiredChecksNotConfiguredError,
-    parse_change_url,
 )
 
-API = "https://api.github.test"
+API = "https://api.github.com"
 REPOSITORY = "acme/widgets"
 HEAD_SHA = "a" * 40
 MERGE_SHA = "b" * 40
@@ -108,10 +109,18 @@ class FakeGitHub:
         self.bodies: dict[str, bytes] = {}
         self.tokens = [TOKEN, SECOND_TOKEN]
         self.routes: dict[tuple[str, str], list] = {}
+        # A GitHub Enterprise Server API lives under a path such as /api/v3.
+        self.prefix = ""
         self.route("GET", f"/repos/{REPOSITORY}/installation", {"id": 77})
         self.route("POST", "/app/installations/77/access_tokens", self._token)
+        self.route("GET", f"/repos/{REPOSITORY}", {"full_name": REPOSITORY})
         self.route("GET", f"/repos/{REPOSITORY}/pulls/12", _pull())
         self.route("GET", f"/repos/{REPOSITORY}/pulls/12/reviews", REVIEWS)
+        self.route(
+            "GET",
+            f"/repos/{REPOSITORY}/collaborators/reviewer/permission",
+            {"permission": "write", "user": {"login": "reviewer", "id": 7}},
+        )
         self.route("GET", f"/repos/{REPOSITORY}/pulls/12/files", FILES)
         self.route(
             "GET",
@@ -161,7 +170,7 @@ class FakeGitHub:
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
-        queue = self.routes.get((request.method, request.url.path))
+        queue = self.routes.get((request.method, request.url.path.removeprefix(self.prefix)))
         if queue is None:
             return httpx.Response(404, json={"message": "Not Found"})
         item = queue.pop(0) if len(queue) > 1 else queue[0]
@@ -206,13 +215,14 @@ def _adapter(
     installation_id: int | None = None,
     deadline: float = 45.0,
     attempts: int = 3,
+    api: str = API,
 ) -> GitHubAppFactsAdapter:
     clock = clock or Clock()
     return GitHubAppFactsAdapter(
         GitHubAppFactsConfiguration(
             app_id=APP_ID,
             installation_id=installation_id,
-            api_base_url=API,
+            api_base_url=api,
             request_timeout_seconds=10.0,
             total_deadline_seconds=deadline,
             maximum_attempts=attempts,
@@ -226,7 +236,9 @@ def _adapter(
 
 
 async def _fetch(adapter: GitHubAppFactsAdapter) -> ForgeChangeFacts:
-    return await adapter.fetch_change_facts(repository=REPOSITORY, change_number=12)
+    return await adapter.fetch_change_facts(
+        repository=REPOSITORY, change_number=12, base_branch="main"
+    )
 
 
 def _sha(content: bytes) -> str:
@@ -240,26 +252,29 @@ async def test_happy_path_returns_facts_with_response_digests() -> None:
     assert facts.model_dump(mode="json") == {
         "schema_version": "workstream.forge_change_facts.v1",
         "forge": "github",
+        "forge_origin": "https://github.com",
         "repository": REPOSITORY,
         "change_number": 12,
         "change_url": f"https://github.com/{REPOSITORY}/pull/12",
         "state": "closed",
         "merged": True,
-        "merge_commit_sha": MERGE_SHA,
+        "landed_commit_sha": MERGE_SHA,
         "base_ref": "main",
         "head_sha": HEAD_SHA,
         "author": {"login": "agent-bot", "id": 501, "kind": "bot"},
         "reviews": [
             {
-                "id": 61,
+                "id": "61",
                 "reviewer": {"login": "reviewer", "id": 7, "kind": "user"},
+                "reviewer_write_access": True,
                 "state": "approved",
                 "commit_id": HEAD_SHA,
                 "submitted_at": "2027-01-15T07:00:00Z",
             },
             {
-                "id": 62,
+                "id": "62",
                 "reviewer": None,
+                "reviewer_write_access": None,
                 "state": "commented",
                 "commit_id": MERGE_SHA,
                 "submitted_at": "2027-01-15T07:30:00Z",
@@ -293,6 +308,10 @@ async def test_happy_path_returns_facts_with_response_digests() -> None:
         "fetched_at": "2027-01-15T08:00:00Z",
         "responses": [
             {
+                "request": "repository",
+                "sha256": _sha(fake.bodies[f"{API}/repos/{REPOSITORY}"]),
+            },
+            {
                 "request": "pull_request",
                 "sha256": _sha(fake.bodies[f"{API}/repos/{REPOSITORY}/pulls/12"]),
             },
@@ -309,6 +328,14 @@ async def test_happy_path_returns_facts_with_response_digests() -> None:
                 "request": "reviews.page.1",
                 "sha256": _sha(
                     fake.bodies[f"{API}/repos/{REPOSITORY}/pulls/12/reviews?per_page=100"]
+                ),
+            },
+            {
+                "request": "reviewer_permission",
+                "sha256": _sha(
+                    fake.bodies[
+                        f"{API}/repos/{REPOSITORY}/collaborators/reviewer/permission"
+                    ]
                 ),
             },
             {
@@ -394,7 +421,7 @@ async def test_pagination_follows_same_origin_next_links() -> None:
     facts = await _fetch(_adapter(fake))
 
     assert facts.required_checks[0].conclusion == "failure"
-    assert [item.request for item in facts.responses][4:6] == [
+    assert [item.request for item in facts.responses][6:8] == [
         "check_runs.page.1",
         "check_runs.page.2",
     ]
@@ -413,7 +440,7 @@ async def test_pagination_refuses_a_foreign_origin_link() -> None:
     )
     with pytest.raises(ForgeFactsProtocolError):
         await _fetch(_adapter(fake))
-    assert all(request.url.host == "api.github.test" for request in fake.requests)
+    assert all(request.url.host == "api.github.com" for request in fake.requests)
 
 
 async def test_required_check_conclusions_fail_closed() -> None:
@@ -545,7 +572,7 @@ async def test_unmerged_pull_request_reports_no_merge_commit() -> None:
     fake = FakeGitHub()
     fake.route("GET", f"/repos/{REPOSITORY}/pulls/12", _pull(state="open", merged=False))
     facts = await _fetch(_adapter(fake))
-    assert (facts.state, facts.merged, facts.merge_commit_sha) == ("open", False, None)
+    assert (facts.state, facts.merged, facts.landed_commit_sha) == ("open", False, None)
 
 
 @pytest.mark.parametrize(
@@ -685,7 +712,7 @@ async def test_invalid_request_is_refused_before_any_network_call(
     fake = FakeGitHub()
     with pytest.raises(ExternalServiceConfigurationError):
         await _adapter(fake).fetch_change_facts(
-            repository=repository, change_number=number
+            repository=repository, change_number=number, base_branch="main"
         )
     assert fake.requests == []
 
@@ -861,22 +888,25 @@ async def test_reviews_and_files_paginate_and_reviews_are_returned_unfiltered() 
     )
     facts = await _fetch(_adapter(fake))
     assert [(item.id, item.state) for item in facts.reviews] == [
-        (61, "approved"),
-        (63, "changes_requested"),
+        ("61", "approved"),
+        ("63", "changes_requested"),
     ]
     assert len(facts.changed_files) == facts.changed_files_count == 101
-    assert [item.request for item in facts.responses][2:6] == [
+    assert [item.request for item in facts.responses][3:8] == [
         "reviews.page.1",
         "reviews.page.2",
+        "reviewer_permission",
         "files.page.1",
         "files.page.2",
     ]
 
 
-async def test_more_changed_files_than_github_can_list_fails_closed() -> None:
+async def test_more_changed_files_than_github_can_list_is_not_eligible() -> None:
+    # A permanent property of the change, not an outage: no facts, so the
+    # checker fails the proof instead of an Operator retrying forever.
     fake = FakeGitHub()
     fake.route("GET", f"/repos/{REPOSITORY}/pulls/12", _pull(changed_files=3001))
-    with pytest.raises(ForgeFactsIncompleteError):
+    with pytest.raises(ForgeChangeNotEligibleError):
         await _fetch(_adapter(fake))
     assert not any(request.url.path.endswith("/files") for request in fake.requests)
 
@@ -932,7 +962,8 @@ async def test_pull_request_moving_once_is_reread_and_bound_to_one_state() -> No
     assert facts.head_sha == HEAD_SHA
     assert _pull_reads(fake) == 4
     labels = [item.request for item in facts.responses]
-    assert labels[0] == "pull_request" and labels[-1] == "pull_request_final"
+    assert labels[:2] == ["repository", "pull_request"]
+    assert labels[-1] == "pull_request_final"
     assert labels.count("pull_request") == 1
 
 
@@ -1036,14 +1067,13 @@ async def test_run_url_comes_only_from_actions_runs_of_this_repository(
     ],
 )
 def test_pull_request_url_parser_rejects_noncanonical_forms(url: object) -> None:
-    assert parse_change_url("github", url) is None
+    assert _adapter(FakeGitHub()).parse_change_url(url) is None
 
 
 def test_pull_request_url_parser_returns_repository_and_number() -> None:
-    assert parse_change_url("github", "https://github.com/Acme/widgets.v2/pull/12") == (
-        "Acme/widgets.v2",
-        12,
-    )
+    assert _adapter(FakeGitHub()).parse_change_url(
+        "https://github.com/Acme/widgets.v2/pull/12"
+    ) == ("Acme/widgets.v2", 12)
 
 
 
@@ -1355,12 +1385,13 @@ def test_facts_model_rejects_a_noncanonical_repository() -> None:
     facts = ForgeChangeFacts.model_validate(
         {
             "forge": "github",
+            "forge_origin": "https://github.com",
             "repository": REPOSITORY,
             "change_number": 12,
             "change_url": f"https://github.com/{REPOSITORY}/pull/12",
             "state": "closed",
             "merged": True,
-            "merge_commit_sha": MERGE_SHA,
+            "landed_commit_sha": MERGE_SHA,
             "base_ref": "main",
             "head_sha": HEAD_SHA,
             "author": {"login": "a", "id": 1, "kind": "user"},
@@ -1380,7 +1411,7 @@ def test_facts_model_rejects_a_noncanonical_repository() -> None:
             "responses": [{"request": "pull_request", "sha256": "sha256:" + "0" * 64}],
         }
     )
-    for repository in ("acme", "acme/..", "-acme/widgets"):
+    for repository in ("acme", "acme/..", "acme//widgets", "acme/" + "w" * 251):
         with pytest.raises(ValidationError):
             ForgeChangeFacts.model_validate(
                 {**facts.model_dump(), "repository": repository}
@@ -1406,11 +1437,14 @@ async def test_github_accounts_and_review_states_map_to_neutral_values() -> None
     facts = await _fetch(_adapter(fake))
     assert facts.author.kind == "other"
     assert [(item.id, item.state) for item in facts.reviews] == [
-        (70, "dismissed"),
-        (71, "other"),
-        (72, "approved"),
+        ("70", "dismissed"),
+        ("71", "other"),
+        ("72", "approved"),
     ]
     assert facts.reviews[2].reviewer.kind == "other"
+    # Only reviewers approving the head commit are asked about write access.
+    assert facts.reviews[2].reviewer_write_access is False
+    assert facts.reviews[0].reviewer_write_access is None
 
 
 async def test_pull_request_url_other_than_the_canonical_change_url_is_a_protocol_error() -> None:
@@ -1448,12 +1482,13 @@ async def test_check_run_and_commit_status_are_both_judged_for_an_unbound_check(
 def test_facts_model_binds_the_file_count_and_accepts_sha256_object_names() -> None:
     base = {
         "forge": "github",
+        "forge_origin": "https://github.com",
         "repository": REPOSITORY,
         "change_number": 12,
         "change_url": f"https://github.com/{REPOSITORY}/pull/12",
         "state": "open",
         "merged": False,
-        "merge_commit_sha": None,
+        "landed_commit_sha": None,
         "base_ref": "main",
         "head_sha": "c" * 64,
         "author": {"login": "a", "id": 1, "kind": "user"},
@@ -1475,3 +1510,205 @@ def test_facts_model_binds_the_file_count_and_accepts_sha256_object_names() -> N
     unjudged = {**base["required_checks"][0], "conclusion": "success"}
     with pytest.raises(ValidationError):
         ForgeChangeFacts.model_validate({**base, "required_checks": [unjudged]})
+
+
+# Revision 2: forge instance, reviewer write access, eligibility -----------------
+
+
+@pytest.mark.parametrize(
+    ("api", "origin"),
+    [
+        ("https://api.github.com", "https://github.com"),
+        ("https://ghe.example/api/v3", "https://ghe.example"),
+        ("https://ghe.example:8443/api/v3", "https://ghe.example:8443"),
+    ],
+)
+def test_web_origin_follows_the_configured_api(api: str, origin: str) -> None:
+    assert github_web_origin(api) == origin
+
+
+async def test_enterprise_instance_names_its_own_origin_in_every_url() -> None:
+    fake = FakeGitHub()
+    fake.prefix = "/api/v3"
+    origin = "https://ghe.example"
+    fake.route(
+        "GET", f"/repos/{REPOSITORY}/pulls/12", _pull(html_url=f"{origin}/{REPOSITORY}/pull/12")
+    )
+    check_runs = fake.routes[("GET", f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/check-runs")][0]
+    check_runs["check_runs"][0]["details_url"] = f"{origin}/{REPOSITORY}/actions/runs/345/job/678"
+    adapter = _adapter(fake, api=f"{origin}/api/v3")
+
+    facts = await _fetch(adapter)
+
+    assert adapter.forge_origin == facts.forge_origin == origin
+    assert facts.change_url == f"{origin}/{REPOSITORY}/pull/12"
+    assert facts.required_checks[0].run_url == f"{origin}/{REPOSITORY}/actions/runs/345"
+    assert adapter.parse_change_url(f"{origin}/{REPOSITORY}/pull/12") == (REPOSITORY, 12)
+    assert adapter.parse_change_url(f"https://github.com/{REPOSITORY}/pull/12") is None
+
+
+async def test_github_com_pull_request_url_on_an_enterprise_instance_is_a_protocol_error() -> None:
+    fake = FakeGitHub()
+    fake.prefix = "/api/v3"
+    with pytest.raises(ForgeFactsProtocolError):
+        await _fetch(_adapter(fake, api="https://ghe.example/api/v3"))
+
+
+async def test_change_into_another_base_branch_is_not_eligible() -> None:
+    fake = FakeGitHub()
+    with pytest.raises(ForgeChangeNotEligibleError):
+        await _adapter(fake).fetch_change_facts(
+            repository=REPOSITORY, change_number=12, base_branch="dev"
+        )
+    assert not any("/protection/" in request.url.path for request in fake.requests)
+
+
+async def test_repository_the_app_cannot_read_is_access_denied_not_a_missing_change() -> None:
+    fake = FakeGitHub()
+    fake.route("GET", f"/repos/{REPOSITORY}", httpx.Response(404, json={}))
+    with pytest.raises(ForgeFactsAccessDeniedError):
+        await _fetch(_adapter(fake))
+    assert not any(request.url.path.endswith("/pulls/12") for request in fake.requests)
+
+
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    [
+        ({"permission": "admin", "user": {"login": "reviewer", "id": 7}}, True),
+        ({"permission": "maintain", "user": {"login": "reviewer", "id": 7}}, True),
+        ({"permission": "read", "user": {"login": "reviewer", "id": 7}}, False),
+        ({"permission": "triage", "user": {"login": "reviewer", "id": 7}}, False),
+        ({"permission": "none", "user": {"login": "reviewer", "id": 7}}, False),
+        # The login now names another account: never this reviewer's access.
+        ({"permission": "write", "user": {"login": "reviewer", "id": 8}}, False),
+        (httpx.Response(404, json={}), False),
+    ],
+    ids=("admin", "maintain", "read", "triage", "none", "renamed", "not-collaborator"),
+)
+async def test_only_current_write_access_is_reported_for_an_approving_reviewer(
+    response: object, expected: bool
+) -> None:
+    fake = FakeGitHub()
+    fake.route("GET", f"/repos/{REPOSITORY}/collaborators/reviewer/permission", response)
+    facts = await _fetch(_adapter(fake))
+    assert facts.reviews[0].reviewer_write_access is expected
+
+
+async def test_write_access_is_read_only_for_approvals_of_the_head_commit() -> None:
+    fake = FakeGitHub()
+    reviewer = {"login": "other", "id": 8, "type": "User"}
+    fake.route(
+        "GET",
+        f"/repos/{REPOSITORY}/pulls/12/reviews",
+        [
+            {**REVIEWS[0], "id": 1, "user": reviewer, "commit_id": MERGE_SHA},
+            {**REVIEWS[0], "id": 2, "user": reviewer, "state": "COMMENTED"},
+        ],
+    )
+    facts = await _fetch(_adapter(fake))
+    assert [item.reviewer_write_access for item in facts.reviews] == [None, None]
+    assert not any("/collaborators/" in request.url.path for request in fake.requests)
+
+
+async def test_malformed_permission_response_is_a_protocol_error() -> None:
+    fake = FakeGitHub()
+    fake.route(
+        "GET", f"/repos/{REPOSITORY}/collaborators/reviewer/permission", {"permission": "write"}
+    )
+    with pytest.raises(ForgeFactsProtocolError):
+        await _fetch(_adapter(fake))
+
+
+async def test_more_approving_reviewers_than_the_bound_fails_closed() -> None:
+    fake = FakeGitHub()
+    fake.route(
+        "GET",
+        f"/repos/{REPOSITORY}/pulls/12/reviews",
+        [
+            {**REVIEWS[0], "id": index, "user": {"login": f"r{index}", "id": index, "type": "User"}}
+            for index in range(1, 22)
+        ],
+    )
+    with pytest.raises(ForgeFactsIncompleteError):
+        await _fetch(_adapter(fake))
+
+
+async def test_reviews_are_reported_oldest_first_by_github_id() -> None:
+    fake = FakeGitHub()
+    fake.route(
+        "GET",
+        f"/repos/{REPOSITORY}/pulls/12/reviews",
+        [
+            {**REVIEWS[0], "id": 100, "state": "CHANGES_REQUESTED"},
+            {**REVIEWS[0], "id": 70},
+        ],
+    )
+    facts = await _fetch(_adapter(fake))
+    assert [(item.id, item.state) for item in facts.reviews] == [
+        ("70", "approved"),
+        ("100", "changes_requested"),
+    ]
+
+
+async def test_review_without_an_integer_id_is_a_protocol_error() -> None:
+    fake = FakeGitHub()
+    fake.route(
+        "GET", f"/repos/{REPOSITORY}/pulls/12/reviews", [{**REVIEWS[0], "id": "61"}]
+    )
+    with pytest.raises(ForgeFactsProtocolError):
+        await _fetch(_adapter(fake))
+
+
+@pytest.mark.parametrize(
+    "error",
+    [httpx.DecodingError("bad body"), httpx.TooManyRedirects("loop"), httpx.InvalidURL("bad")],
+    ids=("decoding", "redirects", "invalid-url"),
+)
+async def test_non_transport_http_client_errors_are_protocol_errors(error: Exception) -> None:
+    fake = FakeGitHub()
+    fake.route("GET", f"/repos/{REPOSITORY}/pulls/12", error)
+    with pytest.raises(ForgeFactsProtocolError):
+        await _fetch(_adapter(fake))
+
+
+@pytest.mark.parametrize(
+    ("changes", "valid"),
+    [
+        ({}, True),
+        ({"merged": True, "state": "open"}, False),
+        ({"merged": True, "landed_commit_sha": None}, False),
+        ({"merged": False, "state": "open"}, False),
+        ({"forge_origin": "https://github.com/"}, False),
+        ({"forge_origin": "http://github.com"}, False),
+        ({"repository": "group/subgroup/project"}, True),
+    ],
+)
+def test_facts_model_binds_landed_commit_and_forge_origin(changes: dict, valid: bool) -> None:
+    body = {
+        "forge": "github",
+        "forge_origin": "https://github.com",
+        "repository": REPOSITORY,
+        "change_number": 12,
+        "change_url": f"https://github.com/{REPOSITORY}/pull/12",
+        "state": "closed",
+        "merged": True,
+        "landed_commit_sha": MERGE_SHA,
+        "base_ref": "main",
+        "head_sha": HEAD_SHA,
+        "author": {"login": "a", "id": 1, "kind": "user"},
+        "reviews": [],
+        "changed_files_count": 0,
+        "changed_files": [],
+        "required_checks": [
+            {"name": "ci", "conclusion": "pending", "required_producer": None,
+             "judged": [], "run_url": None}
+        ],
+        "fetched_at": "2027-01-15T08:00:00Z",
+        "responses": [{"request": "pull_request", "sha256": "sha256:" + "0" * 64}],
+        **changes,
+    }
+    if valid:
+        ForgeChangeFacts.model_validate(body)
+    else:
+        with pytest.raises(ValidationError):
+            ForgeChangeFacts.model_validate(body)
